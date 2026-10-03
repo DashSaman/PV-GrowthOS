@@ -2,6 +2,15 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
+## [0.5.0] — 2026-10-03 — Phase 4: Referral / Viral / Partner
+
+### Added
+- Migration 0005: referral_codes, referrals (unique referred_user), reward_ledger (unique dedupe_key), milestones, partners, commission_entries (unique dedupe_key)
+- Referral engine: pending→valid(settled order)→rewarded; self-referral blocked; per-referred-user uniqueness; daily farming cap; bot-start hook (start=ref_<code>)
+- Reward ledger: single pay point, idempotent forever; configurable milestones granted exactly once
+- Partner engine: affiliate/partner/reseller records, click/start tracking (start=partner_<code>), PARTNER_CONVERSION, commission pending→approved with dedupe; reseller dashboard untouched
+- 9 new tests (56 total passing)
+
 ## [0.4.0] — 2026-10-03 — Phase 3: Lifecycle Sales Automation
 
 ### Added

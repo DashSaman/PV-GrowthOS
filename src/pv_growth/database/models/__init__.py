@@ -12,6 +12,14 @@ from pv_growth.database.models.free_config import (  # noqa: F401
     PublishedPost,
     RawConfig,
 )
+from pv_growth.database.models.growth import (  # noqa: F401
+    CommissionEntry,
+    Milestone,
+    Partner,
+    Referral,
+    ReferralCode,
+    RewardLedger,
+)
 from pv_growth.database.models.jobs import (  # noqa: F401
     Job,
     LifecycleRule,

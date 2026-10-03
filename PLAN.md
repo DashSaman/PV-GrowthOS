@@ -12,7 +12,7 @@ phase starts. New ideas go to `BACKLOG.md` and never interrupt the active phase.
 | 1 | Core Data / Events / Attribution / Mirza Adapter | ✅ COMPLETE |
 | 2 | Free Acquisition Engine | ✅ COMPLETE |
 | 3 | Lifecycle Sales Automation | ✅ COMPLETE |
-| 4 | Referral / Viral / Partner | ⬜ PENDING |
+| 4 | Referral / Viral / Partner | ✅ COMPLETE |
 | 5 | Content / Feedback / Competitor Intel | ⬜ PENDING |
 | 6 | Analytics / Admin / Experiments | ⬜ PENDING |
 | 7 | Production Hardening & Rollout | ⬜ PENDING |
@@ -88,10 +88,11 @@ Acceptance (verified — tests/test_jobs.py, tests/test_lifecycle.py):
 Referral codes, validation-after-settled-purchase, reward ledger, anti-abuse,
 milestones, affiliate records, partner conversion, commission ledger.
 
-Acceptance:
-- [ ] self-referral blocked
-- [ ] duplicate rewards impossible
-- [ ] rewards only after qualifying conversion
+Acceptance (verified — tests/test_referrals.py):
+- [x] self-referral blocked (tested)
+- [x] duplicate rewards impossible (unique ledger dedupe_key — tested)
+- [x] rewards only after qualifying conversion (click-only never pays; settled purchase validates — tested)
+- [x] milestones pay exactly once; partner commissions dedupe + pending→approved
 
 ## Phase 5 — Content / Feedback / Competitor Intelligence
 

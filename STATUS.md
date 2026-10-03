@@ -4,7 +4,7 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-Phase 0–3 — COMPLETE. Phase 4 is next.
+Phase 0–4 — COMPLETE. Phase 5 is next.
 
 ## Environment
 
@@ -26,7 +26,18 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-- Phase 4 (Referral / Viral / Partner).
+- Phase 5 (Content / Feedback / Competitor intelligence).
+
+## Phase 4 summary
+
+- Referral codes + pending→valid→rewarded state machine; validation only on
+  settled qualifying purchase; one referral row per referred user; daily
+  anti-farming cap; self-referral blocked
+- Reward ledger with unique dedupe_key (rewards can never pay twice);
+  configurable milestones (1/3/5/10-style thresholds, data-driven)
+- Partner records (affiliate/partner/reseller) with click/start counters,
+  PARTNER_CONVERSION events, commission ledger (pending→approved, dedupe);
+  reseller dashboard NOT rebuilt (spec §19)
 
 ## Phase 3 summary
 
@@ -70,6 +81,6 @@ See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
 ## Test Results
 
-- Phase 0: 6 · P1: +13 · P2: +15 · P3: +13 → 47 passed total (SQLite locally;
+- Phase 0: 6 · P1: +13 · P2: +15 · P3: +13 · P4: +9 → 56 passed total (SQLite locally;
   CI additionally runs the same suite against PostgreSQL 14 + migration up/down).
 - `ruff check src tests`: clean.
