@@ -268,12 +268,6 @@ class FakeMirzaMySQL:
     def list_invoice_ids(self) -> list[str]:
         return [str(i["id_invoice"]) for i in self.invoices]
 
-    def fetch_statuses(self) -> dict[str, str]:
-        """id -> Status for every invoice (light: two varchar columns)."""
-        with self.connect() as conn, conn.cursor() as cur:
-            cur.execute("SELECT id_invoice, Status FROM invoice")
-            return {str(r["id_invoice"]): str(r["Status"] or "").strip().lower()
-                    for r in cur.fetchall()}
 
     def fetch_by_ids(self, ids: list[str]) -> list[dict]:
         wanted = set(ids)
