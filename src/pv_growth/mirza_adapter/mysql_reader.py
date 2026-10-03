@@ -67,65 +67,71 @@ class MirzaMySQLReader:
             cursorclass=pymysql.cursors.DictCursor,
         )
 
-    def fetch_invoices_after(self, invoice_id: int, limit: int = 500) -> list[dict]:
+    def list_invoice_ids(self) -> list[str]:
         with self.connect() as conn, conn.cursor() as cur:
-            cur.execute(
-                "SELECT id_invoice, id_user, username, name_product, price_product, "
-                "Volume, Service_time, Status, refral "
-                "FROM invoice WHERE id_invoice > %s ORDER BY id_invoice LIMIT %s",
-                (invoice_id, limit),
-            )
-            return list(cur.fetchall())
+            cur.execute("SELECT id_invoice FROM invoice")
+            return [str(r["id_invoice"]) for r in cur.fetchall()]
 
-    def max_invoice_id(self) -> int:
-        with self.connect() as conn, conn.cursor() as cur:
-            cur.execute("SELECT COALESCE(MAX(id_invoice), 0) AS m FROM invoice")
-            return int(cur.fetchone()["m"])
+    def fetch_by_ids(self, ids: list[str]) -> list[dict]:
+        rows: list[dict] = []
+        for start in range(0, len(ids), 100):
+            chunk = ids[start:start + 100]
+            placeholders = ",".join(["%s"] * len(chunk))
+            with self.connect() as conn, conn.cursor() as cur:
+                cur.execute(  # noqa: S608 - placeholders are %s-bound, not interpolated
+                    "SELECT id_invoice, id_user, username, name_product, price_product, "
+                    "Volume, Service_time, Status, refral "
+                    f"FROM invoice WHERE id_invoice IN ({placeholders})",
+                    tuple(chunk),
+                )
+                rows.extend(cur.fetchall())
+        return rows
 
 
-def _watermark(session: Session) -> int:
+def _load_seen(session: Session) -> set[str]:
     row = session.get(AppConfig, WATERMARK_KEY)
-    if row is None:
-        return 0
-    return int((row.value or {}).get("last_invoice_id", 0))
+    return set((row.value or {}).get("seen", [])) if row else set()
 
 
-def _advance_watermark(session: Session, invoice_id: int) -> None:
+def _save_seen(session: Session, seen: set[str]) -> None:
     row = session.get(AppConfig, WATERMARK_KEY)
     if row is None:
         row = AppConfig(key=WATERMARK_KEY, value={})
         session.add(row)
         session.flush()  # visible to later gets within the same transaction
-    row.value = {"last_invoice_id": invoice_id}
+    row.value = {"seen": sorted(seen), "count": len(seen)}
     row.updated_at = utcnow()
 
 
 def sync_mirza(session: Session, settings: Settings,
                reader: MirzaMySQLReader | None = None,
-               *, limit: int = 100) -> dict:
-    """Pull new Mirza invoices and ingest them as events — idempotent by
-    invoice id. Passive: emits events only; rewards/messages stay flag-gated."""
-    reader = reader or MirzaMySQLReader(settings)
-    stats = {"fetched": 0, "payments": 0, "checkouts": 0, "skipped": 0}
+               *, limit: int = 300) -> dict:
+    """Poll Mirza invoices (read-only) and ingest new/changed ones as events.
 
-    first_run = session.get(AppConfig, WATERMARK_KEY) is None
+    Mirza's invoice PK is a random hex string with no monotonic order and no
+    reliable timestamp column, so change detection uses a seen-id set plus
+    event-level idempotency keys (mirza:pay:<id> / mirza:checkout:<id>) —
+    re-scans are always safe, and unpaid->active transitions emit
+    PAYMENT_SUCCESS after the earlier CHECKOUT_STARTED. Passive: events only;
+    rewards/messages stay flag-gated."""
+    reader = reader or MirzaMySQLReader(settings)
+    stats = {"scanned": 0, "new": 0, "payments": 0, "checkouts": 0, "skipped": 0}
+
     try:
-        if first_run:
-            # forward-only: start from the tip, never replay historical invoices
-            # (a deliberate backfill can lower the watermark manually)
-            tip = reader.max_invoice_id()
-            _advance_watermark(session, tip)
-            log.info("mirza watermark initialized to tip", last_invoice_id=tip)
-            return {**stats, "initialized": True, "last_invoice_id": tip}
-        last_id = _watermark(session)
-        invoices = reader.fetch_invoices_after(last_id, limit=limit)
+        all_ids = reader.list_invoice_ids()
+        seen = _load_seen(session)
+        fresh = [i for i in all_ids if i not in seen][:limit]
+        stats["scanned"] = len(all_ids)
+        if not fresh:
+            return stats
+        rows = reader.fetch_by_ids(fresh)
     except Exception as exc:  # noqa: BLE001 — Mirza outage must never hurt GrowthOS
         log.warning("mirza mysql read failed (isolated)", error=str(exc))
         return {**stats, "error": str(exc)[:120]}
 
-    for invoice in invoices:
-        stats["fetched"] += 1
-        inv_id = int(invoice["id_invoice"])
+    for invoice in rows:
+        stats["new"] += 1
+        inv_id = str(invoice["id_invoice"])
         tg_user = _to_int(invoice.get("id_user"))
         status = str(invoice.get("Status") or "").strip().lower()
 
@@ -156,11 +162,10 @@ def sync_mirza(session: Session, settings: Settings,
                 stats["checkouts"] += 1
             else:
                 stats["skipped"] += 1
+        seen.add(inv_id)
 
-        _advance_watermark(session, inv_id)  # advance even on skips
-
-    if stats["fetched"]:
-        log.info("mirza sync", **stats)
+    _save_seen(session, seen)
+    log.info("mirza sync", **stats)
     return stats
 
 
@@ -170,8 +175,9 @@ class FakeMirzaMySQL:
     def __init__(self, invoices: list[dict]) -> None:
         self.invoices = invoices
 
-    def fetch_invoices_after(self, invoice_id: int, limit: int = 500) -> list[dict]:
-        return [i for i in self.invoices if int(i["id_invoice"]) > invoice_id][:limit]
+    def list_invoice_ids(self) -> list[str]:
+        return [str(i["id_invoice"]) for i in self.invoices]
 
-    def max_invoice_id(self) -> int:
-        return max((int(i["id_invoice"]) for i in self.invoices), default=0)
+    def fetch_by_ids(self, ids: list[str]) -> list[dict]:
+        wanted = set(ids)
+        return [i for i in self.invoices if str(i["id_invoice"]) in wanted]
