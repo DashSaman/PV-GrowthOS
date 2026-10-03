@@ -95,3 +95,16 @@ def test_queue_depth(settings, session):
     jobs.enqueue(session, "test.d2", {}, idempotency_key="d:2")
     depth = jobs.queue_depth(session)
     assert depth["pending"] >= 2
+
+
+def test_app_starts_with_scheduler_enabled(settings, monkeypatch):
+    """Regression: PVG_SCHEDULER_ENABLED=1 must not crash startup
+    (caught a missing module in the first production image)."""
+    from fastapi.testclient import TestClient
+
+    enabled = settings.model_copy(update={"scheduler_enabled": True})
+    monkeypatch.setattr("pv_growth.main.get_settings", lambda: enabled)
+    from pv_growth.main import create_app
+
+    with TestClient(create_app()) as c:
+        assert c.get("/health").status_code == 200
