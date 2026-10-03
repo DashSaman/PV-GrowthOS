@@ -84,6 +84,15 @@ def process_update(update: dict) -> None:
         _handle_callback(client, parsed.callback_query)
 
 
+def _safe_send(client, chat_id, text, keyboard=None):
+    """A Telegram delivery failure must never abort event ingestion."""
+    try:
+        client.send_message(chat_id, text, keyboard)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("telegram reply failed (isolated)", chat_id=chat_id,
+                    error=str(exc)[:120])
+
+
 def _handle_message(client, message: TgMessage) -> None:
     settings = get_settings()
     text = (message.text or "").strip()
@@ -131,7 +140,7 @@ def _handle_message(client, message: TgMessage) -> None:
                     id=str(message.message_id), from_=tg_user,
                     data=f"claim:{parts[1]}"))
             else:
-                client.send_message(message.chat.get("id"), "استفاده: /claim <کد کمپین>")
+                _safe_send(client, message.chat.get("id"), "استفاده: /claim <کد کمپین>")
 
 
 def _handle_callback(client, callback: TgCallback) -> None:
