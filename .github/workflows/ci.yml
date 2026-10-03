@@ -39,6 +39,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install -r requirements-dev.txt
+      - run: pip install -e .
       - name: Run tests (${{ matrix.db }})
         env:
           TEST_DB: ${{ matrix.db }}
