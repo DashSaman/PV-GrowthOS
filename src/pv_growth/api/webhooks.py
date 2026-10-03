@@ -93,6 +93,14 @@ def _safe_send(client, chat_id, text, keyboard=None):
                     error=str(exc)[:120])
 
 
+def _safe_answer(client, callback_id: str, text: str) -> None:
+    """Answering a callback must never roll back the claim transaction."""
+    try:
+        client.answer_callback_query(callback_id, text)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("callback answer failed (isolated)", error=str(exc)[:100])
+
+
 def _handle_message(client, message: TgMessage) -> None:
     settings = get_settings()
     text = (message.text or "").strip()
@@ -171,7 +179,7 @@ def _handle_callback(client, callback: TgCallback) -> None:
                     campaign_code=campaign_code, user_id=user.id,
                 )
             except ValidationError as exc:
-                client.answer_callback_query(callback.id, str(exc))
+                _safe_answer(client, callback.id, str(exc))
                 return
             if claim.status == "active" and claim.config_payload.get("config_uri"):
                 client.send_message(
@@ -188,7 +196,7 @@ def _handle_callback(client, callback: TgCallback) -> None:
                 rating = feedback.submit_rating(
                     session, user_id=user.id, rating=int(parts[2]), window_key=parts[1])
                 route = feedback.route(session, rating)
-                client.answer_callback_query(callback.id, "ثبت شد، سپاسگزاریم!")
+                _safe_answer(client, callback.id, "ثبت شد، سپاسگزاریم!")
                 if route == "testimonial_invite":
                     client.send_message(
                         callback.from_.id,
