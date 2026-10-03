@@ -182,13 +182,13 @@ def _handle_callback(client, callback: TgCallback) -> None:
                 _safe_answer(client, callback.id, str(exc))
                 return
             if claim.status == "active" and claim.config_payload.get("config_uri"):
-                client.send_message(
-                    callback.from_.id,
+                _safe_send(
+                    client, callback.from_.id,
                     f"کانفیگ اختصاصی شما آماده است:\n{claim.config_payload['config_uri']}\n"
                     f"حجم: {claim.traffic_gb} گیگ · اعتبار: {claim.validity_hours} ساعت",
                 )
             else:
-                client.answer_callback_query(callback.id, "در حال آماده‌سازی، چند لحظه صبر کنید")
+                _safe_answer(client, callback.id, "در حال آماده‌سازی، چند لحظه صبر کنید")
         elif data.startswith("rate:"):
             parts = data.split(":")  # rate:<window>:<n>
             if len(parts) == 3 and parts[2].isdigit():
