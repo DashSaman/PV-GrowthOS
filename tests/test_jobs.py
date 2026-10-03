@@ -82,6 +82,7 @@ def test_runner_executes_each_job_once_under_double_run(settings, session, monke
         calls.append(payload_)
 
     jobs.enqueue(session, "test.count", {"n": 1}, idempotency_key="c:1")
+    session.commit()  # real flow: ingest commits, THEN the runner (own session) sees it
     # two ticks back to back (second finds nothing due)
     executed1 = runner.run_tick(settings, worker_id="t1")
     executed2 = runner.run_tick(settings, worker_id="t2")
