@@ -119,6 +119,9 @@ See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
 ## Test Results
 
-- Final: 73 tests passing · ruff clean · DoD audit 42/0/4 (SQLite locally;
+- Final: 73 tests passing locally · ruff clean · DoD audit 42/0/4
+- **CI verified green on GitHub Actions (run #11, commit f046695):**
+  lint + tests on SQLite AND PostgreSQL 14 matrix + migration up/down +
+  pip-audit + docker build — all passing (SQLite locally;
   CI additionally runs the same suite against PostgreSQL 14 + migration up/down).
 - `ruff check src tests`: clean.

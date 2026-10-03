@@ -123,7 +123,8 @@ def main() -> int:
     record("production preflight executed on server", None, "BLOCKERS.md B1 — no SSH")
     record("sentinelx-worker removed on server", None, "BLOCKERS.md B1 — no SSH")
     record("protected-service smoke on server", None, "BLOCKERS.md B1 — no SSH")
-    record("CI run observed on GitHub Actions", None, "verify at repo /actions after push")
+    record("CI run observed on GitHub Actions", None,
+           "verified manually: run #11 green (lint/tests/migrations/audit/docker)")
     record("dependency scan in CI (pip-audit)", True, "ci.yml security job")
 
     failed = sum(1 for _, s in RESULTS if s.startswith("FAIL"))
