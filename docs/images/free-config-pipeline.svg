@@ -1,0 +1,97 @@
+<svg width="1400" height="700" viewBox="0 0 1400 700" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Tahoma, sans-serif">
+  <defs>
+    <marker id="arr4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1400" height="700" fill="#f8fafc"/>
+  <text x="700" y="50" text-anchor="middle" font-size="30" font-weight="700" fill="#0f172a">PV GrowthOS — Free Config Pipeline</text>
+  <text x="700" y="82" text-anchor="middle" font-size="18" fill="#475569">دو استخر مستقل: عمومی (سبز) و اختصاصی PV (آبی) — فیلتر مرحله‌ای برای حفاظت از سرور پروडاکشن</text>
+
+  <!-- ===== PUBLIC POOL ===== -->
+  <rect x="40" y="110" width="1320" height="250" rx="16" fill="#f0fdf4" stroke="#10b981" stroke-width="2.5"/>
+  <text x="70" y="146" font-size="20" font-weight="700" fill="#065f46">PUBLIC POOL · استخر عمومی</text>
+  <text x="1330" y="146" text-anchor="end" font-size="14" fill="#047857">label: community-sourced — هرگز به نام PV Network ارائه نمی‌شود</text>
+
+  <g font-size="15">
+    <rect x="70" y="170" width="150" height="70" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+    <text x="145" y="200" text-anchor="middle" font-weight="700" fill="#065f46">Fetcher</text>
+    <text x="145" y="224" text-anchor="middle" font-size="13" fill="#059669">دریافت از منابع مجاز</text>
+
+    <rect x="250" y="170" width="150" height="70" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+    <text x="325" y="200" text-anchor="middle" font-weight="700" fill="#065f46">Parser</text>
+    <text x="325" y="224" text-anchor="middle" font-size="13" fill="#059669">تجزیه ساختار</text>
+
+    <rect x="430" y="170" width="160" height="70" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+    <text x="510" y="200" text-anchor="middle" font-weight="700" fill="#065f46">Normalize</text>
+    <text x="510" y="224" text-anchor="middle" font-size="13" fill="#059669">یکسان‌سازی</text>
+
+    <rect x="620" y="170" width="160" height="70" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+    <text x="700" y="200" text-anchor="middle" font-weight="700" fill="#065f46">Deduplicate</text>
+    <text x="700" y="224" text-anchor="middle" font-size="13" fill="#059669">حذف تکراری</text>
+
+    <rect x="810" y="170" width="150" height="70" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+    <text x="885" y="200" text-anchor="middle" font-weight="700" fill="#065f46">Validate</text>
+    <text x="885" y="224" text-anchor="middle" font-size="13" fill="#059669">اعتبارسنجی</text>
+
+    <rect x="990" y="170" width="170" height="70" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+    <text x="1075" y="200" text-anchor="middle" font-weight="700" fill="#065f46">Quality Score</text>
+    <text x="1075" y="224" text-anchor="middle" font-size="13" fill="#059669">امتیاز کیفیت</text>
+
+    <rect x="1190" y="170" width="150" height="70" rx="10" fill="#059669"/>
+    <text x="1265" y="200" text-anchor="middle" font-weight="700" fill="#ffffff">Rank + Publish</text>
+    <text x="1265" y="224" text-anchor="middle" font-size="13" fill="#d1fae5">انتشار ۱–۲ برتر</text>
+
+    <line x1="220" y1="205" x2="242" y2="205" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+    <line x1="400" y1="205" x2="422" y2="205" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+    <line x1="590" y1="205" x2="612" y2="205" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+    <line x1="780" y1="205" x2="802" y2="205" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+    <line x1="960" y1="205" x2="982" y2="205" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+    <line x1="1160" y1="205" x2="1182" y2="205" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+  </g>
+
+  <rect x="70" y="264" width="600" height="70" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="370" y="292" text-anchor="middle" font-size="15" font-weight="600" fill="#334155">Limited health check — فقط روی برترین نامزدها</text>
+  <text x="370" y="316" text-anchor="middle" font-size="14" fill="#64748b">مثال: 2000 دریافت ← حذف تکراری ← ۵۰ نامزد ← بررسی محدود ← انتشار ۱–۲ مورد</text>
+  <rect x="700" y="264" width="640" height="70" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="1020" y="292" text-anchor="middle" font-size="15" font-weight="600" fill="#334155">Source reliability metrics — امتیاز اعتبار هر منبع ذخیره می‌شود</text>
+  <text x="1020" y="316" text-anchor="middle" font-size="14" fill="#64748b">منابع ضعیف به‌مرور از رجیستری حذف/کم‌وزن می‌شوند</text>
+
+  <!-- ===== PV EXCLUSIVE POOL ===== -->
+  <rect x="40" y="390" width="1320" height="230" rx="16" fill="#eff6ff" stroke="#3b82f6" stroke-width="2.5"/>
+  <text x="70" y="426" font-size="20" font-weight="700" fill="#1e40af">PV EXCLUSIVE POOL · استخر اختصاصی</text>
+  <text x="1330" y="426" text-anchor="end" font-size="14" fill="#1d4ed8">تولید محدود از طریق پروویژن مجاز PV Network</text>
+
+  <g font-size="15">
+    <rect x="70" y="450" width="220" height="74" rx="10" fill="#ffffff" stroke="#3b82f6" stroke-width="2"/>
+    <text x="180" y="480" text-anchor="middle" font-weight="700" fill="#1e40af">Channel Post</text>
+    <text x="180" y="504" text-anchor="middle" font-size="13" fill="#2563eb">پست کانال + دیده‌بانی</text>
+
+    <rect x="330" y="450" width="230" height="74" rx="10" fill="#ffffff" stroke="#3b82f6" stroke-width="2"/>
+    <text x="445" y="480" text-anchor="middle" font-weight="700" fill="#1e40af">Tracked Deep Link</text>
+    <text x="445" y="504" text-anchor="middle" font-size="13" fill="#2563eb">start=freecfg_&lt;campaign&gt;</text>
+
+    <rect x="600" y="450" width="220" height="74" rx="10" fill="#ffffff" stroke="#3b82f6" stroke-width="2"/>
+    <text x="710" y="480" text-anchor="middle" font-weight="700" fill="#1e40af">Eligibility Check</text>
+    <text x="710" y="504" text-anchor="middle" font-size="13" fill="#2563eb">بررسی واجد شرایط بودن</text>
+
+    <rect x="860" y="450" width="230" height="74" rx="10" fill="#ffffff" stroke="#3b82f6" stroke-width="2"/>
+    <text x="975" y="480" text-anchor="middle" font-weight="700" fill="#1e40af">Temp Service + Quota</text>
+    <text x="975" y="504" text-anchor="middle" font-size="13" fill="#2563eb">سرویس موقت با سهمیه</text>
+
+    <rect x="1130" y="450" width="210" height="74" rx="10" fill="#2563eb"/>
+    <text x="1235" y="480" text-anchor="middle" font-weight="700" fill="#ffffff">Event + Follow-up</text>
+    <text x="1235" y="504" text-anchor="middle" font-size="13" fill="#dbeafe">ثبت رویداد و پیگیری</text>
+
+    <line x1="290" y1="487" x2="322" y2="487" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+    <line x1="560" y1="487" x2="592" y2="487" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+    <line x1="820" y1="487" x2="852" y2="487" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+    <line x1="1090" y1="487" x2="1122" y2="487" stroke="#475569" stroke-width="3" marker-end="url(#arr4)"/>
+  </g>
+
+  <rect x="70" y="548" width="1270" height="56" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="705" y="572" text-anchor="middle" font-size="15" font-weight="600" fill="#334155">Admin-configurable: posts/day · publish times · traffic GB · validity · location · protocol · max claims · per-user limits · campaign range · fallback</text>
+  <text x="705" y="594" text-anchor="middle" font-size="14" fill="#64748b">اورراید تاریخ بدون تغییر کد — مثال: 03 Oct → 5GB · 04 Oct → 10GB · 05 Oct → 3GB</text>
+
+  <text x="700" y="666" text-anchor="middle" font-size="14" fill="#94a3b8">Staged filtering protects the production VPN server · no aggressive mass speed-testing from this host</text>
+</svg>

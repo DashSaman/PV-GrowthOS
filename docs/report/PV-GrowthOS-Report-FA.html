@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>گزارش کامل PV GrowthOS</title>
+<style>
+  @font-face { font-family:'Vazirmatn'; src:url('fonts/Vazirmatn-Regular.woff2') format('woff2'); font-weight:400; }
+  @font-face { font-family:'Vazirmatn'; src:url('fonts/Vazirmatn-Medium.woff2') format('woff2'); font-weight:500; }
+  @font-face { font-family:'Vazirmatn'; src:url('fonts/Vazirmatn-SemiBold.woff2') format('woff2'); font-weight:600; }
+  @font-face { font-family:'Vazirmatn'; src:url('fonts/Vazirmatn-Bold.woff2') format('woff2'); font-weight:700; }
+  @font-face { font-family:'Vazirmatn'; src:url('fonts/Vazirmatn-Black.woff2') format('woff2'); font-weight:900; }
+  @page { size:A4; margin:15mm 13mm 17mm 13mm; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body { font-family:'Vazirmatn',Tahoma,sans-serif; font-size:10.5pt; color:#1e293b; line-height:1.9; background:#fff; }
+  .en { direction:ltr; text-align:left; font-family:'Vazirmatn',Segoe UI,sans-serif; unicode-bidi:embed; }
+  code, .mono { font-family:Consolas,'Courier New',monospace; direction:ltr; unicode-bidi:embed; font-size:9pt; background:#f1f5f9; padding:1px 5px; border-radius:4px; color:#0f172a; }
+
+  /* ===== Cover ===== */
+  .cover { height:262mm; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; page-break-after:always; background:linear-gradient(160deg,#0f172a 0%,#1e3a5f 55%,#0f766e 100%); color:#fff; border-radius:12mm; margin:-6mm -6mm 0 -6mm; padding:20mm; }
+  .cover .badge { display:inline-block; border:1.5px solid rgba(255,255,255,.45); border-radius:99px; padding:2mm 8mm; font-size:11pt; letter-spacing:.5px; margin-bottom:12mm; color:#e2e8f0; }
+  .cover h1 { font-size:34pt; font-weight:900; margin-bottom:6mm; }
+  .cover h2 { font-size:16pt; font-weight:500; color:#a5f3fc; margin-bottom:16mm; }
+  .cover .funnel-box { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.25); border-radius:6mm; padding:8mm 12mm; font-size:11pt; color:#e0f2fe; margin-bottom:16mm; line-height:2.3; }
+  .cover .meta { font-size:10pt; color:#cbd5e1; line-height:2.2; }
+  .cover .repo { font-family:Consolas,monospace; direction:ltr; background:rgba(255,255,255,.1); padding:2mm 6mm; border-radius:3mm; display:inline-block; margin-top:4mm; font-size:10pt; }
+
+  /* ===== TOC ===== */
+  .toc { page-break-after:always; }
+  .toc h2 { font-size:17pt; font-weight:800; color:#0f172a; border-bottom:3px solid #0d9488; padding-bottom:3mm; margin-bottom:7mm; }
+  .toc ol { list-style:none; counter-reset:toc; }
+  .toc li { counter-increment:toc; padding:1.2mm 0; border-bottom:1px dashed #e2e8f0; font-size:10.5pt; }
+  .toc li::before { content:counter(toc) ". "; font-weight:700; color:#0d9488; margin-left:2mm; }
+
+  /* ===== Sections ===== */
+  h2.sec { font-size:16pt; font-weight:800; color:#ffffff; background:linear-gradient(90deg,#0f766e,#0e7490); padding:3mm 6mm; border-radius:3mm; margin:9mm 0 5mm 0; page-break-after:avoid; }
+  h2.sec .num { display:inline-block; background:rgba(255,255,255,.2); border-radius:2mm; padding:0 3mm; margin-left:3mm; font-size:12pt; }
+  h3 { font-size:12.5pt; font-weight:700; color:#0f766e; margin:6mm 0 2.5mm 0; page-break-after:avoid; }
+  h4 { font-size:11pt; font-weight:700; color:#334155; margin:4mm 0 2mm 0; page-break-after:avoid; }
+  p { margin-bottom:2.5mm; text-align:justify; }
+  ul,ol { margin:0 6mm 3mm 0; }
+  li { margin-bottom:1.2mm; }
+  .page-break { page-break-before:always; }
+
+  table { width:100%; border-collapse:collapse; margin:3mm 0 5mm 0; font-size:9.5pt; page-break-inside:auto; }
+  th { background:#0f766e; color:#fff; font-weight:700; padding:2.2mm 3mm; text-align:right; border:1px solid #0d9488; }
+  td { border:1px solid #cbd5e1; padding:2mm 3mm; vertical-align:top; }
+  tr:nth-child(even) td { background:#f8fafc; }
+  tr { page-break-inside:avoid; }
+
+  .box { border-radius:3mm; padding:4mm 5mm; margin:3.5mm 0; page-break-inside:avoid; }
+  .box .t { font-weight:800; margin-bottom:1.5mm; }
+  .box-blue { background:#eff6ff; border-right:1.6mm solid #3b82f6; }
+  .box-blue .t { color:#1d4ed8; }
+  .box-green { background:#ecfdf5; border-right:1.6mm solid #10b981; }
+  .box-green .t { color:#047857; }
+  .box-amber { background:#fffbeb; border-right:1.6mm solid #f59e0b; }
+  .box-amber .t { color:#b45309; }
+  .box-red { background:#fef2f2; border-right:1.6mm solid #dc2626; }
+  .box-red .t { color:#b91c1c; }
+  .box-violet { background:#f5f3ff; border-right:1.6mm solid #8b5cf6; }
+  .box-violet .t { color:#6d28d9; }
+
+  .kpi-row { display:flex; gap:3mm; margin:3mm 0 5mm 0; }
+  .kpi { flex:1; border-radius:3mm; padding:3.5mm 2mm; text-align:center; color:#fff; page-break-inside:avoid; }
+  .kpi .v { font-size:16pt; font-weight:900; }
+  .kpi .l { font-size:8.5pt; opacity:.92; margin-top:1mm; }
+  .k1 { background:linear-gradient(135deg,#059669,#10b981); }
+  .k2 { background:linear-gradient(135deg,#2563eb,#3b82f6); }
+  .k3 { background:linear-gradient(135deg,#7c3aed,#8b5cf6); }
+  .k4 { background:linear-gradient(135deg,#db2777,#ec4899); }
+  .k5 { background:linear-gradient(135deg,#d97706,#f59e0b); }
+
+  .figure { text-align:center; margin:4mm 0 6mm 0; page-break-inside:avoid; }
+  .figure img { max-width:100%; border:1px solid #e2e8f0; border-radius:2mm; }
+  .figure .cap { font-size:9pt; color:#64748b; margin-top:1.5mm; }
+  .figure .cap b { color:#0f766e; }
+
+  .flow { background:#0f172a; color:#a5f3fc; border-radius:3mm; padding:4mm 5mm; margin:3mm 0; font-size:9.5pt; line-height:2.1; page-break-inside:avoid; }
+  .flow b { color:#fff; }
+  .chips { margin:2mm 0 4mm 0; }
+  .chip { display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:99px; padding:.8mm 3.5mm; font-size:8.5pt; margin:0 0 1.5mm 1.5mm; color:#334155; }
+  .chip.hot { background:#ecfdf5; border-color:#10b981; color:#047857; font-weight:600; }
+
+  .footer-note { margin-top:8mm; padding-top:3mm; border-top:2px solid #0d9488; font-size:9pt; color:#64748b; text-align:center; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div class="badge">گزارش جامع پروژه · نسخه ۱٫۰ · اکتبر ۲۰۲۶</div>
+  <h1>PV GrowthOS</h1>
+  <h2>سیستم‌عامل رشد خودکار و ایمن برای PV Network</h2>
+  <div class="funnel-box">
+    جذب کاربر ← شروع ربات ← کانفیگ رایگان / تست ← اتصال ← مشاهده تعرفه ← پرداخت<br>
+    ← مشتری فعال ← تمدید ← معرفی دوستان ← افیلیت / نمایندگی ← بازگشت مشتری
+  </div>
+  <div class="meta">
+    گزارش تحلیلی کامل بر پایه سند مشخصات رسمی <b>Autonomous Production-Safe Implementation Specification v1.0</b><br>
+    هدف: افزایش فروش و ارزش بلندمدت مشتری با حداقل عملیات دستی — بدون دست‌کاری سرویس‌های پرووداکشن
+    <br><span class="repo">github.com/DashSaman/PV-GrowthOS</span>
+  </div>
+</div>
+
+<!-- ============ TOC ============ -->
+<div class="toc">
+  <h2>فهرست مطالب</h2>
+  <ol>
+    <li>خلاصه مدیریتی</li>
+    <li>هدف تجاری و قیف رشد</li>
+    <li>محیط پرووداکشن و منابع محافظت‌شده</li>
+    <li>فضای نام رزروشده، پورت‌ها و دیتابیس</li>
+    <li>معماری هسته سیستم</li>
+    <li>سیستم کار و مدل رویداد</li>
+    <li>اتصال به میرزا و موتور اتریبیوشن</li>
+    <li>موتور جذب کانفیگ رایگان</li>
+    <li>موتور پیام و محتوای کانال</li>
+    <li>موتور چرخه حیات (Lifecycle)</li>
+    <li>موتور معرفی، گیمیفیکیشن و همکاری</li>
+    <li>امتیازدهی سرنخ و سگمنت‌ها</li>
+    <li>بازخورد مشتری و رصد رقبا</li>
+    <li>تحلیل، آزمایش A/B و پنل ادمین</li>
+    <li>فیچر فلگ‌ها و محدودیت منابع</li>
+    <li>سیاست بیلد، امنیت و مشاهده‌پذیری</li>
+    <li>پاکسازی SentinelX و دستورهای ممنوع</li>
+    <li>مستندسازی و قوانین ضدحلقه</li>
+    <li>فازهای اجرا (۰ تا ۷)</li>
+    <li>تست، قرارداد استقرار و تعریف پایان کار</li>
+  </ol>
+</div>
+
+<!-- ============ 1. EXEC SUMMARY ============ -->
+<h2 class="sec"><span class="num">۱</span>خلاصه مدیریتی</h2>
+
+<p><b>PV GrowthOS</b> یک سیستم خودکارسازی رشد است که روی همان سرور پرووداکشن زنده‌ی VPN شبکه PV مستقر می‌شود — سروری که همین حالا مشتریان واقعی روی آن سرویس دارند و سرویس‌های فروش (میرزا)، پنل نمایندگی، ربات AKH و زیرساخت تونل‌ها روی آن فعال‌اند. فلسفه طراحی این پروژه یک جمله است: <b>رشد فروش با کمترین دخالت دستی، بدون به خطر انداختن حتی یک سرویس موجود.</b></p>
+
+<div class="kpi-row">
+  <div class="kpi k1"><div class="v">۸</div><div class="l">فاز اجرای گیت‌دار</div></div>
+  <div class="kpi k2"><div class="v">۲۱</div><div class="l">ماژول منطقی</div></div>
+  <div class="kpi k3"><div class="v">۲۳</div><div class="l">نوع رویداد نرمال</div></div>
+  <div class="kpi k4"><div class="v">۱۲</div><div class="l">مرحله قیف رشد</div></div>
+  <div class="kpi k5"><div class="v">۱۰+</div><div class="l">فیچر فلگ مستقل</div></div>
+</div>
+
+<p>سه تصمیم بنیادین، کل پروژه را تعریف می‌کنند:</p>
+<ul>
+  <li><b>مونولیت ماژولار به جای میکروسرویس:</b> سرور فقط ۲ هسته CPU و حدود ۴ گیگابایت رم دارد؛ پخش کردن سرویس‌ها هدر دادن منابع است. همه ماژول‌ها داخل یک ران‌تایم (<span class="mono en">pv-growth-app</span>) زندگی می‌کنند ولی مرزهای داخلی‌شان آن‌قدر تمیز نگه داشته می‌شود که در آینده بتوان ورکرها را بدون بازطراحی جدا کرد.</li>
+  <li><b>بدون پلتفرم سنگین:</b> PostHog، Mautic، GrowthBook، n8n و استک Grafana صرفاً مرجع مفهومی‌اند. فقط زیرمجموعه کوچکی از مفاهیم آن‌ها (رویداد، قیف، سگمنت، آزمایش) به‌صورت سبک و روی PostgreSQL پیاده می‌شود.</li>
+  <li><b>ایمنی مطلق نسبت به پرووداکشن:</b> میرزا منبع حقیقت فروش باقی می‌ماند؛ گروث‌او‌اس فقط از بیرون و به‌صورت فقط‌خواندنی یا افزایشی به آن وصل می‌شود. با خاموش بودن همه قابلیت‌های گروث‌او‌اس، رفتار میرزا باید بیت‌به‌بیت مثل قبل بماند.</li>
+</ul>
+
+<div class="box box-amber">
+  <div class="t">اصل طلایی پروژه</div>
+  اگر رویدادی فقط به یک وابستگی انسانی گره خورده باشد (اعتبار رجیستری، دسترسی سرور و…)، آن وابستگی در <span class="mono en">BLOCKERS.md</span> ثبت می‌شود، همه‌چیز اطرافش پیاده می‌شود و <b>پروژه متوقف نمی‌شود</b>.
+</div>
+
+<!-- ============ 2. FUNNEL ============ -->
+<h2 class="sec"><span class="num">۲</span>هدف تجاری و قیف رشد</h2>
+
+<p>هر قابلیتی که در این پروژه پیاده شود باید به‌وضوح حداقل یکی از این‌ها را تقویت کند: جذب کاربر واجد شرایط، افزایش تبدیل تست‌به‌پرداخت، افزایش تمدید، بازگرداندن کاربر ازدست‌رفته، افزایش معرفی، رشد کانال نمایندگی/افیلیت، بهبود اتریبیوشن یا بهبود خودکارسازی عملیاتی. قابلیت‌هایی که صرفاً «جالب» هستند پیاده نمی‌شوند.</p>
+
+<div class="figure">
+  <img src="../images/funnel.png" alt="Growth Funnel" style="width:100%">
+  <div class="cap"><b>شکل ۱ —</b> قیف کامل ۱۲ مرحله‌ای رشد PV GrowthOS به همراه دو حلقه بازگشت (وین‌بک و رشد ویروسی)</div>
+</div>
+
+<h3>معنای تجاری هر مرحله</h3>
+<table>
+  <tr><th style="width:22%">مرحله</th><th style="width:40%">تعریف</th><th>موتور مسئول در GrowthOS</th></tr>
+  <tr><td><b>جذب کاربر (Acquisition)</b></td><td>ورود کاربر از منبعی ردیابی‌شده (پست کانال، معرفی، سئو، کمپین)</td><td>اتریبیوشن + کمپین‌ها + کانفیگ رایگان</td></tr>
+  <tr><td><b>شروع ربات</b></td><td>اولین <span class="mono en">/start</span> با پارامتر <span class="mono en">start=&lt;source&gt;</span></td><td>رویداد <span class="mono en">BOT_STARTED</span></td></tr>
+  <tr><td><b>کانفیگ رایگان / تست</b></td><td>دریافت کانفیگ عمومی یا اختصاصی PV</td><td>موتور جذب (فصل ۸)</td></tr>
+  <tr><td><b>اتصال</b></td><td>اتصال موفق و مصرف واقعی ترافیک</td><td>رویداد <span class="mono en">TRIAL_CONNECTED</span></td></tr>
+  <tr><td><b>مشاهده تعرفه ← پرداخت</b></td><td>ورود به قیف فروش میرزا و تسویه موفق</td><td>آداپتر میرزا (فقط-خواندنی)</td></tr>
+  <tr><td><b>مشتری فعال ← تمدید</b></td><td>سرویس فعال و تمدیدهای بعدی</td><td>چرخه حیات + یادآوری تمدید</td></tr>
+  <tr><td><b>معرفی / افیلیت / وین‌بک</b></td><td>رشد ویروسی و بازگشت مشتری ازدست‌رفته</td><td>موتور معرفی + وین‌بک</td></tr>
+</table>
+
+<div class="box box-green">
+  <div class="t">حلقه‌های رشد</div>
+  دو حلقه در طراحی تعبیه شده: (۱) <b>حلقه ویروسی</b> — مشتری راضی از طریق کد معرفی کاربر جدید به بالای قیف برمی‌گرداند؛ (۲) <b>حلقه وین‌بک</b> — کاربر منقضی‌شده با پیشنهاد هدفمند به مرحله پرداخت بازمی‌گردد. هر دو حلقه فقط با رویداد واقعی (خرید تسویه‌شده) پاداش یا فعال‌سازی می‌شوند.
+</div>
+
+<!-- ============ 3. PRODUCTION ENV ============ -->
+<h2 class="sec"><span class="num">۳</span>محیط پرووداکشن و منابع محافظت‌شده</h2>
+
+<p>این سرور یک سرور زنده با مشتریان واقعی است. مشخصات سخت‌افزاری و نرم‌افزاری بر اساس ممیزی کامل:</p>
+
+<table>
+  <tr><th style="width:30%">جزء</th><th>مقدار</th></tr>
+  <tr><td>سیستم‌عامل</td><td class="en">Ubuntu 22.04</td></tr>
+  <tr><td>CPU / RAM</td><td>۲ vCPU / حدود ۴ گیگابایت (بدون swap)</td></tr>
+  <tr><td>دیسک</td><td>حدود ۳۸ گیگابایت</td></tr>
+  <tr><td>نرم‌افزارهای موجود</td><td>Docker، Apache، MySQL، PostgreSQL 14، X-UI/Xray، تونل‌های Hedioum و WireGuard/GRE/SIT</td></tr>
+  <tr><td>شبکه‌های داکر موجود</td><td class="en">bridge (172.17.0.0/16) · pv_reseller_net (172.18.0.0/16) · akhbot_internal (172.19.0.0/16)</td></tr>
+</table>
+
+<h3>منابع محافظت‌شده — هرگونه تغییر ممنوع</h3>
+<table>
+  <tr><th style="width:20%">سرویس</th><th style="width:26%">مسیر / دامنه</th><th style="width:18%">کانتینر / بایندینگ</th><th>قید</th></tr>
+  <tr><td><b>میرزا</b></td><td class="en">/var/www/html/mirzaprobotconfig · /var/www/mirza_pro · robot.ahsg.top</td><td>—</td><td>سیستم اصلی فروش و پروویژن؛ ممنوع: بازسازی، تغییر نام، مایگریشن، ریفکتور</td></tr>
+  <tr><td><b>پنل نمایندگی PV</b></td><td class="en">/opt/pv-reseller · npanel.softarg.ir</td><td class="en">pv-reseller-dashboard · 127.0.0.1:31080→3000 · pv_reseller_net</td><td>DO NOT TOUCH</td></tr>
+  <tr><td><b>ربات AKH</b></td><td class="en">/opt/akhbot/app · rasteh.softarg.ir</td><td class="en">akhbot-app · 127.0.0.1:8307→8000 · akhbot_internal</td><td>DO NOT TOUCH</td></tr>
+  <tr><td><b>زیرساخت VPN</b></td><td>X-UI، Xray، Hedioum، WireGuard، GRE، SIT، واچ‌داگ‌ها</td><td>—</td><td>ممنوع: <span class="mono en">ip route</span>، <span class="mono en">ip rule</span>، <span class="mono en">iptables</span>، <span class="mono en">nft</span>، <span class="mono en">wg</span>، <span class="mono en">ip tunnel</span>، حذف اینترفیس، تغییر شبکه داکر</td></tr>
+</table>
+
+<div class="box box-red">
+  <div class="t">قاعده تغییر شبکه</div>
+  شبکه‌های داکر موجود (<span class="mono en">bridge</span>، <span class="mono en">pv_reseller_net</span>، <span class="mono en">akhbot_internal</span>) هرگز تغییر، حذف، بازسازی یا اتصال به GrowthOS نمی‌شوند — حتی اگر تداخل بروز کند؛ در آن صورت GrowthOS ساب‌نت دیگری برمی‌گزیند.
+</div>
+
+<div class="box box-amber">
+  <div class="t">مشکلات از پیش موجود، وظیفه خودکار ما نیستند</div>
+  مواردی مثل سرویس خراب <span class="mono en">pv-gre.service</span>، خطاهای ۴۰۹ <span class="mono en">getUpdates</span> در X-UI، ورودی‌های تکراری cron میرزا و فایل‌های legacy، صرفاً در <span class="mono en">EXISTING_ISSUES.md</span> ثبت می‌شوند و فقط اگر مسیر GrowthOS را ببندند، با کوچک‌ترین مداخله‌ی توجیه‌شده رفع می‌شوند.
+</div>
+
+<!-- ============ 4. NAMESPACE / PORTS / DB ============ -->
+<h2 class="sec"><span class="num">۴</span>فضای نام رزروشده، پورت‌ها و دیتابیس</h2>
+
+<h3>فضای نام اختصاصی</h3>
+<table>
+  <tr><th style="width:30%">قلمرو</th><th>مقدار</th></tr>
+  <tr><td>ریشه استقرار</td><td class="en">/opt/pv-growth</td></tr>
+  <tr><td>بایندینگ میزبان</td><td class="en">127.0.0.1:8350</td> (هرگز <span class="mono en">0.0.0.0:8350</span>)</tr>
+  <tr><td>شبکه داکر اختصاصی</td><td class="en">pv_growth_net</td> — ترجیحاً <span class="mono en">172.23.77.0/24</td></tr>
+  <tr><td>مالکیت</td><td>فقط همین مسیر، کانتینرها، دیتابیس، شبکه و لاگ‌های خود سیستم</td></tr>
+</table>
+
+<p>قبل از ساخت شبکه، بررسی فقط‌خواندنیِ شبکه‌های داکر، روت‌های IPv4، ساب‌نت‌های VPN/تونل و اینترفیس‌های محلی انجام می‌شود. در صورت تداخلِ <span class="mono en">172.23.77.0/24</span>، یک ساب‌نت آزاد انتخاب و تصمیم در <span class="mono en">ARCHITECTURE.md</span> مستند می‌شود.</p>
+
+<h3>پورت‌های رزروشده (پیش از هر تخصیص، بررسی تازه با <span class="mono en">ss</span> الزامی است)</h3>
+<div class="chips">
+  <span class="chip en">22</span><span class="chip en">53</span><span class="chip en">80</span><span class="chip en">443</span><span class="chip en">465</span><span class="chip en">993</span><span class="chip en">1194–1197</span><span class="chip en">2083</span><span class="chip en">2087</span><span class="chip en">2096</span><span class="chip en">3000</span><span class="chip en">3306</span><span class="chip en">4020</span><span class="chip en">5000</span><span class="chip en">5432</span><span class="chip en">8080</span><span class="chip en">8307</span><span class="chip en">8443</span><span class="chip en">9090</span><span class="chip en">11111</span><span class="chip en">31080</span><span class="chip en">33060</span><span class="chip en">46573</span><span class="chip en">62789</span><span class="chip hot en">TCP</span><span class="chip en">22295/udp</span><span class="chip en">46414/udp</span>
+</div>
+
+<h3>دیتابیس</h3>
+<ul>
+  <li>بازاستفاده از سرور PostgreSQL موجود — <b>نصب سرور جدید ممنوع</b></li>
+  <li>دیتابیس‌های <span class="mono en">postgres</span> و <span class="mono en">pvnaive</span> دست‌نخورده می‌مانند؛ دیتابیس جدید <span class="mono en">pv_growth</span> ساخته می‌شود</li>
+  <li>کاربر اختصاصی با حداقل دسترسی؛ همه جدول‌ها فقط داخل همین دیتابیس</li>
+  <li>مایگریشن با Alembic: نسخه‌دار، سازگار با گذشته در حد امکان، با دانگرید تست‌شده یا رول‌بک مستند، و بدون دست‌زدن به دیتابیس‌های میرزا</li>
+  <li>دیتابیس MySQL موجود (<span class="mono en">hajsaman</span>) به‌عنوان ذخیره‌گاه GrowthOS استفاده نمی‌شود</li>
+</ul>
+
+<!-- ============ 5. ARCHITECTURE ============ -->
+<h2 class="sec"><span class="num">۵</span>معماری هسته سیستم</h2>
+
+<div class="figure">
+  <img src="../images/architecture.png" alt="Architecture" style="width:100%">
+  <div class="cap"><b>شکل ۲ —</b> معماری مونولیت ماژولار pv-growth-app و مرزش با منابع محافظت‌شده</div>
+</div>
+
+<p>ران‌تایم اولیه <span class="mono en">pv-growth-app</span> شامل API فریم‌ورک FastAPI، ورکر سبک، زمان‌بند (اسکژولر)، یکپارچگی تلگرام و موتور کمپین است. مرزهای ماژول‌ها داخلی اما صریح است تا جداسازی آتی ورکرها بدون بازطراحی ممکن باشد.</p>
+
+<h3>ماژول‌های الزامی (۲۱ ماژول)</h3>
+<table>
+  <tr><th style="width:24%">ماژول</th><th>مسئولیت</th></tr>
+  <tr><td class="en">core · database</td><td>پیکربندی، اتصال دیتابیس و مایگریشن‌ها</td></tr>
+  <tr><td class="en">events · attribution · analytics</td><td>رویدادها، اتریبیوشن first/last-touch و تحلیل قیف</td></tr>
+  <tr><td class="en">mirza_adapter</td><td>دروازه امن به منبع حقیقت فروش (میرزا)</td></tr>
+  <tr><td class="en">telegram · messaging</td><td>ربات، کانال‌ها و قالب‌های پیام با متغیر</td></tr>
+  <tr><td class="en">free_config · config_sources · config_quality</td><td>خط تولید کانفیگ رایگان، رجیستری منابع و امتیازدهی کیفیت</td></tr>
+  <tr><td class="en">campaigns · lifecycle · content</td><td>کمپین‌ها، اتوماسیون چرخه حیات و موتور محتوا</td></tr>
+  <tr><td class="en">referrals · partners</td><td>معرفی/پاداش و افیلیت/نمایندگی</td></tr>
+  <tr><td class="en">competitors · feedback</td><td>رصد هدفمند رقبا و بازخورد مشتری</td></tr>
+  <tr><td class="en">experiments · admin · jobs</td><td>آزمایش A/B قطعی، پنل ادمین و صف کار پایدار</td></tr>
+</table>
+
+<div class="box box-blue">
+  <div class="t">چرا مونولیت ماژولار؟</div>
+  میکروسرویس روی سرور ۲ هسته‌ای/۴ گیگی یعنی هزینه اضافه‌ی شبکه، مونیتورینگ و رم برای مرزهایی که هنوز به آن‌ها نیاز نیست. مونولیت ماژولار با مرزهای تمیز، هم امروز سبک است و هم فردا مسیر جداسازی را باز نگه می‌دارد.
+</div>
+
+<!-- ============ 6. JOBS & EVENTS ============ -->
+<h2 class="sec"><span class="num">۶</span>سیستم کار و مدل رویداد</h2>
+
+<h3>صف کار پایدار — بدون Redis</h3>
+<p>در نسخه اول، Redis لازم نیست؛ کارها روی PostgreSQL ذخیره و اجرا می‌شوند. هر کار این ویژگی‌ها را دارد: زمان‌بندی، تعداد تلاش مجدد با استراتژی backoff، کلید یکتایی/idempotency، وضعیت، <span class="mono en">locked_at/locked_by</span>، <span class="mono en">started_at/finished_at</span>، جزئیات خطا و <span class="mono en">retry_after</span>.</p>
+
+<div class="box box-green">
+  <div class="t">تضمین کلیدی</div>
+  اجرای هم‌زمان یا تکراریِ چند نمونه زمان‌بند <b>هرگز</b> نبتواند یک پست کمپین یا پیام مشتری را دوباره ارسال کند. این تضمین با کلید یکتایی + قفل ردیفی در سطح دیتابیس اعمال می‌شود و در تست‌ها به‌صورت اختصاصی پوشش داده می‌شود.
+</div>
+
+<h3>مدل رویداد — ۲۳ نوع نرمال</h3>
+<div class="chips">
+  <span class="chip hot en">BOT_STARTED</span><span class="chip hot en">SOURCE_ATTRIBUTED</span><span class="chip en">FREE_CONFIG_POSTED</span><span class="chip en">FREE_CONFIG_CLICKED</span><span class="chip en">FREE_CONFIG_CLAIMED</span><span class="chip en">TRIAL_CREATED</span><span class="chip en">TRIAL_CONNECTED</span><span class="chip en">PRICING_VIEWED</span><span class="chip en">CHECKOUT_STARTED</span><span class="chip hot en">PAYMENT_SUCCESS</span><span class="chip en">SERVICE_CREATED</span><span class="chip en">SERVICE_RENEWED</span><span class="chip en">SERVICE_EXPIRING</span><span class="chip en">SERVICE_EXPIRED</span><span class="chip en">MESSAGE_SENT</span><span class="chip en">MESSAGE_CLICKED</span><span class="chip en">REFERRAL_CREATED</span><span class="chip en">REFERRAL_VALIDATED</span><span class="chip en">REFERRAL_REWARDED</span><span class="chip en">PARTNER_CONVERSION</span><span class="chip en">FEEDBACK_RECEIVED</span><span class="chip en">WINBACK_SUCCESS</span>
+</div>
+
+<p>هر رویداد این فیلدها را دارد: <span class="mono en">event_id · event_type · actor/user · campaign · source · timestamp · idempotency key · metadata(JSON)</span>. قید امنیتی مهم: <b>هیچ secret یا اعتبار VPN مشتری در متادیتای رویداد ذخیره نمی‌شود.</b></p>
+
+<!-- ============ 7. MIRZA & ATTRIBUTION ============ -->
+<h2 class="sec"><span class="num">۷</span>اتصال به میرزا و موتور اتریبیوشن</h2>
+
+<h3>آداپتر میرزا — منبع حقیقت</h3>
+<p>میرزا برای کاربران (در حد نیاز)، سفارش‌ها، پرداخت‌ها، پروویژن، ساخت سرویس VPN و تمدید، منبع حقیقت باقی می‌ماند. GrowthOS هیچ منطق پرداخت یا پروویژنی را duplicate نمی‌کند. ترتیب ترجیحی یکپارچه‌سازی:</p>
+<div class="flow">
+  <b>۱.</b> API/رابط موجود میرزا &nbsp;←&nbsp; <b>۲.</b> آداپتر غیرتهاجمی &nbsp;←&nbsp; <b>۳.</b> یکپارچگی فقط‌خواندنی دیتابیس (در صورت امن بودن) &nbsp;←&nbsp; <b>۴.</b> هوک/رویداد افزایشیِ حداقلی — فقط در صورت ضرورت
+</div>
+<div class="box box-red">
+  <div class="t">معیار پذیرش فاز ۱</div>
+  با غیرفعال بودن تمام قابلیت‌های GrowthOS، رفتار میرزا باید دقیقاً مثل قبل بماند — هیچ رگرسیون پرداخت یا پروویژنی قابل قبول نیست.
+</div>
+
+<h3>موتور اتریبیوشن</h3>
+<p>اتریبیوشن first-touch و last-touch هر دو ذخیره می‌شوند و <b>first-touch هرگز بازنویسی نمی‌شود</b>. منبع از پارامتر دیپ‌لینک <span class="mono en">start=&lt;source&gt;</span> استخراج می‌شود:</p>
+<table>
+  <tr><th style="width:34%">الگو</th><th>معنا</th></tr>
+  <tr><td class="en">freecfg_&lt;campaign&gt;</td><td>پست کانفیگ رایگان یک کمپین</td></tr>
+  <tr><td class="en">ref_&lt;user&gt;</td><td>لینک معرفی یک کاربر</td></tr>
+  <tr><td class="en">partner_&lt;partner&gt;</td><td>لینک همکار/افیلیت</td></tr>
+  <tr><td class="en">seo_&lt;page&gt;</td><td>ورود از صفحه سئو</td></tr>
+  <tr><td class="en">channel_&lt;campaign&gt; · social_&lt;campaign&gt;</td><td>کمپین کانال یا شبکه اجتماعی</td></tr>
+</table>
+<p>برای هر منبع ردیابی می‌شود: source، campaign، medium، referrer، first/last_seen، bot_start، trial، purchase، revenue و درآمد تمدید — تا پاسخ سوال کلیدی «کدام منبع، مشتریِ باارزش می‌سازد؟» داده‌محور باشد.</p>
+
+<!-- ============ 8. FREE CONFIG ENGINE ============ -->
+<h2 class="sec"><span class="num">۸</span>موتور جذب کانفیگ رایگان</h2>
+
+<p>کانال کانفیگ رایگان، موتور اصلی جذب سرنخ واجد شرایط است و از دو استخر کاملاً مستقل تغذیه می‌شود:</p>
+
+<div class="figure">
+  <img src="../images/free-config-pipeline.png" alt="Free Config Pipeline" style="width:100%">
+  <div class="cap"><b>شکل ۳ —</b> خط تولید دوگانه کانفیگ رایگان: استخر عمومی (سبز) و استخر اختصاصی PV (آبی)</div>
+</div>
+
+<h3>استخر عمومی (Public Pool)</h3>
+<p>کانفیگ‌های عمومی از رجیستریِ اداره‌شده توسط ادمین (منابع تأییدشده گیت‌هاب/تلگرام) جمع می‌شوند و از این خط تولید عبور می‌کنند:</p>
+<div class="flow en" style="text-align:center">
+  <b>Fetcher</b> → <b>Parser</b> → <b>Normalize</b> → <b>Deduplicate</b> → <b>Validate</b> → <b>Quality Score</b> → <b>Limited Health Check</b> → <b>Rank</b> → <b>Publish</b>
+</div>
+<ul>
+  <li><b>فیلتر مرحله‌ای:</b> نمونه واقعی — دریافت ۲۰۰۰ ← حذف تکراری ← ۵۰ نامزد ← بررسی اتصالِ محدودِ همان برترین‌ها ← انتشار فقط ۱ تا ۲ مورد. هیچ تستِ خشنِ هزاران اتصالی از روی این سرور VPN اجرا نمی‌شود.</li>
+  <li><b>اعتبار منبع:</b> معیارهای قابلیت اعتماد هر منبع ذخیره می‌شود تا کیفیت رجیستری به‌مرور خودتصحیح شود.</li>
+  <li><b>صداقت برند:</b> کانفیگ‌های عمومی صراحتاً «منبع عمومی/کامانیوتی» برچسب می‌خورند — هرگز القا نمی‌شود که PV Network آن‌ها را اداره می‌کند.</li>
+</ul>
+
+<h3>استخر اختصاصی PV (PV Exclusive Pool)</h3>
+<p>کانفیگ‌های رایگانِ محدود با استفاده از پروویژن مجاز PV Network ساخته می‌شوند. ادمین بدون هیچ تغییر کد می‌تواند این‌ها را تنظیم کند:</p>
+<div class="chips">
+  <span class="chip hot">پست در روز</span><span class="chip hot">ساعات انتشار</span><span class="chip">حجم ترافیک (GB)</span><span class="chip">اعتبار</span><span class="chip">لوکیشن</span><span class="chip">پروتکل/پروفایل</span><span class="chip">سقف claim</span><span class="chip">محدودیت هر کاربر</span><span class="chip">بازه تاریخ کمپین</span><span class="chip">لوکیشن جایگزین</span>
+</div>
+<p><b>اورراید تاریخ:</b> مثلاً ۳ اکتبر ← ۵ گیگابایت، ۴ اکتبر ← ۱۰ گیگابایت، ۵ اکتبر ← ۳ گیگابایت — صرفاً با تنظیم، بدون تغییر کد. جریان ترجیحی تبدیل:</p>
+<div class="flow">
+  پست کانال ← دیپ‌لینک ردیابی‌شده ← شناسایی کمپین توسط ربات ← بررسی واجد شرایط بودن ← سرویس موقت یکتا ← اعمال سهمیه/انقضا ← ثبت رویداد ← پیگیری خودکار
+</div>
+<p>حالت «اشتراک عمومیِ کنترل‌شده» هم پشتیبانی می‌شود، اما مدل ترجیحیِ تبدیل، <b>claim انفرادی</b> است — چون اتصال کاربر به کمپین، سقف مصرف و هویت او قابل ردیابی و پیگیری است.</p>
+
+<h3>ترکیب محتوای کانال رایگان</h3>
+<p>کانال رایگان نباید به بڑِ کانفیگ بی‌کیفیت تبدیل شود. ترکیب محتواییِ قابل تنظیم: کانفیگ عمومی، کانفیگ اختصاصی PV، نکته رفع اشکال، ابزار مفید شبکه/VPN، دعوت به خرید و کمپین معرفی — همه زمان‌بند‌محور. <b>ممنوع:</b> کمیابی ساختگی، آپ‌تایم جعلی و تعداد کاربر غیرواقعی.</p>
+
+<!-- ============ 9. MESSAGING ============ -->
+<h2 class="sec"><span class="num">۹</span>موتور پیام و محتوای کانال</h2>
+
+<h3>قاعده طلایی پیام: داده ساختاریافته، نه تخیّل</h3>
+<div class="box box-red">
+  <div class="t">هوش مصنوعی فقط لحن را بازنویسی می‌کند — هرگز اعداد تجاری را نمی‌سازد</div>
+  قیمت، تخفیف، پهنای باند، سهمیه ترافیک، دسترسی سرور، آپ‌تایم، تعداد مشتریان و سقف claim باید از <b>داده ساختاریافته</b> بیایند. جعل هرکدام از این اعداد در پیام، نقض مشخصات است.
+</div>
+
+<p>قالب‌های پیام با متغیر پارامتری می‌شوند:</p>
+<div class="chips">
+  <span class="chip en">{{location}}</span><span class="chip en">{{traffic_gb}}</span><span class="chip en">{{validity_hours}}</span><span class="chip en">{{price}}</span><span class="chip en">{{campaign_name}}</span><span class="chip en">{{bot_link}}</span><span class="chip en">{{expires_at}}</span>
+</div>
+
+<p>قالب‌ها بر اساس نیت جدا می‌شوند: <b>جذب</b>، آموزش، پیگیری تست، بازیابی خرید، تمدید، انقضا، وین‌بک، معرفی، همکاری و پشتیبانی.</p>
+
+<h3>موتور محتوا (Content Engine)</h3>
+<p>موتور محتوا برای کانال رسمی PV و کانال کانفیگ رایگان، محتوای زمان‌بندی‌شده (آموزشی، وضعیت سرویس، کمپین خرید، کمپین معرفی) تولید و منتشر می‌کند. چرخه عمر هر رکورد محتوا:</p>
+<div class="flow">
+  <span class="en"><b>draft</b> → <b>validated</b> → <b>scheduled</b> → <b>published</b> → <b>failed</b></span> &nbsp;&nbsp;·&nbsp;&nbsp; حقایق تجاری ساختاریافته <b>قبل از انتشار</b> اعتبارسنجی می‌شوند
+</div>
+
+<!-- ============ 10. LIFECYCLE ============ -->
+<h2 class="sec"><span class="num">۱۰</span>موتور چرخه حیات (Lifecycle)</h2>
+
+<p>اتوماسیون قانون‌محور برای کل مسیر مشتری — از سرنخ خام تا مشتری راکد:</p>
+<table>
+  <tr><th style="width:50%">وضعیت ماشینی</th><th>اقدام خودکار</th></tr>
+  <tr><td>ربات شروع شده ولی بدون تست</td><td>پیگیری جذب</td></tr>
+  <tr><td>تست ساخته شده ولی بدون اتصال</td><td>راهنمای اتصال</td></tr>
+  <tr><td>تست متصل شده ولی بدون خرید</td><td>پیشنهاد تبدیل</td></tr>
+  <tr><td>تسویه شروع شده ولی پرداخت‌نشده</td><td>بازیابی خرید</td></tr>
+  <tr><td>اولین خرید</td><td>خوش‌آمد و فعال‌سازی</td></tr>
+  <tr><td>۳ روز و ۱ روز قبل از انقضا</td><td>یادآوری تمدید پله‌ای</td></tr>
+  <tr><td>منقضی شده / مشتری غیرفعال</td><td>وین‌بک</td></tr>
+  <tr><td>مشتری ارزشمند · معرف موفق · نامزد همکاری</td><td>مسیرهای VIP و همکاری</td></tr>
+</table>
+
+<p>هر قانون این اجزا را دارد: <span class="mono en">trigger · delay · conditions · template · CTA · cooldown · max sends · stop conditions</span></p>
+
+<div class="box box-green">
+  <div class="t">توقف هوشمند</div>
+  وقتی خرید انجام می‌شود، همه یادآورهای فروشِ نامناسب بلافاصله متوقف می‌شوند — مشتریِ پول‌داده هرگز پیام «هنوز خرید نکردی» نمی‌گیرد. این رفتار در فاز ۳ با تست اختصاصی پذیرش می‌شود.
+</div>
+
+<!-- ============ 11. REFERRAL / GAMIFICATION / PARTNERS ============ -->
+<h2 class="sec"><span class="num">۱۱</span>موتور معرفی، گیمیفیکیشن و همکاری</h2>
+
+<h3>موتور معرفی (Referral)</h3>
+<p>کدهای معرفی یکتا، اتریبیوشن معرف، وضعیت pending، اعتبارسنجی، پاداش، تاریخچه پاداش و محافظت ضدتقلب. قاعده نام شکست‌ناپذیر: <b>هرگز فقط برای کلیک روی لینک پاداش داده نمی‌شود.</b> مسیر ترجیحی اعتبارسنجی:</p>
+<div class="flow">
+  کاربر معرفی‌شده ← شروع ربات ← (تست اختیاری) ← خرید واجد شرایط ← تسویه پرداخت ← اعتبار referral ← پاداش
+</div>
+<p>محافظت‌ها: خود‌معرفی، حساب‌های تکراریِ قابل‌شناسایی، فارمینگ سریع و پردازش تکراری پاداش. مبلغ و نوع پاداش کاملاً قابل تنظیم است.</p>
+
+<h3>گیمیفیکیشن</h3>
+<p>ماسک‌های اختیاری (مثلاً ۱ معرفی معتبر ← پاداش A، ۳ ← پاداش B، ۵ ← پاداش C، ۱۰ ← پاداش D) به‌همراه کمپین‌های جدول امتیازات (leaderboard). همه مقادیر تجاری قابل تنظیم — هیچ عدد تجاری در کد هاردکد نمی‌شود.</p>
+
+<h3>افیلیت / همکار / نماینده</h3>
+<p>چهار لایه متمایز: معرفی مشتری، افیلیت، همکاری و نمایندگی. برای هر همکار ذخیره می‌شود: کلیک، شروع‌ها، تست‌ها، سفارش‌ها، فروش، درآمد، کمیسیون، کمیسیون در انتظار و کمیسیون تأییدشده. پنل نمایندگی موجود بازسازی نمی‌شود — یکپارچگی آن به فازهای بعدی موکول می‌شود و ربات‌های وایت‌لیبل صرفاً بک‌لاگ‌اند.</p>
+
+<!-- ============ 12. LEAD SCORING & SEGMENTS ============ -->
+<h2 class="sec"><span class="num">۱۲</span>امتیازدهی سرنخ و سگمنت‌ها</h2>
+
+<h3>امتیاز سرنخ (Lead Scoring)</h3>
+<p>امتیازدهی کاملاً قابل تنظیم بر اساس سیگنال‌هایی مثل: شروع ربات، دریافت کانفیگ رایگان، اتصال تست، مشاهده تعرفه، شروع تسویه، خرید قبلی، معرفی و انقضای اخیر. استراتژی نهایی امتیازدهی و آستانه‌های سگمنت <b>هرگز در منطق تجاری هاردکد نمی‌شوند</b> — از پیکربندی می‌آیند.</p>
+
+<h3>سگمنت‌های حداقلی (۱۵ سگمنت)</h3>
+<div class="chips">
+  <span class="chip en">NEW_LEAD</span><span class="chip en">FREE_CONFIG_USER</span><span class="chip en">TRIAL_USER</span><span class="chip en">TRIAL_NO_PURCHASE</span><span class="chip hot en">HOT_LEAD</span><span class="chip en">FIRST_TIME_BUYER</span><span class="chip hot en">ACTIVE_CUSTOMER</span><span class="chip en">EXPIRING</span><span class="chip en">EXPIRED</span><span class="chip en">CHURNED</span><span class="chip en">RETURNING_CUSTOMER</span><span class="chip hot en">VIP</span><span class="chip en">REFERRER</span><span class="chip en">AFFILIATE</span><span class="chip en">RESELLER</span>
+</div>
+<p>سگمنت‌بندی باید همیشه <b>قابل محاسبه مجدد</b> باشد — یعنی عضویت در سگمنت تابعی قطعی از رویدادهاست، نه یک وضعیت دستی که کهنه می‌شود.</p>
+
+<!-- ============ 13. FEEDBACK & COMPETITORS ============ -->
+<h2 class="sec"><span class="num">۱۳</span>بازخورد مشتری و رصد رقبا</h2>
+
+<h3>بازخورد و اعتماد</h3>
+<ul>
+  <li>امتیازدهی سبک ۱ تا ۵ پس از دوره استفاده مناسب</li>
+  <li>امتیازهای بالا ← دعوت به ثبت رضایت برای ارائه توصیه‌نامه (testimonial)</li>
+  <li>امتیازهای پایین ← مسیر بازیابی/پشتیبانی</li>
+  <li><b>قانون سخت:</b> هیچ توصیه‌نامه‌ای بدون رضایتِ ذخیره‌شده به‌صورت عمومی منتشر نمی‌شود</li>
+</ul>
+
+<h3>رصد هدفمند رقبا</h3>
+<p>فقط هوشمندی هدفمند — نه خزنده اینترنتیِ بی‌کنترل. منابع عمومیِ رقبا که ادمین تنظیم کرده برای تغییرات قیمت، پیشنهاد تست، حجم ترافیک، لوکیشن‌ها، کمپین معرفی، پلن جدید و پروموشن‌های بزرگ رصد می‌شوند. برای هر تغییر ذخیره می‌شود: منبع، زمان مشاهده، فیلد تغییرکرده، مقدار قبلی، مقدار جدید و URL منبع. قیدهای ایمنی: هرگز با ترافیک VPN تداخل نمی‌کند، در نسخه اول بدون اتوماسیون مرورگر و با HTTP fetching سبک.</p>
+
+<!-- ============ 14. ANALYTICS / EXPERIMENTS / ADMIN ============ -->
+<h2 class="sec"><span class="num">۱۴</span>تحلیل، آزمایش A/B و پنل ادمین</h2>
+
+<h3>تحلیل (Analytics)</h3>
+<p>داشبورد ادمین باید این پرسش‌ها را پاسخ دهد: کاربران از کجا آمده‌اند؟ کدام پست کانفیگ رایگان به خرید می‌رسد؟ کدام کمپین تبدیل می‌شود؟ کدام منبع تمدید می‌سازد؟ کدام منبع معرفی درآمد می‌سازد؟ کدام پیام چرخه حیات به خرید ختم می‌شود؟ متریک‌های حداقلی: کاربران، شروع ربات، تست‌ها، claimهای رایگان، شروع تسویه، خریدها، نرخ تبدیل، درآمد، تمدیدها، نرخ تمدید، معرفی‌ها، درآمد معرفی، درآمد وین‌بک و LTV (در صورت کفایت داده) — همه با کوئری قیف و کوهورتِ سبک روی PostgreSQL، بدون نصب پلتفرم سنگین.</p>
+
+<h3>موتور آزمایش (Experiments)</h3>
+<ul>
+  <li>تخصیص A/B <b>قطعی (deterministic)</b> — تخصیص یک کاربر در طول آزمایشِ در حال اجرا هرگز تغییر نمی‌کند و در دیتابیس ماندگار است</li>
+  <li>دامنه آزمایش: متن پیام، CTA، سهمیه تست، زمان انتشار، پیشنهاد کمپین، زمان‌بندی پیگیری</li>
+  <li><b>بدون نمونه کافی، برنده اعلام نمی‌شود</b> — فقط گزارش نتایج</li>
+</ul>
+
+<h3>پنل ادمین</h3>
+<p>حداقلی اما کارکردی — اولویت با عملکرد است نه طراحی. ادمین می‌تواند کمپین‌ها، برنامه کانفیگ رایگان، رجیستری منابع، قالب‌ها، قوانین اتوماسیون، قوانین معرفی، سوابق همکاران، فیچر فلگ‌ها و آزمایش‌ها را مدیریت کند. داشبورد: سلامت سیستم، کارهای شکست‌خورده، رویدادهای اخیر، قیف فروش و عملکرد کمپین.</p>
+
+<!-- ============ 15. FLAGS & RESOURCES ============ -->
+<h2 class="sec"><span class="num">۱۵</span>فیچر فلگ‌ها و محدودیت منابع</h2>
+
+<h3>هر ماژول بزرگ، کلید مستقل دارد</h3>
+<div class="chips">
+  <span class="chip hot en">ATTRIBUTION_ENABLED</span><span class="chip hot en">FREE_CONFIG_ENABLED</span><span class="chip en">PUBLIC_CONFIG_ENABLED</span><span class="chip en">PV_EXCLUSIVE_CONFIG_ENABLED</span><span class="chip hot en">LIFECYCLE_AUTOMATION_ENABLED</span><span class="chip hot en">REFERRAL_ENABLED</span><span class="chip en">PARTNER_ENABLED</span><span class="chip en">CONTENT_ENGINE_ENABLED</span><span class="chip en">COMPETITOR_WATCH_ENABLED</span><span class="chip en">EXPERIMENTS_ENABLED</span>
+</div>
+<p>هر اتوماسیونِ خطرناک یا رو‌به‌مشتری، تا وقتی تست‌های فازش قبول نشده <b>غیرفعال</b> شروع می‌کند. فعال‌سازی در فاز ۷ به‌صورت تدریجی است — هرگز همه قابلیت‌ها هم‌زمان روشن نمی‌شوند.</p>
+
+<h3>سهم منابع سرور</h3>
+<table>
+  <tr><th style="width:40%">قید</th><th>مقدار</th></tr>
+  <tr><td>مصرف عادی رم</td><td>حدود ۲۵۰ تا ۴۰۰ مگابایت</td></tr>
+  <tr><td>سقف رم داکر</td><td>حدود ۳۸۴ مگابایت (مگر با پروفایل مستندشده)</td></tr>
+  <tr><td>سقف CPU</td><td>محافظه‌کارانه ۰٫۵۰ تا ۰٫۷۵ هسته</td></tr>
+  <tr><td>سقف تعداد پروسه (PIDs)</td><td>اعمال می‌شود تا ورکر سرور را اشباع نکند</td></tr>
+</table>
+
+<!-- ============ 16. BUILD / SECURITY / OBSERVABILITY ============ -->
+<h2 class="sec"><span class="num">۱۶</span>سیاست بیلد، امنیت و مشاهده‌پذیری</h2>
+
+<h3>سیاست بیلد — بیلد سنگین روی پرووداکشن ممنوع</h3>
+<p>ممیزی نشان داده یک بیلد داکر تقریباً یک هسته CPU کامل را مصرف می‌کند. مسیر استاندارد:</p>
+<div class="flow">
+  <b>GitHub Actions</b> ← بیلد ایمیج ← تست ایمیج ← انتشار به رجیستری ← pool/deploy روی سرور
+</div>
+<p>CI شامل lint، تست واحد، تست یکپارچه، بررسی امنیتی و بیلد داکر است. اگر اعتبار رجیستری در دسترس نباشد، بلاکر ثبت و کار توسعه/تست ادامه می‌یابد — بیلد سنگینِ خاموش روی سرور تولیدی هرگز انجام نمی‌شود.</p>
+
+<h3>امنیت</h3>
+<ul>
+  <li>هیچ توکن، رمز، کلید خصوصی، اعتبار دیتابیس، توکن ربات تلگرام یا اعتبار پرداختی در گیت ذخیره نمی‌شود — همه از محیط/secret می‌آیند</li>
+  <li>کاربر دیتابیس با حداقل دسترسی؛ سرویس‌های داخلی فقط روی localhost یا شبکه اختصاصی</li>
+  <li>ادمین بدون احراز هویت غیرممکن است؛ CSRF در جاهای لازم، rate limiting، اعتبارسنجی ورودی، دسترسی SQL امن و لاگ امنیتی ساختاریافته</li>
+  <li>اعتبار VPN مشتریان لاگ نمی‌شود مگر با ضرورت قطعی و محافظت‌شده</li>
+</ul>
+
+<h3>مشاهده‌پذیری</h3>
+<p>لاگ ساختاریافته سبک به‌همراه: endpoint سلامت (health)، آمادگی (readiness)، متریک کارها، عمق صف، کارهای شکست‌خورده و خطاهای پردازش رویداد — با نمای CLI/ادمین برای بررسی سلامت. هیچ سوئیت مشاهده‌پذیری سنگینی در نسخه اول نصب نمی‌شود.</p>
+
+<!-- ============ 17. SENTINELX & FORBIDDEN ============ -->
+<h2 class="sec"><span class="num">۱۷</span>پاکسازی SentinelX و دستورهای ممنوع</h2>
+
+<h3>حذف کنترل‌شده‌ی sentinelx-worker (فاز ۰)</h3>
+<p>مالک اعلام کرده این کانتینر لازم نیست: بدون پورت منتشرشده، روی شبکه bridge پیش‌فرض، بدون وابستگی Compose و بدون رابطه کشف‌شده با پنل نمایندگی یا ربات AKH. روش حذف:</p>
+<ol>
+  <li>ثبت خروجی <span class="mono en">docker inspect</span> برای rollback</li>
+  <li>فقط همین یک کانتینر stop و remove می‌شود — <b>نه</b> پوشه <span class="mono en">/opt/sentinelx-worker</span> (تا پایان تأیید استقرار GrowthOS)</li>
+  <li>هرگز <span class="mono en">docker system prune</span> یا <span class="mono en">docker network prune</span> یا <span class="mono en">docker volume prune</span> اجرا نمی‌شود</li>
+</ol>
+
+<h3>دستورهای مطلقاً ممنوع</h3>
+<div class="box box-red">
+  <div class="t en">docker system prune · docker network prune · docker volume prune · docker rm $(docker ps ...) · docker stop $(docker ps ...) · iptables -F · nft flush ruleset · git reset --hard (ریپوی نامرتبط) · rm -rf (پوشه‌های زیرساختی)</div>
+  همیشه فقط منابعی هدف گرفته می‌شوند که متعلق به GrowthOS هستند.
+</div>
+
+<!-- ============ 18. DOCS & ANTI-LOOP ============ -->
+<h2 class="sec"><span class="num">۱۸</span>مستندسازی و قوانین ضدحلقه</h2>
+
+<h3>فایل‌های مستنداتی که پیوسته به‌روز نگه داشته می‌شوند</h3>
+<div class="chips">
+  <span class="chip en">README.md</span><span class="chip en">MASTER_SPEC.md</span><span class="chip en">ARCHITECTURE.md</span><span class="chip hot en">PLAN.md</span><span class="chip en">STATUS.md</span><span class="chip en">CHANGELOG.md</span><span class="chip en">TEST_PLAN.md</span><span class="chip en">SECURITY.md</span><span class="chip en">DEPLOYMENT.md</span><span class="chip en">ROLLBACK.md</span><span class="chip en">BACKLOG.md</span><span class="chip hot en">BLOCKERS.md</span><span class="chip en">EXISTING_ISSUES.md</span><span class="chip en">SERVER_RESOURCE_MAP.md</span>
+</div>
+<p><span class="mono en">PLAN.md</span> تنها برنامه اجرایی پروژه است — برنامه رقیبی ساخته نمی‌شود.</p>
+
+<h3>قوانین ضدحلقه (ضمن اجبار)</h3>
+<ul>
+  <li>در هر لحظه فقط <b>یک فاز فعال</b> است؛ هر فاز قبل از پیاده‌سازی باید هدف، دامنه، فایل‌ها/ماژول‌ها، تغییرات دیتابیس، ریسک‌ها و معیارهای پذیرش را تعریف کند</li>
+  <li>فازِ بسته‌شده فقط برای تمیزکاری کد باز نمی‌شود؛ معماری به صرفِ ظاهرِ بهتر بازطراحی نمی‌شود؛ کدِ کارکننده بدون نیازِ اندازه‌پذیر جایگزین نمی‌شود؛ ریفکتور مؤلفه‌های نامرتبط ممنوع است</li>
+  <li>ایده‌های جدید به <span class="mono en">BACKLOG.md</span> می‌روند و فاز جاری را تغییر نمی‌دهند</li>
+</ul>
+<div class="box box-amber">
+  <div class="t">قانون سه تلاش</div>
+  اگر یک مشکل فنی بعد از <b>سه تلاش جدی</b> حل نشد: توقفِ تکرار همان رویکرد؛ ثبت رفتار مشاهده‌شده، شواهد، تلاش‌ها، فرضیه ریشه‌ای و کوچک‌ترین گام بعدی در <span class="mono en">STATUS.md</span>؛ سپس رویکردِ محدودِ متفاوت. ورود به حلقه دیباگ بی‌پایان ممنوع است.
+</div>
+
+<!-- ============ 19. PHASES ============ -->
+<h2 class="sec"><span class="num">۱۹</span>فازهای اجرا (۰ تا ۷)</h2>
+
+<div class="figure">
+  <img src="../images/phases.png" alt="Execution Phases" style="width:100%">
+  <div class="cap"><b>شکل ۴ —</b> هشت فاز اجرایی؛ ورود به هر فاز فقط پس از قبولی معیارهای پذیرش فاز قبل</div>
+</div>
+
+<table>
+  <tr><th style="width:6%">فاز</th><th style="width:22%">عنوان</th><th style="width:40%">محتوا</th><th>معیار پذیرش (خلاصه)</th></tr>
+  <tr><td><b>۰</b></td><td>زیرساخت و ایمنی</td><td>ساختار ریپو، مستندات، نقشه منابع سرور، preflight استقرار، چک تداخل، حذف فقط کانتینر sentinelx، محیط لوکال/توسعه، CI، روش بکاپ/rollback</td><td>تست‌ها اجرا می‌شوند؛ CI کار می‌کند؛ هیچ منبع محافظت‌شده‌ای تغییر نکرده؛ چک تداخل پرووداکشن کار می‌کند؛ حذف sentinel به سرویس‌ها آسیب نزده</td></tr>
+  <tr><td><b>۱</b></td><td>داده هسته / رویداد / اتریبیوشن / آداپتر میرزا</td><td>اسکیمای دیتابیس Growth، سیستم رویداد، مدل‌های کاربر/منبع/کمپین، اتریبیوشن، آداپتر امن میرزا</td><td>رویداد ربات/کاربر ثبت می‌شود؛ منبع و first-touch ماندگارند؛ رویداد تکراری idempotent است؛ هیچ رگرسیون پرداخت/پروویژن</td></tr>
+  <tr><td><b>۲</b></td><td>موتور جذب رایگان</td><td>رجیستری منابع، جمع‌آورهای عمومی گیت‌هاب/تلگرام، پارسرها، حذف تکراری، امتیاز کیفیت، اعتبارسنجی سلامت محدود، زمان‌بند، انتشار کانال رایگان، مدل کمپین اختصاصی PV</td><td>دو پست زمان‌بندی‌شده تکراری نمی‌شوند؛ کانفیگ نامعتبر منتشر نمی‌شود؛ تنظیم سهمیه/تاریخ PV کار می‌کند؛ اتریبیوشن در جریان دیپ‌لینک زنده می‌ماند</td></tr>
+  <tr><td><b>۳</b></td><td>اتوماسیون فروش چرخه حیات</td><td>سگمنت‌ها، موتور کار، قالب پیام، پیگیری تست، بازیابی تسویه، یادآوری تمدید، انقضا، وین‌بک</td><td>پیام‌ها شرط توقف را رعایت می‌کنند؛ خریداران یادآور اشتباه نمی‌گیرند؛ idempotency و cooldown کار می‌کنند</td></tr>
+  <tr><td><b>۴</b></td><td>معرفی / ویروسی / همکاری</td><td>کدهای معرفی، اعتبارسنجی، دفتر پاداش، ضدسوءاستفاده، مایل‌استون‌ها، سوابق افیلیت، تبدیل همکار</td><td>خود‌معرفی مسدود؛ پاداش تکراری ناممکن؛ پاداش فقط پس از تبدیل واجد شرایط</td></tr>
+  <tr><td><b>۵</b></td><td>محتوا / بازخورد / هوش رقابتی</td><td>زمان‌بندی کانال رسمی و رایگان، قالب محتوا، بازخورد/امتیاز، رصد تغییرات هدفمند رقبا</td><td>حقایق تجاری قابل جعل نیستند؛ زمان‌بند idempotent است؛ خطای رصد رقبا هرگز VPN/میرزا را تحت تاثیر قرار نمی‌دهد</td></tr>
+  <tr><td><b>۶</b></td><td>تحلیل / ادمین / آزمایش</td><td>رابط ادمین، قیف، تحلیل منبع، اتریبیوشن درآمد، تمدیدها، کوهورت‌ها، امتیاز سرنخ، تخصیص A/B</td><td>ادمین می‌تواند منبع ← تست ← خرید ← تمدید را ردیابی کند؛ تحلیل‌ها با رویدادها/سفارش‌های پایه سازگارند</td></tr>
+  <tr><td><b>۷</b></td><td>سخت‌سازی و رول‌اوت</td><td>پروفایل منابع، بازبینی امنیتی، اسکن وابستگی، تست بار، تأیید مایگریشن، تأیید بکاپ، تمرین rollback، رول‌اوت فیچر‌فلگ</td><td>اتوماسیون رو‌به‌مشتری به‌تدریج فعال می‌شود — هرگز همه هم‌زمان</td></tr>
+</table>
+
+<p>چرخه هر فاز در پنج گام اجرا می‌شود و در پایان هر فاز به‌روزرسانی <span class="mono en">STATUS.md</span>، <span class="mono en">CHANGELOG.md</span> و <span class="mono en">PLAN.md</span> به‌همراه ثبت نتایج تست و یک کامیت منطقی انجام می‌شود. کامیت‌ها کوچک‌اند و فورس‌پوش هرگز انجام نمی‌شود.</p>
+<div class="flow" style="text-align:center"><b>بازرسی</b> ← <b>پیاده‌سازی</b> ← <b>تست</b> ← <b>مستندسازی</b> ← <b>کامیت</b></div>
+
+<!-- ============ 20. TESTING / DEPLOYMENT / DOD ============ -->
+<h2 class="sec"><span class="num">۲۰</span>تست، قرارداد استقرار و تعریف پایان کار</h2>
+
+<h3>تست‌های الزامی</h3>
+<div class="chips">
+  <span class="chip">واحد</span><span class="chip">یکپارچه</span><span class="chip">مایگریشن دیتابیس</span><span class="chip hot">idempotency</span><span class="chip hot">تکراری‌نبودن زمان‌بند</span><span class="chip">ماک تلگرام</span><span class="chip">آداپتر میرزا</span><span class="chip hot">تقلب معرفی</span><span class="chip">کمپین</span><span class="chip">بررسی امنیتی</span>
+</div>
+
+<h3>تست دودی پرووداکشن — قبل و بعد از هر استقرار</h3>
+<div class="chips">
+  <span class="chip hot">میرزا در دسترس</span><span class="chip hot">پنل نمایندگی در دسترس</span><span class="chip hot">ربات AKH در دسترس</span><span class="chip">X-UI زنده</span><span class="chip">Apache سالم</span><span class="chip">GrowthOS سالم</span><span class="chip">PostgreSQL سالم</span>
+</div>
+<div class="box box-red">
+  <div class="t">قاعده شکست دودی</div>
+  اگر بعد از یک عمل GrowthOS هر یک از چک‌های سرویس محافظت‌شده شکست خورد: <b>rollback فوری GrowthOS</b>. تلاش تصادفی برای «تعمیر» سرویس محافظت‌شده ممنوع است.
+</div>
+
+<h3>قرارداد استقرار</h3>
+<div class="flow">
+  preflight ← پشتیبان‌گیری وضعیت ← pool ایمیج تست‌شده ← مایگریشن ← راه‌اندازی GrowthOS ← چک سلامت ← تست دودی سرویس‌های محافظت‌شده ← <b>موفقیت، یا rollback خودکار GrowthOS</b>
+</div>
+<p>GrowthOS فقط مالک <span class="mono en">/opt/pv-growth</span>، منابع داکر خودش، دیتابیس/کاربر خودش، شبکه اختصاصی، vhost آپاچیِ صریحاً مجازِ آینده و لاگ‌های خودش است — مالک هیچ منبع پرووداکشن موجودی نیست.</p>
+
+<h3>تعریف پایان کار (Definition of Done)</h3>
+<p>وجود کد به‌تنهایی پایان پروژه نیست. نسخه ۱ کامل است وقتی سیستم بتواند <b>خودکار</b> این کارها را انجام دهد:</p>
+<div class="kpi-row">
+  <div class="kpi k1"><div class="v">✓</div><div class="l">شناسایی منبع جذب</div></div>
+  <div class="kpi k1"><div class="v">✓</div><div class="l">مدیریت کانفیگ رایگان</div></div>
+  <div class="kpi k2"><div class="v">✓</div><div class="l">قیف تست ← خرید</div></div>
+  <div class="kpi k2"><div class="v">✓</div><div class="l">پیگیری چرخه حیات</div></div>
+  <div class="kpi k3"><div class="v">✓</div><div class="l">معرفی و پاداش</div></div>
+</div>
+<div class="kpi-row">
+  <div class="kpi k3"><div class="v">✓</div><div class="l">اتریبیوشن همکار</div></div>
+  <div class="kpi k4"><div class="v">✓</div><div class="l">زمان‌بندی محتوا</div></div>
+  <div class="kpi k4"><div class="v">✓</div><div class="l">ردگیری تبدیل و تمدید</div></div>
+  <div class="kpi k5"><div class="v">✓</div><div class="l">وین‌بک و بازخورد</div></div>
+  <div class="kpi k5"><div class="v">✓</div><div class="l">رصد رقبا و تحلیل</div></div>
+</div>
+<p style="margin-top:2mm">و دو شرط پایانی: <b>عملیات بدون دخالت روزانه‌ی دستی</b> و <b>ادامه normal عملکرد زیرساخت VPN موجود</b>.</p>
+
+<div class="footer-note">
+  گزارش جامع PV GrowthOS · نسخه ۱٫۰ · اکتبر ۲۰۲۶ · تدوین‌شده بر پایه سند مشخصات رسمی v1.0<br>
+  <span class="en" style="font-size:8.5pt">github.com/DashSaman/PV-GrowthOS · docs/report/PV-GrowthOS-Report-FA.pdf</span>
+</div>
+
+</body>
+</html>

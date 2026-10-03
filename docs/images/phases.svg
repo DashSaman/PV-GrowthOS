@@ -1,0 +1,97 @@
+<svg width="1400" height="640" viewBox="0 0 1400 640" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Tahoma, sans-serif">
+  <defs>
+    <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <linearGradient id="pg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#059669"/><stop offset="0.35" stop-color="#2563eb"/>
+      <stop offset="0.7" stop-color="#7c3aed"/><stop offset="1" stop-color="#db2777"/>
+    </linearGradient>
+  </defs>
+  <rect width="1400" height="640" fill="#f8fafc"/>
+  <text x="700" y="50" text-anchor="middle" font-size="30" font-weight="700" fill="#0f172a">PV GrowthOS — Execution Phases</text>
+  <text x="700" y="82" text-anchor="middle" font-size="18" fill="#475569">هشت فاز اجرایی؛ فقط یک فاز در هر لحظه فعال است و ورود فاز بعدی نیازمند قبولی معیارهاست</text>
+
+  <!-- timeline -->
+  <rect x="60" y="118" width="1280" height="8" rx="4" fill="url(#pg)"/>
+
+  <!-- Row 1 -->
+  <g>
+    <circle cx="115" cy="122" r="26" fill="#059669"/>
+    <text x="115" y="129" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">0</text>
+    <rect x="30" y="160" width="300" height="150" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="180" y="188" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">Foundation &amp; Safety</text>
+    <text x="180" y="210" text-anchor="middle" font-size="14" fill="#475569">زیرساخت و ایمنی</text>
+    <text x="48" y="238" font-size="13.5" fill="#334155">• repo, docs, preflight &amp; collision checks</text>
+    <text x="48" y="262" font-size="13.5" fill="#334155">• CI: lint, tests, security, docker build</text>
+    <text x="48" y="286" font-size="13.5" fill="#334155">• remove only sentinelx-worker container</text>
+
+    <circle cx="465" cy="122" r="26" fill="#0d9488"/>
+    <text x="465" y="129" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">1</text>
+    <rect x="380" y="160" width="300" height="150" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="530" y="188" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">Core Data &amp; Attribution</text>
+    <text x="530" y="210" text-anchor="middle" font-size="14" fill="#475569">داده، رویداد، اتریبیوشن</text>
+    <text x="398" y="238" font-size="13.5" fill="#334155">• schema pv_growth + Alembic</text>
+    <text x="398" y="262" font-size="13.5" fill="#334155">• idempotent event system</text>
+    <text x="398" y="286" font-size="13.5" fill="#334155">• first/last-touch + Mirza adapter</text>
+
+    <circle cx="815" cy="122" r="26" fill="#2563eb"/>
+    <text x="815" y="129" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">2</text>
+    <rect x="730" y="160" width="300" height="150" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="880" y="188" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">Free Acquisition Engine</text>
+    <text x="880" y="210" text-anchor="middle" font-size="14" fill="#475569">موتور جذب کانفیگ رایگان</text>
+    <text x="748" y="238" font-size="13.5" fill="#334155">• source registry + collectors</text>
+    <text x="748" y="262" font-size="13.5" fill="#334155">• dedup, quality score, health check</text>
+    <text x="748" y="286" font-size="13.5" fill="#334155">• free channel + PV exclusive quota</text>
+
+    <circle cx="1165" cy="122" r="26" fill="#7c3aed"/>
+    <text x="1165" y="129" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">3</text>
+    <rect x="1080" y="160" width="300" height="150" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="1230" y="188" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">Lifecycle Automation</text>
+    <text x="1230" y="210" text-anchor="middle" font-size="14" fill="#475569">اتوماسیون چرخه حیات</text>
+    <text x="1098" y="238" font-size="13.5" fill="#334155">• segments + rule engine</text>
+    <text x="1098" y="262" font-size="13.5" fill="#334155">• trial follow-up, checkout recovery</text>
+    <text x="1098" y="286" font-size="13.5" fill="#334155">• renewal, expiry, win-back</text>
+  </g>
+
+  <!-- Row 2 -->
+  <g>
+    <circle cx="115" cy="372" r="26" fill="#9333ea"/>
+    <text x="115" y="379" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">4</text>
+    <rect x="30" y="410" width="300" height="150" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="180" y="438" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">Referral &amp; Partner</text>
+    <text x="180" y="460" text-anchor="middle" font-size="14" fill="#475569">معرفی، پاداش، همکاری</text>
+    <text x="48" y="488" font-size="13.5" fill="#334155">• codes + validation after purchase</text>
+    <text x="48" y="512" font-size="13.5" fill="#334155">• reward ledger + anti-fraud</text>
+    <text x="48" y="536" font-size="13.5" fill="#334155">• milestones, affiliate records</text>
+
+    <circle cx="465" cy="372" r="26" fill="#c026d3"/>
+    <text x="465" y="379" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">5</text>
+    <rect x="380" y="410" width="300" height="150" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="530" y="438" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">Content &amp; Intel</text>
+    <text x="530" y="460" text-anchor="middle" font-size="14" fill="#475569">محتوا، بازخورد، رقبا</text>
+    <text x="398" y="488" font-size="13.5" fill="#334155">• channel scheduling, validated facts</text>
+    <text x="398" y="512" font-size="13.5" fill="#334155">• feedback + consent-based trust</text>
+    <text x="398" y="536" font-size="13.5" fill="#334155">• targeted competitor watcher</text>
+
+    <circle cx="815" cy="372" r="26" fill="#db2777"/>
+    <text x="815" y="379" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">6</text>
+    <rect x="730" y="410" width="300" height="150" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="880" y="438" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">Analytics &amp; Admin</text>
+    <text x="880" y="460" text-anchor="middle" font-size="14" fill="#475569">تحلیل و پنل ادمین</text>
+    <text x="748" y="488" font-size="13.5" fill="#334155">• funnel, cohort, revenue attribution</text>
+    <text x="748" y="512" font-size="13.5" fill="#334155">• lead scoring, segments recalc</text>
+    <text x="748" y="536" font-size="13.5" fill="#334155">• A/B assignment (deterministic)</text>
+
+    <circle cx="1165" cy="372" r="26" fill="#e11d48"/>
+    <text x="1165" y="379" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">7</text>
+    <rect x="1080" y="410" width="300" height="150" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="1230" y="438" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">Hardening &amp; Rollout</text>
+    <text x="1230" y="460" text-anchor="middle" font-size="14" fill="#475569">سخت‌سازی و رول‌اوت</text>
+    <text x="1098" y="488" font-size="13.5" fill="#334155">• profiling, security, load test</text>
+    <text x="1098" y="512" font-size="13.5" fill="#334155">• backup + rollback rehearsal</text>
+    <text x="1098" y="536" font-size="13.5" fill="#334155">• gradual feature-flag rollout</text>
+  </g>
+
+  <text x="700" y="610" text-anchor="middle" font-size="15" fill="#64748b">Acceptance criteria gate every phase · بعد از هر فاز: STATUS / CHANGELOG / PLAN به‌روز و کامیت منطقی</text>
+</svg>
