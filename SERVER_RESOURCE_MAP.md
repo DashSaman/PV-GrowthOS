@@ -17,6 +17,7 @@ Host: `RoboT` · Ubuntu 22.04 · 2 vCPU · ~4 GB RAM (+ **2 GB swap — NEW, Gro
 | Docker networks | bridge/pv_reseller_net/akhbot_internal | shared | **PROTECTED**; new `pv_growth_net` 172.23.77.0/24 (GROWTHOS OWNED) |
 | sentinelx-worker | — | — | **REMOVED** (container absent before this deploy; no /opt/sentinelx-worker on this host) |
 | GrowthOS app | container `pv-growth-app` · 127.0.0.1:8350 · image pv-growth-app:<sha> · limits 384M/0.75CPU/200pids | GrowthOS | **GROWTHOS OWNED — DEPLOYED, HEALTHY** |
+| X-UI panel API (provisioning reuse) | v1.pvnetwork.ir:2087/Pikniki + :4020 sub · Bearer token in /opt/pv-growth/config/.env · growth-* client namespace only | shared (Mirza's interface) | **REUSED read+scoped-write** (temp free clients only; paid users untouched) |
 | GrowthOS config/audit/backups | /opt/pv-growth/{config,logs,backups,deploy,audit} | GrowthOS | **GROWTHOS OWNED** (.env root-owned 600) |
 | socat forwarders | pv-growth-pgforward (172.23.77.1:5432→127.0.0.1:5432) · pv-growth-mysqlforward (…:3306→…:3306) | GrowthOS | **GROWTHOS OWNED — NEW** (enabled, Restart=always) |
 | swap | /swapfile 2 GB · fstab + sysctl swappiness=10 | host | **NEW (GrowthOS-initiated)** — rollback: `swapoff /swapfile && rm /swapfile`, remove fstab line |

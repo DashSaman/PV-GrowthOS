@@ -69,6 +69,24 @@ df -h / && free -m && docker exec pv-growth-app python -m pv_growth preflight
 Container is hard-capped (384M/0.75 CPU/200 pids) — host services keep
 headroom. If the cap is hit, GrowthOS throttles, it cannot starve VPN/Mirza.
 
+## PV Exclusive provisioning (B5)
+- Adapter: `XUIProvisioningAdapter` → Mirza's own X-UI panel API
+  (`PVG_PROVISIONING_BASE_URL`/`TOKEN`/`INBOUND_IDS`/`SUBLINK` in .env)
+- Free clients use the `growth-*` email namespace only — paid users can never collide
+- Daily free budget: `PVG_FREE_DAILY_BUDGET` (default 25); guard also requires
+  DB + panel health before every provision (fail closed)
+- Expiry sweep (`provisioning.sweep`, every 5 min): marks expired claims and emits
+  SERVICE_EXPIRED only when the panel confirms the service is gone/expired
+- Manual check:
+```bash
+docker exec pv-growth-app python -c "
+from pv_growth.core.config import get_settings
+from pv_growth.provisioning.xui import get_provisioning
+a=get_provisioning(get_settings())
+print('health:', a.health())
+print(a.service_state('growth-XXXX'))"
+```
+
 ## Rollback
 ```bash
 docker stop pv-growth-app && docker rm pv-growth-app
