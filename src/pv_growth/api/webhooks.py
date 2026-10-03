@@ -68,11 +68,20 @@ def telegram_webhook(secret: str, update: TgUpdate):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
                             "telegram not configured")
 
-    if update.message is not None and update.message.from_ is not None:
-        _handle_message(client, update.message)
-    elif update.callback_query is not None and update.callback_query.from_ is not None:
-        _handle_callback(client, update.callback_query)
+    process_update(update.model_dump(by_alias=True))
     return {"ok": True}
+
+
+def process_update(update: dict) -> None:
+    """Shared update pipeline for webhook + long-polling paths."""
+    client = _telegram()
+    if client is None:
+        return
+    parsed = TgUpdate.model_validate(update)
+    if parsed.message is not None and parsed.message.from_ is not None:
+        _handle_message(client, parsed.message)
+    elif parsed.callback_query is not None and parsed.callback_query.from_ is not None:
+        _handle_callback(client, parsed.callback_query)
 
 
 def _handle_message(client, message: TgMessage) -> None:

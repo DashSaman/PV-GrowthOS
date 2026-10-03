@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     # --- scheduler / jobs (enable in production env when Phase 3 lands) ---
     scheduler_enabled: bool = False
+    telegram_polling_enabled: bool = True  # long-poll when no public webhook
     scheduler_interval_seconds: float = 15.0
     job_batch_size: int = 10
     job_lock_stale_seconds: int = 300

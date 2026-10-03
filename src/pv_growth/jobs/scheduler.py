@@ -26,10 +26,21 @@ class Scheduler:
 
         settings = self._settings
         log.info("scheduler loop started", interval=settings.scheduler_interval_seconds)
+        poller = None
+        if (settings.scheduler_enabled and settings.telegram_polling_enabled
+                and settings.telegram_bot_token):
+            from pv_growth.api.webhooks import process_update
+            from pv_growth.telegram.poller import TelegramPoller
+
+            poller = TelegramPoller(settings, lambda u: process_update(u))
+            log.info("telegram long-polling enabled")
+
         while not self._stop.is_set():
             try:
                 self._enqueue_periodic()
                 run_tick(settings, worker_id="scheduler")
+                if poller is not None:
+                    poller.poll_once()  # blocks up to 25s; fine in this thread
             except Exception as exc:  # noqa: BLE001 — the loop itself must never die
                 log.error("scheduler tick failed", error=str(exc))
             self._stop.wait(settings.scheduler_interval_seconds)
