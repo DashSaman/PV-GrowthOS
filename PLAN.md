@@ -10,7 +10,7 @@ phase starts. New ideas go to `BACKLOG.md` and never interrupt the active phase.
 |---|---|---|
 | 0 | Foundation & Safety | ✅ COMPLETE |
 | 1 | Core Data / Events / Attribution / Mirza Adapter | ✅ COMPLETE |
-| 2 | Free Acquisition Engine | ⬜ PENDING |
+| 2 | Free Acquisition Engine | ✅ COMPLETE |
 | 3 | Lifecycle Sales Automation | ⬜ PENDING |
 | 4 | Referral / Viral / Partner | ⬜ PENDING |
 | 5 | Content / Feedback / Competitor Intel | ⬜ PENDING |
@@ -66,11 +66,11 @@ Source registry, public collectors (GitHub/Telegram), parsers, dedup, quality sc
 limited health validation, scheduler, free-channel publishing, PV exclusive campaign
 model with admin-configurable per-date overrides.
 
-Acceptance:
-- [ ] two scheduled posts cannot duplicate
-- [ ] invalid configs do not publish
-- [ ] PV exclusive quota/date settings work
-- [ ] source attribution survives the deep-link flow
+Acceptance (verified — tests/test_free_config.py, tests/test_config_quality.py):
+- [x] two scheduled posts cannot duplicate (PublishedPost.dedupe_key + savepoint race guard)
+- [x] invalid configs do not publish (validate() filters; unhealthy candidates filtered by limited health check)
+- [x] PV exclusive quota/date settings work (max_claims, per_user_limit, date_overrides — data-driven, no code change)
+- [x] source attribution survives the deep-link flow (Phase 1 parser handles freecfg_<campaign>; campaign linkage tested)
 
 ## Phase 3 — Lifecycle Sales Automation
 

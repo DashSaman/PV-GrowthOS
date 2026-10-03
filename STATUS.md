@@ -4,7 +4,7 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-Phase 0 — COMPLETE. Phase 1 — COMPLETE. Phase 2 is next.
+Phase 0/1/2 — COMPLETE. Phase 3 is next.
 
 ## Environment
 
@@ -26,7 +26,18 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-- Phase 2 (Free Acquisition Engine) implementation.
+- Phase 3 (Lifecycle Sales Automation + durable job engine).
+
+## Phase 2 summary
+
+- config_sources registry + fetchers (GitHub raw, t.me/s public preview — lightweight HTTP only)
+- Parsers vmess/vless/trojan/ss (SIP002): normalize, credential-fingerprint dedup hash,
+  validation (private hosts, ports, credentials), bounded quality scoring
+- Limited health check: TCP-only, hard caps (5 candidates, concurrency 3) — no mass testing
+- Publish pipeline idempotent per day+slot (dedupe_key + savepoint); unhealthy never publish;
+  public posts always labeled community-sourced
+- PV exclusive pool: per-date overrides, quotas, per-user limits, idempotent claims,
+  provisioning interface + fake; provisioning outage queues claim (never loses it)
 
 ## Phase 1 summary
 
@@ -45,6 +56,6 @@ See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
 ## Test Results
 
-- Phase 0: 6 tests · Phase 1: +13 tests → 19 passed total (SQLite locally;
+- Phase 0: 6 · Phase 1: +13 · Phase 2: +15 → 34 passed total (SQLite locally;
   CI additionally runs the same suite against PostgreSQL 14 + migration up/down).
 - `ruff check src tests`: clean.

@@ -2,6 +2,20 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
+## [0.3.0] — 2026-10-03 — Phase 2: Free Acquisition Engine
+
+### Added
+- Migration 0003: config_sources, raw_configs (unique uri_hash), published_posts (unique dedupe_key), exclusive_claims (unique claim_key)
+- Public source registry + fetchers: GitHub raw files, Telegram public previews (t.me/s) — HTTP only, no crawling
+- Config parsers vmess/vless/trojan/ss(SIP002) with credential-fingerprint dedup, validation (private/loopback hosts, port ranges, missing credentials), reliability-weighted scoring
+- Limited health checking: capped TCP checks only (default max 5, concurrency 3, 4s timeout)
+- Idempotent publishing per day+slot — double scheduler runs cannot double-post; unhealthy/invalid configs never publish; community-sourced labeling enforced
+- PV exclusive pool: data-driven campaigns (traffic/validity/location/protocol/claims/per-user/date_overrides), idempotent claims, provisioning interface with Http/Fake clients, outage-safe queueing
+- 15 new tests (34 total passing)
+
+### Fixed
+- In-transaction dedupe: staged pipeline inserts now use savepoints (autoflush-off safe)
+
 ## [0.2.0] — 2026-10-03 — Phase 1: Core Data / Events / Attribution / Mirza
 
 ### Added
