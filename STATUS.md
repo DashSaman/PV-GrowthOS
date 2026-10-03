@@ -4,7 +4,7 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-Phase 0–5 — COMPLETE. Phase 6 is next.
+Phase 0–6 — COMPLETE. Phase 7 (hardening) in progress.
 
 ## Environment
 
@@ -26,7 +26,22 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-- Phase 6 (Analytics / Admin / Experiments).
+- Phase 7 (Production Hardening & Rollout).
+
+## Phase 6 summary
+
+- Analytics: funnel (6 steps), conversion rate, source performance (first-touch
+  attribution → trials/purchases/revenue), monthly cohorts, revenue summary
+  (total/renewal/winback), referral stats, campaign performance — all SQL over
+  the event log, reconciling with raw counts (tested)
+- Experiments: hash(seed,key,user) deterministic assignment, persisted per
+  (experiment,user), immutable while running, results reported with
+  insufficient-sample flag, never auto-declared winners
+- Admin API (X-Admin-Token): dashboard (flags/funnel/revenue/queue/failures/
+  recent events), flags toggle, campaigns/templates/rules/sources CRUD,
+  partners summary, experiments create/list/end, competitor sources
+- Telegram webhook: secret path; /start deep links → BOT_STARTED + attribution
+  + referral/partner hooks; claim: and rate: callbacks; 503 without token
 
 ## Phase 5 summary
 
@@ -91,6 +106,6 @@ See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
 ## Test Results
 
-- Phase 0–5 cumulative: 66 passed total (SQLite locally;
+- Phase 0–6 cumulative: 73 passed total (SQLite locally;
   CI additionally runs the same suite against PostgreSQL 14 + migration up/down).
 - `ruff check src tests`: clean.

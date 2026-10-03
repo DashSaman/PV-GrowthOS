@@ -26,6 +26,11 @@ from pv_growth.database.models.growth import (  # noqa: F401
     ReferralCode,
     RewardLedger,
 )
+from pv_growth.database.models.intel import (  # noqa: F401
+    AppConfig,
+    Experiment,
+    ExperimentAssignment,
+)
 from pv_growth.database.models.jobs import (  # noqa: F401
     Job,
     LifecycleRule,

@@ -14,7 +14,7 @@ phase starts. New ideas go to `BACKLOG.md` and never interrupt the active phase.
 | 3 | Lifecycle Sales Automation | ✅ COMPLETE |
 | 4 | Referral / Viral / Partner | ✅ COMPLETE |
 | 5 | Content / Feedback / Competitor Intel | ✅ COMPLETE |
-| 6 | Analytics / Admin / Experiments | ⬜ PENDING |
+| 6 | Analytics / Admin / Experiments | ✅ COMPLETE |
 | 7 | Production Hardening & Rollout | ⬜ PENDING |
 
 ## Phase 0 — Foundation & Safety (COMPLETE)
@@ -109,9 +109,12 @@ Acceptance (verified — tests/test_phase5.py):
 Admin interface (auth + management endpoints + dashboard), funnel, source analytics,
 revenue attribution, renewals, cohorts, lead scoring, deterministic A/B assignment.
 
-Acceptance:
-- [ ] admin can trace source → trial → purchase → renewal
-- [ ] analytics reconcile against underlying events/orders
+Acceptance (verified — tests/test_phase6.py):
+- [x] admin can trace source → trial → purchase → renewal (first-touch + funnel + source performance)
+- [x] analytics reconcile against underlying events (funnel vs raw counts — tested)
+- [x] deterministic A/B (stable per user, persisted, never re-assigned; no winner declared on weak samples)
+- [x] admin API: token-auth management for campaigns/templates/rules/sources/flags/partners/experiments + dashboard
+- [x] Telegram webhook: secret path, deep-link → attribution + referral/partner hooks, claim & rating callbacks
 
 ## Phase 7 — Production Hardening & Rollout
 

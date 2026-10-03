@@ -2,6 +2,16 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
+## [0.7.0] — 2026-10-03 — Phase 6: Analytics / Admin / Experiments
+
+### Added
+- Migration 0007: experiments, experiment_assignments (unique per user), app_configs
+- Analytics: funnels, conversion, source performance (first-touch), cohorts, revenue/renewal/winback summaries, campaign performance; reconciliation tested
+- Experiment engine: deterministic hash assignment, persisted & immutable per running experiment, no auto-declared winners on weak samples
+- Admin API: authed dashboard + management endpoints (campaigns/templates/rules/sources/flags/partners/experiments/competitor sources)
+- Telegram webhook with secret path, deep-link attribution + referral/partner hooks, claim/rating callbacks (503 when unconfigured)
+- 7 new tests (73 total passing)
+
 ## [0.6.0] — 2026-10-03 — Phase 5: Content / Feedback / Competitor Intel
 
 ### Added
