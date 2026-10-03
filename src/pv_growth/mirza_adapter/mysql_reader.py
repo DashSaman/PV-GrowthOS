@@ -169,5 +169,8 @@ class FakeMirzaMySQL:
     def __init__(self, invoices: list[dict]) -> None:
         self.invoices = invoices
 
-    def fetch_invoices_after(self, invoice_id: int, limit: int = 100) -> list[dict]:
+    def fetch_invoices_after(self, invoice_id: int, limit: int = 500) -> list[dict]:
         return [i for i in self.invoices if int(i["id_invoice"]) > invoice_id][:limit]
+
+    def max_invoice_id(self) -> int:
+        return max((int(i["id_invoice"]) for i in self.invoices), default=0)
