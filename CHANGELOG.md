@@ -2,6 +2,31 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
+## [1.0.2] — 2026-10-04 — B5 CLOSED: real PV-exclusive provisioning
+
+### Discovery & reuse
+- Inspected Mirza's own provisioning path (read-only): `panels.php` + `x-ui_single.php`
+  + `marzban_panel` registry → the existing authorized interface is the X-UI
+  panel HTTP API (Bearer token, `/panel/api/clients/*`)
+- `XUIProvisioningAdapter` reuses exactly that interface — no parallel logic;
+  GrowthOS creates only `growth-*` clients (paid users untouchable by namespace)
+
+### Safety
+- deterministic email per claim key → replay/double-worker can never create a 2nd account (verified)
+- fail-closed resource guard: DB + backend health + daily free budget
+- `provisioning.sweep` job: SERVICE_EXPIRED only with panel evidence
+- all bot replies/answers isolated — a Telegram delivery failure can never roll back a claim
+- `disabledn` confirmed = "user not found on panel" (mirza index.php:820) — real state, not a typo
+
+### Production E2E (real)
+- campaign `exc_b5_e2e` (1GB/24h/max 2): channel post → deep link → bot →
+  `/claim` → REAL provision on panel inbound 15 → service visible upstream
+  (1GB limit, expiry ms, enabled) → subscription URI returned → duplicate
+  claim idempotent (same row) → test services cleaned up → smoke green
+
+### Tests
+- 17 required provisioning scenarios (mock panel) — 98 total passing
+
 ## [1.0.1] — 2026-10-03 — FULL OPERATIONAL INTEGRATION
 
 ### Live integrations

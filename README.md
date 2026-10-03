@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/DashSaman/PV-GrowthOS/actions/workflows/ci.yml/badge.svg)](https://github.com/DashSaman/PV-GrowthOS/actions)
 ![Production](https://img.shields.io/badge/production-live%20%40%20RoboT-10b981)
-![Tests](https://img.shields.io/badge/tests-82%20passing-3b82f6)
+![Tests](https://img.shields.io/badge/tests-98%20passing-3b82f6)
 ![Version](https://img.shields.io/badge/release-v1.0.0-8b5cf6)
 
 **v1.0.0** · Modular Monolith · FastAPI · SQLAlchemy 2 · PostgreSQL 14 · Telegram-native
@@ -48,6 +48,7 @@ Acquisition → Bot Start → Free Config/Trial → Connection → Pricing
 | Telegram | **LIVE**: dedicated bot [@pvgrowthos_bot](https://t.me/pvgrowthos_bot) + channel [PV Network | Free Config](https://t.me/pvnetwork_freeconfig) (bot = admin) · long-polling (localhost-only topology, one mechanism) · deep-link attribution `freecfg_*` verified end-to-end |
 | Free Config | **LIVE pipeline**: 1,846 real configs staged from an approved public aggregator; one health-checked config published to the channel; exclusive campaign `exc_e2e` claimed idempotently (1 GB/24h quota) |
 | Referral | **LIVE E2E**: A→link→B→settled payment→exactly 1 reward; self-referral + duplicate reward + duplicate payment all rejected |
+| **PV Exclusive provisioning** | **REAL (B5 closed)**: XUIProvisioningAdapter over Mirza's own panel API — production E2E: claim → provision → panel-visible 1GB/24h service → subscription URI → idempotent duplicates → cleanup |
 | Lifecycle | **canary verified**: real onboarding message delivered to a paying user; strict fact-validation refused 240 sends lacking real numbers (safety worked) |
 | Feature flags | 6/10 ON: attribution, free-config, public, exclusive, lifecycle, referral · partner/content/competitor/experiments remain OFF (per rollout plan) |
 | Protected services | Mirza 200→200 · Reseller 200→200 · AKH 401→401 · Apache/X-UI/Xray/Hedioum/tunnels: identical before/after (audited) |

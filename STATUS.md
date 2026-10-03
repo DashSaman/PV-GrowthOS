@@ -4,14 +4,18 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-**FULLY OPERATIONAL (2026-10-03, post v1.0.0)**: dedicated bot @pvgrowthos_bot
+**FULLY OPERATIONAL — B5 CLOSED (2026-10-04, v1.0.2)**: dedicated bot @pvgrowthos_bot
 LIVE (long-polling), channel t.me/pvnetwork_freeconfig LIVE, free-config
 pipeline LIVE (1,846 real configs staged, post published), exclusive claim E2E
 idempotent, referral A→B E2E with exactly-one reward, lifecycle canary sent,
 Mirza 100% reconciled (7,272 pay / 213 checkout / 7,032 renewals / expiry
 change-detection). 6/10 flags ON. Protected services verified unchanged.
-Only remaining external credential: PV-exclusive provisioning endpoint (claims
-queue safely). DoD audit: 50 PASS · 0 FAIL · 0 BLOCKED.
+B5 closed: real PV-exclusive provisioning reuses Mirza's own X-UI panel API
+(XUIProvisioningAdapter, deterministic growth-* clients, fail-closed guard,
+expiry sweep with panel evidence). Production E2E verified end-to-end:
+claim → provision → panel-visible 1GB/24h service → subscription config URI →
+duplicate idempotent → cleanup. DoD audit: 51 PASS · 0 FAIL · 0 BLOCKED
+(including a live create+verify+cleanup probe on every audit run).
 
 ## Environment
 

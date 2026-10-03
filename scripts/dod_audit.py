@@ -164,6 +164,22 @@ def main() -> int:
               "print(r.json()['result']['username'])\"")
     record("Telegram real integration (@pvgrowthos_bot live)", "pvgrowthos_bot" in (out or ""), out or "no ssh")
 
+    # B5: real PV-exclusive provisioning E2E — provision + panel verify + cleanup
+    probe = "dodprobe" + "b5x"
+    script = (
+        "from pv_growth.core.config import get_settings;"
+        "from pv_growth.provisioning.xui import get_provisioning;"
+        "a=get_provisioning(get_settings());"
+        "o=a.create_temp_service(location='multiloc',traffic_gb=1,validity_hours=1,"
+        "protocol='vless',idempotency_key='" + probe + "');"
+        "st=a.service_state(o['service_ref']);"
+        "ok=st.get('exists') and st.get('traffic_limit_gb')==1;"
+        "a.disable_service(o['service_ref']);"
+        "print('PROV_OK' if ok else 'PROV_FAIL:', o['service_ref'], bool(o['config_uri']), st.get('traffic_limit_gb'))")
+    out = ssh("docker exec pv-growth-app python -c \"" + script + "\"")
+    record("B5 real provisioning E2E (create+verify+cleanup)",
+           "PROV_OK" in (out or ""), (out or "no ssh").strip()[:160])
+
     failed = sum(1 for _, s in RESULTS if s.startswith("FAIL"))
     blocked = sum(1 for _, s in RESULTS if s.startswith("BLOCKED"))
     passed = len(RESULTS) - failed - blocked
