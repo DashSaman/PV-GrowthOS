@@ -4,7 +4,7 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-Phase 0 — COMPLETE. Phase 1 is next (not yet started).
+Phase 0 — COMPLETE. Phase 1 — COMPLETE. Phase 2 is next.
 
 ## Environment
 
@@ -26,14 +26,25 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-- Phase 1 kick-off (schema, events, attribution, Mirza adapter).
+- Phase 2 (Free Acquisition Engine) implementation.
+
+## Phase 1 summary
+
+- Schema: users/campaigns/sources/events/attribution_touch (migration 0002, tested up/down in CI)
+- Event service: 23 normalized types, unique idempotency_key with savepoint-based
+  concurrent-safe dedupe; SOURCE_ATTRIBUTED idempotent per user+source
+- Attribution: start= parser (freecfg/ref/partner/seo/channel/social/custom/direct),
+  first-touch immutable, last-touch upsert
+- Mirza adapter: GET-only HTTP client + FakeMirza; NotConfigured degradation
+- Telegram client: injectable transport (Http/Fake), webhook-safe
+- API: POST/GET /api/events (admin token + rate limit), 201/created=false on duplicates
 
 ## Blockers
 
 See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
-## Test Results (Phase 0)
+## Test Results
 
-- `pytest`: 6 passed (health/ready/preflight-logic) on SQLite; CI additionally
-  runs the same suite against PostgreSQL 14 service + migration up/down test.
+- Phase 0: 6 tests · Phase 1: +13 tests → 19 passed total (SQLite locally;
+  CI additionally runs the same suite against PostgreSQL 14 + migration up/down).
 - `ruff check src tests`: clean.

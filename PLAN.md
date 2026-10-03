@@ -9,7 +9,7 @@ phase starts. New ideas go to `BACKLOG.md` and never interrupt the active phase.
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Foundation & Safety | ✅ COMPLETE |
-| 1 | Core Data / Events / Attribution / Mirza Adapter | ⬜ PENDING |
+| 1 | Core Data / Events / Attribution / Mirza Adapter | ✅ COMPLETE |
 | 2 | Free Acquisition Engine | ⬜ PENDING |
 | 3 | Lifecycle Sales Automation | ⬜ PENDING |
 | 4 | Referral / Viral / Partner | ⬜ PENDING |

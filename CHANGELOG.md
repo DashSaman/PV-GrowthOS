@@ -2,6 +2,19 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
+## [0.2.0] — 2026-10-03 — Phase 1: Core Data / Events / Attribution / Mirza
+
+### Added
+- Migration 0002: users, campaigns, sources, events (unique idempotency_key), attribution_touch (unique user+kind)
+- Event service: 23 normalized event types, concurrent-safe idempotent ingestion via savepoint + re-fetch
+- Attribution engine: `start=` deep-link parser (freecfg/ref/partner/seo/channel/social/custom/direct);
+  first-touch immutable, last-touch upserted; SOURCE_ATTRIBUTED deduped per user+source
+- Read-only Mirza adapter (GET-only HTTP client, route table, FakeMirza for tests, NotConfigured degradation)
+- Telegram Bot API client with injectable Http/Fake transport (messages, inline keyboards, channel posts, webhooks)
+- POST/GET /api/events ingestion endpoint: admin-token auth, rate limiting, 201 + created=false on duplicates
+- Tests: ingestion idempotency, unknown-type rejection, first-touch immutability, source persistence,
+  API auth, Mirza read-only contract (13 new; 19 total passing)
+
 ## [0.1.0] — 2026-10-03 — Phase 0: Foundation & Safety
 
 ### Added

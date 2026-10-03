@@ -39,9 +39,10 @@ def create_app() -> FastAPI:
     app = FastAPI(title="PV GrowthOS", version=__version__, lifespan=lifespan,
                   docs_url=None if settings.env == "production" else "/docs")
 
-    from pv_growth.api import health
+    from pv_growth.api import events, health
 
     app.include_router(health.router)
+    app.include_router(events.router, prefix="/api")
     return app
 
 
