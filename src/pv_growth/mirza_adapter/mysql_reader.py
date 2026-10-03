@@ -67,7 +67,7 @@ class MirzaMySQLReader:
             cursorclass=pymysql.cursors.DictCursor,
         )
 
-    def fetch_invoices_after(self, invoice_id: int, limit: int = 100) -> list[dict]:
+    def fetch_invoices_after(self, invoice_id: int, limit: int = 500) -> list[dict]:
         with self.connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT id_invoice, id_user, username, name_product, price_product, "
@@ -76,6 +76,11 @@ class MirzaMySQLReader:
                 (invoice_id, limit),
             )
             return list(cur.fetchall())
+
+    def max_invoice_id(self) -> int:
+        with self.connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT COALESCE(MAX(id_invoice), 0) AS m FROM invoice")
+            return int(cur.fetchone()["m"])
 
 
 def _watermark(session: Session) -> int:
@@ -102,8 +107,16 @@ def sync_mirza(session: Session, settings: Settings,
     reader = reader or MirzaMySQLReader(settings)
     stats = {"fetched": 0, "payments": 0, "checkouts": 0, "skipped": 0}
 
-    last_id = _watermark(session)
+    first_run = session.get(AppConfig, WATERMARK_KEY) is None
     try:
+        if first_run:
+            # forward-only: start from the tip, never replay historical invoices
+            # (a deliberate backfill can lower the watermark manually)
+            tip = reader.max_invoice_id()
+            _advance_watermark(session, tip)
+            log.info("mirza watermark initialized to tip", last_invoice_id=tip)
+            return {**stats, "initialized": True, "last_invoice_id": tip}
+        last_id = _watermark(session)
         invoices = reader.fetch_invoices_after(last_id, limit=limit)
     except Exception as exc:  # noqa: BLE001 — Mirza outage must never hurt GrowthOS
         log.warning("mirza mysql read failed (isolated)", error=str(exc))

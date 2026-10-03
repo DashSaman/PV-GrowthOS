@@ -17,10 +17,23 @@ def _invoice(inv_id, tg, status="active", price="990,000", refral=""):
             "refral": refral}
 
 
+def test_sync_first_run_initializes_to_tip(session, settings):
+    """Forward-only: first sync jumps to MAX(id_invoice), never replays history."""
+    reader = FakeMirzaMySQL([_invoice(1, 111, "active"), _invoice(9002, 222, "active")])
+    init = sync_mirza(session, settings, reader)
+    assert init.get("initialized") is True and init["last_invoice_id"] == 9002
+    assert session.query(Event).filter(
+        Event.idempotency_key.like("mirza:%")).count() == 0  # nothing replayed
+    later = sync_mirza(session, settings, reader)  # now normal forward mode
+    assert later["fetched"] == 0
+
+
 def test_sync_ingests_idempotently_and_advances_watermark(session, settings):
     tg = int(f"98{uuid.uuid4().int % 10000000}")
-    reader = FakeMirzaMySQL([_invoice(9001, tg, "active"), _invoice(9002, tg, "unpaid")])
+    reader = FakeMirzaMySQL([_invoice(9000, tg, "active")])  # existing history
+    sync_mirza(session, settings, reader)  # initialize watermark at tip (9000)
 
+    reader.invoices += [_invoice(9001, tg, "active"), _invoice(9002, tg, "unpaid")]
     s1 = sync_mirza(session, settings, reader)
     assert s1["payments"] == 1 and s1["checkouts"] == 1
     assert session.query(Event).filter_by(
@@ -43,10 +56,12 @@ def test_sync_ingests_idempotently_and_advances_watermark(session, settings):
 
 
 def test_sync_skips_bad_rows_but_advances(session, settings):
-    reader = FakeMirzaMySQL([
+    reader = FakeMirzaMySQL([_invoice(9100, 1, "active")])
+    sync_mirza(session, settings, reader)  # initialize watermark at 9100
+    reader.invoices += [
         _invoice(9101, None, "active"),          # no user -> skipped
         _invoice(9102, 555000111, "weird"),      # unknown status -> skipped
-    ])
+    ]
     stats = sync_mirza(session, settings, reader)
     assert stats["skipped"] == 2 and stats["payments"] == 0
     wm = session.get(AppConfig, WATERMARK_KEY)
