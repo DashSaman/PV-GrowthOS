@@ -107,11 +107,23 @@ def _handle_message(client, message: TgMessage) -> None:
             attribute(session, user.id, start_param)
             referrals.handle_bot_start(session, user.id, start_param)
             partners.handle_bot_start(session, user.id, start_param)
-            client.send_message(
-                message.chat.get("id"),
-                "سلام! به PV Network خوش آمدید.\n"
-                "برای دریافت کانفیگ رایگان از کانال ما سر بزنید یا /help را بزنید.",
-            )
+            if start_param and start_param.startswith("freecfg_"):
+                from pv_growth.telegram.client import InlineKeyboard
+
+                client.send_message(
+                    message.chat.get("id"),
+                    "🎁 کانفیگ رایگان PV Network آماده است!\nروی دکمه بزن تا دریافت کنی:",
+                    InlineKeyboard([[
+                        {"text": "🚀 دریافت کانفیگ",
+                         "callback_data": f"claim:{start_param[len('freecfg_')]}"},
+                    ]]),
+                )
+            else:
+                client.send_message(
+                    message.chat.get("id"),
+                    "سلام! به PV Network خوش آمدید.\n"
+                    "برای دریافت کانفیگ رایگان از کانال ما سر بزنید یا /help را بزنید.",
+                )
 
 
 def _handle_callback(client, callback: TgCallback) -> None:
@@ -127,15 +139,22 @@ def _handle_callback(client, callback: TgCallback) -> None:
         if data.startswith("claim:"):
             campaign_code = data.split(":", 1)[1]
             from pv_growth.free_config.exclusive import (
-                FakeProvisioningClient,
                 HttpProvisioningClient,
                 claim_exclusive,
             )
             try:
                 provisioning = HttpProvisioningClient(settings)
             except NotConfigured:
-                provisioning = FakeProvisioningClient()  # dev/test path
+                # provisioning endpoint not provided yet (BLOCKERS.md) — the
+                # claim still records and stays queued, never silently fakes
+                provisioning = None
             try:
+                if provisioning is None:
+                    class _QueuedProvisioning:
+                        def create_temp_service(self, **kwargs):
+                            raise RuntimeError("provisioning endpoint not configured")
+
+                    provisioning = _QueuedProvisioning()
                 claim, is_new = claim_exclusive(
                     session, settings, flags, provisioning,
                     campaign_code=campaign_code, user_id=user.id,
@@ -143,8 +162,6 @@ def _handle_callback(client, callback: TgCallback) -> None:
             except ValidationError as exc:
                 client.answer_callback_query(callback.id, str(exc))
                 return
-            from datetime import date
-            _ = date  # claim already resolved
             if claim.status == "active" and claim.config_payload.get("config_uri"):
                 client.send_message(
                     callback.from_.id,

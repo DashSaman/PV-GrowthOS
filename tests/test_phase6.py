@@ -162,4 +162,5 @@ def test_telegram_webhook_secret_and_flows(client, monkeypatch, settings):
         touch = first_touch(session, user.id)
         assert touch is not None and touch.raw_start_param == "freecfg_winter"
     texts = fake.sent_texts()
-    assert any("خوش آمدید" in t for t in texts)
+    # freecfg deep-link start -> claim button message (not the plain welcome)
+    assert any("کانفیگ رایگان" in t for t in texts)
