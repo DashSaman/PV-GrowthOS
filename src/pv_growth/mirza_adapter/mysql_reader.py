@@ -20,11 +20,12 @@ from __future__ import annotations
 
 import re
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from pv_growth.core.config import Settings
 from pv_growth.core.logging import get_logger
-from pv_growth.database.models import AppConfig
+from pv_growth.database.models import AppConfig, Event
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import get_or_create_user, ingest
 
@@ -71,6 +72,13 @@ class MirzaMySQLReader:
         with self.connect() as conn, conn.cursor() as cur:
             cur.execute("SELECT id_invoice FROM invoice")
             return [str(r["id_invoice"]) for r in cur.fetchall()]
+
+    def fetch_statuses(self) -> dict[str, str]:
+        """id -> Status for every invoice (light: two varchar columns)."""
+        with self.connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT id_invoice, Status FROM invoice")
+            return {str(r["id_invoice"]): str(r["Status"] or "").strip().lower()
+                    for r in cur.fetchall()}
 
     def fetch_by_ids(self, ids: list[str]) -> list[dict]:
         rows: list[dict] = []
@@ -122,12 +130,15 @@ def sync_mirza(session: Session, settings: Settings,
         seen = _load_seen(session)
         fresh = [i for i in all_ids if i not in seen][:limit]
         stats["scanned"] = len(all_ids)
-        if not fresh:
-            return stats
-        rows = reader.fetch_by_ids(fresh)
+        rows = reader.fetch_by_ids(fresh) if fresh else []
     except Exception as exc:  # noqa: BLE001 — Mirza outage must never hurt GrowthOS
         log.warning("mirza mysql read failed (isolated)", error=str(exc))
         return {**stats, "error": str(exc)[:120]}
+
+    # expiry detection runs on EVERY cycle, new invoices or not
+    stats.update(_detect_expiry(session, reader))
+    if not fresh:
+        return stats
 
     for invoice in rows:
         stats["new"] += 1
@@ -150,11 +161,24 @@ def sync_mirza(session: Session, settings: Settings,
                 "source": "mirza_db",
             }
             if status == _PAID:
+                prior = session.execute(
+                    select(func.count()).select_from(Event).where(
+                        Event.user_id == user.id,
+                        Event.event_type == "SERVICE_CREATED",
+                        Event.idempotency_key != f"mirza:svc:{inv_id}",
+                    )
+                ).scalar_one()
                 ingest(session, "PAYMENT_SUCCESS", user_id=user.id,
                        idempotency_key=f"mirza:pay:{inv_id}",
                        metadata={**meta, "amount_cents": (amount or 0) * 10})
                 ingest(session, "SERVICE_CREATED", user_id=user.id,
                        idempotency_key=f"mirza:svc:{inv_id}", metadata=meta)
+                if prior > 0:
+                    # a second (or later) paid invoice for this user IS a
+                    # renewal in Mirza's model — derived from real data
+                    ingest(session, "SERVICE_RENEWED", user_id=user.id,
+                           idempotency_key=f"mirza:renew:{inv_id}",
+                           metadata={**meta, "amount_cents": (amount or 0) * 10})
                 stats["payments"] += 1
             elif status == "unpaid":
                 ingest(session, "CHECKOUT_STARTED", user_id=user.id,
@@ -169,6 +193,72 @@ def sync_mirza(session: Session, settings: Settings,
     return stats
 
 
+STATUS_MAP_KEY = "mirza_status_map"
+
+
+def _detect_expiry(session: Session, reader: MirzaMySQLReader,
+                   *, statuses: dict[str, str] | None = None) -> dict:
+    """Real expiry source: Mirza flips invoice Status active -> disabledn.
+    We poll statuses and emit SERVICE_EXPIRED only on OBSERVED transitions;
+    rows that were already disabledn before we watched are never guessed."""
+    try:
+        current = statuses if statuses is not None else reader.fetch_statuses()
+    except Exception as exc:  # noqa: BLE001 — isolated, never hurts core sync
+        log.warning("mirza status poll failed (isolated)", error=str(exc))
+        return {"expired": 0, "status_error": str(exc)[:80]}
+
+    row = session.get(AppConfig, STATUS_MAP_KEY)
+    previous: dict[str, str] = (row.value or {}).get("map", {}) if row else {}
+    expired = 0
+    for inv_id, status in current.items():
+        old = previous.get(inv_id)
+        if old == "active" and status == "disabledn":
+            prior_pay = session.execute(
+                select(Event.user_id).where(
+                    Event.idempotency_key == f"mirza:pay:{inv_id}").limit(1)
+            ).scalar_one_or_none()
+            if prior_pay is not None:
+                ingest(session, "SERVICE_EXPIRED", user_id=prior_pay,
+                       idempotency_key=f"mirza:exp:{inv_id}",
+                       metadata={"mirza_invoice_id": inv_id,
+                                 "transition": "active->disabledn",
+                                 "source": "mirza_db"})
+                expired += 1
+    if row is None:
+        row = AppConfig(key=STATUS_MAP_KEY, value={})
+        session.add(row)
+        session.flush()
+    row.value = {"map": current, "count": len(current)}
+    row.updated_at = utcnow()
+    return {"expired": expired}
+
+
+def backfill_renewals(session: Session) -> dict:
+    """One-shot: for every user, N paid invoices in Mirza mean N-1 renewals.
+    Derived strictly from real per-user paid-invoice counts already ingested."""
+    rows = session.execute(
+        select(Event.user_id, func.count()).where(
+            Event.event_type == "SERVICE_CREATED",
+            Event.idempotency_key.like("mirza:svc:%"),
+        ).group_by(Event.user_id)
+    ).all()
+    created = 0
+    for user_id, count in rows:
+        have = session.execute(
+            select(func.count()).where(
+                Event.user_id == user_id, Event.event_type == "SERVICE_RENEWED")
+        ).scalar_one()
+        for seq in range(have + 1, count):
+            ingest(session, "SERVICE_RENEWED", user_id=user_id,
+                   idempotency_key=f"mirza:renew_backfill:{user_id}:{seq}",
+                   metadata={"derived_from": "repeat_paid_invoices",
+                             "paid_invoices": count, "sequence": seq,
+                             "source": "mirza_db"})
+            created += 1
+    log.info("renewals backfilled", users=len(rows), events=created)
+    return {"users": len(rows), "renewal_events": created}
+
+
 class FakeMirzaMySQL:
     """In-memory invoice source for tests."""
 
@@ -178,6 +268,17 @@ class FakeMirzaMySQL:
     def list_invoice_ids(self) -> list[str]:
         return [str(i["id_invoice"]) for i in self.invoices]
 
+    def fetch_statuses(self) -> dict[str, str]:
+        """id -> Status for every invoice (light: two varchar columns)."""
+        with self.connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT id_invoice, Status FROM invoice")
+            return {str(r["id_invoice"]): str(r["Status"] or "").strip().lower()
+                    for r in cur.fetchall()}
+
     def fetch_by_ids(self, ids: list[str]) -> list[dict]:
         wanted = set(ids)
         return [i for i in self.invoices if str(i["id_invoice"]) in wanted]
+
+    def fetch_statuses(self) -> dict[str, str]:
+        return {str(i["id_invoice"]): str(i["Status"]).strip().lower()
+                for i in self.invoices}

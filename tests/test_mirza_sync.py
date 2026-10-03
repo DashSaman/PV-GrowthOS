@@ -85,3 +85,70 @@ def test_sync_failure_isolated(session, settings):
 
     stats = sync_mirza(session, settings, BrokenReader())
     assert "error" in stats  # swallowed, GrowthOS unaffected
+
+
+def test_renewal_emitted_for_repeat_paid_invoice(session, settings):
+    tg = int(f"96{uuid.uuid4().int % 10000000}")
+    reader = FakeMirzaMySQL([_invoice("dd01", tg, "active")])
+    sync_mirza(session, settings, reader)  # watermark init + first invoice
+    session.commit()
+
+    reader.invoices.append(_invoice("dd02", tg, "active"))  # same user, 2nd paid
+    sync_mirza(session, settings, reader)
+    # first invoice: PAYMENT+SERVICE only; second: PAYMENT+SERVICE+RENEWED
+    assert session.query(Event).filter_by(idempotency_key="mirza:renew:dd01").count() == 0
+    assert session.query(Event).filter_by(idempotency_key="mirza:renew:dd02").count() == 1
+    # replay-safe
+    sync_mirza(session, settings, reader)
+    assert session.query(Event).filter(
+        Event.idempotency_key.like("mirza:renew%")).count() == 1
+
+
+def test_expiry_only_on_observed_transition(session, settings):
+    from pv_growth.database.models import AppConfig as Cfg
+    from pv_growth.mirza_adapter.mysql_reader import STATUS_MAP_KEY
+
+    tg = int(f"95{uuid.uuid4().int % 10000000}")
+    session.query(Cfg).filter(Cfg.key.in_((WATERMARK_KEY, STATUS_MAP_KEY))).delete()
+    session.commit()
+    reader = FakeMirzaMySQL([_invoice("ee01", tg, "active")])
+    sync_mirza(session, settings, reader)  # baseline: active map recorded
+    session.commit()
+    assert session.query(Event).filter_by(
+        idempotency_key="mirza:exp:ee01").count() == 0
+
+    # Mirza flips the invoice to disabledn -> observed transition -> EXPIRED
+    reader.invoices = [_invoice("ee01", tg, "disabledn")]
+    stats = sync_mirza(session, settings, reader)
+    assert stats.get("expired") == 1
+    assert session.query(Event).filter_by(
+        idempotency_key="mirza:exp:ee01").count() == 1
+
+    # a row that was ALREADY disabledn before we watched is never guessed
+    reader.invoices.append(_invoice("ee99", tg, "disabledn"))
+    stats = sync_mirza(session, settings, reader)
+    assert session.query(Event).filter_by(
+        idempotency_key="mirza:exp:ee99").count() == 0
+
+
+def test_backfill_renewals_matches_paid_counts(session, settings):
+    from pv_growth.mirza_adapter.mysql_reader import backfill_renewals
+    tg = int(f"94{uuid.uuid4().int % 10000000}")
+    reader = FakeMirzaMySQL([
+        _invoice("ff01", tg, "active"), _invoice("ff02", tg, "active"),
+        _invoice("ff03", tg, "active"),  # 3 paid -> 2 renewals expected
+    ])
+    sync_mirza(session, settings, reader)
+    n = session.query(Event).filter(
+        Event.event_type == "SERVICE_RENEWED",
+        Event.user_id == session.query(User).filter_by(telegram_user_id=tg).one().id
+    ).count()
+    result = backfill_renewals(session)
+    assert result["renewal_events"] >= (2 - n)  # idempotent: fills the gap
+    sync_mirza(session, settings, reader)
+    uid = session.query(User).filter_by(telegram_user_id=tg).one().id
+    renewals = session.query(Event).filter(
+        Event.event_type == "SERVICE_RENEWED", Event.user_id == uid)
+    assert renewals.count() == 2  # exactly N-1 for this user
+    backfill_renewals(session)  # second run adds nothing
+    assert renewals.count() == 2
