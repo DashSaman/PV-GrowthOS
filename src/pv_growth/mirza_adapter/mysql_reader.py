@@ -78,8 +78,8 @@ class MirzaMySQLReader:
             chunk = ids[start:start + 100]
             placeholders = ",".join(["%s"] * len(chunk))
             with self.connect() as conn, conn.cursor() as cur:
-                cur.execute(  # noqa: S608 - placeholders are %s-bound, not interpolated
-                    "SELECT id_invoice, id_user, username, name_product, price_product, "
+                cur.execute(
+                    "SELECT id_invoice, id_user, username, name_product, price_product, "  # noqa: S608
                     "Volume, Service_time, Status, refral "
                     f"FROM invoice WHERE id_invoice IN ({placeholders})",
                     tuple(chunk),
