@@ -98,6 +98,7 @@
   </div>
   <div class="meta">
     گزارش تحلیلی کامل بر پایه سند مشخصات رسمی <b>Autonomous Production-Safe Implementation Specification v1.0</b><br>
+    <b style="color:#6ee7b7">▌نسخه به‌روز: مستقرشده روی سرور اصلی PV — ۲۰۲۶-۱۰-۰۳</b><br>
     هدف: افزایش فروش و ارزش بلندمدت مشتری با حداقل عملیات دستی — بدون دست‌کاری سرویس‌های پرووداکشن
     <br><span class="repo">github.com/DashSaman/PV-GrowthOS</span>
   </div>
@@ -108,6 +109,7 @@
   <h2>فهرست مطالب</h2>
   <ol>
     <li>خلاصه مدیریتی</li>
+    <li>وضعیت استقرار پرووداکشن (۲۰۲۶-۱۰-۰۳)</li>
     <li>هدف تجاری و قیف رشد</li>
     <li>محیط پرووداکشن و منابع محافظت‌شده</li>
     <li>فضای نام رزروشده، پورت‌ها و دیتابیس</li>
@@ -153,6 +155,37 @@
 <div class="box box-amber">
   <div class="t">اصل طلایی پروژه</div>
   اگر رویدادی فقط به یک وابستگی انسانی گره خورده باشد (اعتبار رجیستری، دسترسی سرور و…)، آن وابستگی در <span class="mono en">BLOCKERS.md</span> ثبت می‌شود، همه‌چیز اطرافش پیاده می‌شود و <b>پروژه متوقف نمی‌شود</b>.
+</div>
+
+
+<!-- ============ PRODUCTION STATUS ============ -->
+<h2 class="sec page-break"><span class="num">۱‌ب</span>وضعیت استقرار پرووداکشن — ۲۰۲۶-۱۰-۰۳</h2>
+
+<p>این نسخه گزارش بعد از <b>استقرار واقعی</b> روی سرور اصلی (هاست <span class="mono en">RoboT</span>) تنظیم شده است. جدول زیر دقیقاً مشخص می‌کند چه چیزی «طراحی‌شده»، چه چیزی «پیاده‌سازی‌شده»، چه چیزی «مستقرشده» و چه چیزی «فعال» است — و چه چیزهایی فقط به تصمیم/اعتبار مالک وابسته‌اند.</p>
+
+<table>
+  <tr><th style="width:26%">قلمرو</th><th style="width:14%">وضعیت</th><th>شواهد / جزئیات</th></tr>
+  <tr><td>بک‌اند کامل (۲۳ ماژول)</td><td><b>مستقر ✓</b></td><td>کانتینر <span class="mono en">pv-growth-app</span> روی <span class="mono en">127.0.0.1:8350</span> · سقف ۳۸۴M/۰٫75CPU · مصرف واقعی ~۶۴M</td></tr>
+  <tr><td>دیتابیس <span class="mono en">pv_growth</span></td><td><b>مستقر ✓</b></td><td>روی PostgreSQL 14 موجود · مایگریشن <span class="mono en">0007</span> · ۲۸ جدول · کاربر حداقل‌دسترسی</td></tr>
+  <tr><td>اتصال فقط-خواندنی میرزا</td><td><b>فعال ✓</b></td><td>نقش <span class="mono en">pv_growth_ro</span> با SELECT فقط روی <span class="mono en">invoice/user</span> · سینک دوره‌ای · ۷۴۹۱ فاکتور شناسایی؛ رویدادهای پرداخت واقعی در حال ثبت</td></tr>
+  <tr><td>تحلیل و داشبورد ادمین</td><td><b>فعال ✓</b></td><td>قیف/درآمد واقعی · صف کارها · احراز هویت توکنی (بدون توکن: 401)</td></tr>
+  <tr><td>فیچر فلگ‌ها (۱۰ ماژول)</td><td>مستقر / <b>خاموش عمدی</b></td><td>مرحله مشاهده‌ای؛ فعال‌سازی تدریجی طبق برنامه رول‌اوت — هرگز همه با هم</td></tr>
+  <tr><td>زمان‌بند و صف کارها</td><td><b>فعال ✓</b></td><td>هر ۱۵ ثانیه · اجرای idempotent · خطاها ایزوله با backoff</td></tr>
+  <tr><td>ربات تلگرام / انتشار کانال</td><td>پیاده‌سازی‌شده / <b>غیرفعال</b></td><td>وب‌هوک تا دریافت توکن اختصاصی ربات 503 می‌دهد (توکن X-UI هرگز بازاستفاده نمی‌شود) — <span class="mono en">BLOCKERS.md</span></td></tr>
+  <tr><td>پیام‌های چرخه حیات / پاداش معرفی</td><td>پیاده‌سازی و تست‌شده / <b>خاموش</b></td><td>با فلگ مربوطه پس از تأمین توکن و تأیید مالک فعال می‌شوند</td></tr>
+  <tr><td>سرویس‌های محافظت‌شده</td><td><b>بدون تغییر ✓</b></td><td>میرزا 200→200 · پنل 200→200 · AKH 401→401 · Apache/X-UI/Xray/Hedioum/تونل‌ها: قبل = بعد (مستند در <span class="mono en">docs/deployment-audits/</span>)</td></tr>
+  <tr><td>ایمنی سرور</td><td><b>افزوده‌شده ✓</b></td><td>swap ‏۲GB جدید + persistent · بکاپ pg_dump تأییدشده · تمرین رول‌بک زنده · اسکن secret پاک</td></tr>
+  <tr><td>تست و CI</td><td><b>سبز ✓</b></td><td>۷۹ تست · GitHub Actions سبز (ماتریس SQLite+PostgreSQL، مایگریشن، pip-audit، بیلد داکر)</td></tr>
+</table>
+
+<div class="figure">
+  <img src="../images/deployment-isolation.png" alt="Deployment Isolation" style="width:100%">
+  <div class="cap"><b>شکل ۵ —</b> جداسازی واقعی استقرار: ناحیه سبز متعلق به گروث‌او‌اس، ناحیه قرمز خط‌چین محافظت‌شده — نتایج قبل/بعد</div>
+</div>
+
+<div class="box box-green">
+  <div class="t">جمع‌بندی صادقانه وضعیت</div>
+  سیستم روی سرور اصلی <b>مستقر و سالم</b> است، داده واقعی فروش میرزا را به‌صورت فقط-خواندنی جذب می‌کند و تحلیل واقعی تولید می‌کند؛ همه اتوماسیون‌های رو‌به‌مشتری «آماده ولی خاموش»اند تا توکن تلگرام و تأیید مرحله‌ای مالک برسد. هیچ ادعای «فعال» برای قابلیتی که روشن نیست وجود ندارد.
 </div>
 
 <!-- ============ 2. FUNNEL ============ -->
@@ -595,7 +628,7 @@
 
 <div class="footer-note">
   گزارش جامع PV GrowthOS · نسخه ۱٫۰ · اکتبر ۲۰۲۶ · تدوین‌شده بر پایه سند مشخصات رسمی v1.0<br>
-  <span class="en" style="font-size:8.5pt">github.com/DashSaman/PV-GrowthOS · docs/report/PV-GrowthOS-Report-FA.pdf</span>
+  <span class="en" style="font-size:8.5pt">github.com/DashSaman/PV-GrowthOS · deployed 2026-10-03 @ RoboT · 79 tests · CI green</span>
 </div>
 
 </body>

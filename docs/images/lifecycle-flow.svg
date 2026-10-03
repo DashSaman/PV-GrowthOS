@@ -1,0 +1,105 @@
+<svg width="1400" height="860" viewBox="0 0 1400 860" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Tahoma, sans-serif">
+  <defs>
+    <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#dc2626"/>
+    </marker>
+  </defs>
+  <rect width="1400" height="860" fill="#f8fafc"/>
+  <text x="700" y="50" text-anchor="middle" font-size="30" font-weight="700" fill="#0f172a">PV GrowthOS — Lifecycle Automation Flow</text>
+  <text x="700" y="82" text-anchor="middle" font-size="17" fill="#475569" direction="rtl">هر پیام با تأخیر، شرط توقف، cooldown و سقف ارسال محافظت می‌شود — خرید، یادآور فروش را خاموش می‌کند</text>
+
+  <!-- user state rail -->
+  <g font-size="15">
+    <rect x="40" y="120" width="300" height="86" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+    <text x="190" y="152" text-anchor="middle" font-weight="700" fill="#065f46">Started · no trial</text>
+    <text x="190" y="178" text-anchor="middle" fill="#047857" font-size="13">follow-up: آموزش + دریافت تست</text>
+
+    <rect x="40" y="226" width="300" height="86" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+    <text x="190" y="258" text-anchor="middle" font-weight="700" fill="#065f46">Trial · no connection</text>
+    <text x="190" y="284" text-anchor="middle" fill="#047857" font-size="13">پیگیری: راهنمای اتصال گام‌به‌گام</text>
+
+    <rect x="40" y="332" width="300" height="86" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+    <text x="190" y="364" text-anchor="middle" font-weight="700" fill="#065f46">Connected · no purchase</text>
+    <text x="190" y="390" text-anchor="middle" fill="#047857" font-size="13">پیشنهاد تبدیل (HOT_LEAD)</text>
+
+    <rect x="40" y="438" width="300" height="86" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+    <text x="190" y="470" text-anchor="middle" font-weight="700" fill="#1e40af">Checkout abandoned</text>
+    <text x="190" y="496" text-anchor="middle" fill="#1d4ed8" font-size="13">بازیابی سبد خرید</text>
+
+    <rect x="40" y="544" width="300" height="86" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+    <text x="190" y="576" text-anchor="middle" font-weight="700" fill="#1e40af">Active customer</text>
+    <text x="190" y="602" text-anchor="middle" fill="#1d4ed8" font-size="13">۳روز/۱روز قبل انقضا ← یادآوری تمدید</text>
+
+    <rect x="40" y="650" width="300" height="86" rx="12" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+    <text x="190" y="682" text-anchor="middle" font-weight="700" fill="#5b21b6">Expired / Churned</text>
+    <text x="190" y="708" text-anchor="middle" fill="#6d28d9" font-size="13">وین‌بک هدفمند</text>
+  </g>
+
+  <!-- guard column -->
+  <rect x="420" y="120" width="360" height="616" rx="16" fill="#ffffff" stroke="#0f172a" stroke-width="2.5"/>
+  <rect x="420" y="120" width="360" height="52" rx="16" fill="#0f172a"/>
+  <rect x="420" y="152" width="360" height="20" fill="#0f172a"/>
+  <text x="600" y="153" text-anchor="middle" font-size="17" font-weight="700" fill="#fff">Rule Engine — rail guards</text>
+  <g font-size="14.5" fill="#334155">
+    <text x="445" y="205">⏱ delay — ارسال بعد از تاخیر قانون</text>
+    <text x="445" y="240">⛔ stop_conditions — رویدادهای بازدارنده</text>
+    <text x="445" y="272" font-weight="700" fill="#dc2626">PAYMENT_SUCCESS ⇒ توقف همه یادآورهای فروش</text>
+    <text x="445" y="307">🧊 cooldown_hours — فاصله حداقلی پیام‌ها</text>
+    <text x="445" y="342">🔢 max_sends — سقف ارسال هر قانون/کاربر</text>
+    <text x="445" y="377">✅ conditions — سگمنت / حداقل امتیاز</text>
+    <text x="445" y="412">🔑 idempotency — dedupe_key یکتا</text>
+    <text x="445" y="447">🚫 is_blocked — کاربر مسدود = توقف</text>
+    <text x="445" y="482" fill="#64748b">template با {{facts}} ساختاریافته —</text>
+    <text x="445" y="507" fill="#64748b">اعداد تجاری هرگز ساخته نمی‌شوند</text>
+  </g>
+  <rect x="445" y="530" width="310" height="180" rx="10" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="600" y="560" text-anchor="middle" font-weight="700" fill="#991b1b" font-size="15">سکوی پیام (Message Engine)</text>
+  <text x="600" y="590" text-anchor="middle" fill="#7f1d1d" font-size="13.5">render سخت‌گیر → Telegram send</text>
+  <text x="600" y="616" text-anchor="middle" fill="#7f1d1d" font-size="13.5">message_log (dedupe_key یکتا)</text>
+  <text x="600" y="642" text-anchor="middle" fill="#7f1d1d" font-size="13.5">رویداد MESSAGE_SENT</text>
+  <text x="600" y="676" text-anchor="middle" fill="#7f1d1d" font-size="13.5">دو اجرای زمان‌بند = یک ارسال</text>
+
+  <!-- events & jobs column -->
+  <rect x="850" y="120" width="510" height="300" rx="16" fill="#ffffff" stroke="#0ea5e9" stroke-width="2.5"/>
+  <text x="1105" y="155" text-anchor="middle" font-size="17" font-weight="700" fill="#0369a1">Durable Jobs (PostgreSQL — بدون Redis)</text>
+  <g font-size="14.5" fill="#334155">
+    <text x="880" y="200">1) lifecycle.scan هر ۱۵ ثانیه (dedupe key per bucket)</text>
+    <text x="880" y="236">2) enqueue پیگیری‌ها: lc:&lt;rule&gt;:&lt;user&gt; یکتا</text>
+    <text x="880" y="272">3) claim اتمیک تک‌ردیفی (locked_at/locked_by)</text>
+    <text x="880" y="308">4) retry با backoff نمایی ۶۰s→۱h، سپس failed</text>
+    <text x="880" y="344">5) بازیابی قفل‌های stale (کرش ورکر)</text>
+    <text x="880" y="380">6) queue depth / failed jobs در داشبورد ادمین</text>
+  </g>
+
+  <rect x="850" y="450" width="510" height="286" rx="16" fill="#ffffff" stroke="#8b5cf6" stroke-width="2.5"/>
+  <text x="1105" y="485" text-anchor="middle" font-size="17" font-weight="700" fill="#5b21b6">Event Log — منبع حقیقت تحلیل</text>
+  <g font-size="14" fill="#334155">
+    <text x="880" y="525">BOT_STARTED · TRIAL_CREATED · TRIAL_CONNECTED</text>
+    <text x="880" y="557">CHECKOUT_STARTED · PAYMENT_SUCCESS · SERVICE_CREATED</text>
+    <text x="880" y="589">MESSAGE_SENT · REFERRAL_* · WINBACK_SUCCESS</text>
+    <text x="880" y="627" fill="#64748b">idempotency_key یکتا در سطح رویداد؛</text>
+    <text x="880" y="655" fill="#64748b">قیف/کوهورت/درآمد همیشه با رویدادها reconcile می‌شوند</text>
+    <text x="880" y="695" fill="#047857">فعلاً در پرووداکشن: sync فقط-خواندنی میرزا فعال است؛</text>
+    <text x="880" y="720" fill="#047857">ارسال پیام با فیچر فلگ مرحله‌ای روشن می‌شود</text>
+  </g>
+
+  <g stroke="#475569" stroke-width="3" fill="none">
+    <path d="M 340 163 C 390 163, 395 200, 418 220" marker-end="url(#a1)"/>
+    <path d="M 340 269 C 390 269, 395 269, 418 269" marker-end="url(#a1)"/>
+    <path d="M 340 375 C 390 375, 395 345, 418 330" marker-end="url(#a1)"/>
+    <path d="M 340 481 C 390 481, 395 500, 418 510" marker-end="url(#a1)"/>
+    <path d="M 340 587 C 390 587, 395 575, 418 560" marker-end="url(#a1)"/>
+    <path d="M 340 693 C 390 693, 395 660, 418 640" marker-end="url(#a1)"/>
+  </g>
+  <path d="M 780 300 C 820 300, 820 260, 845 250" stroke="#475569" stroke-width="3" fill="none" marker-end="url(#a1)"/>
+  <path d="M 1105 420 L 1105 445" stroke="#475569" stroke-width="3" fill="none" marker-end="url(#a1)"/>
+
+  <!-- purchase stop arrow -->
+  <path d="M 1105 736 C 1105 800, 600 800, 470 745" stroke="#dc2626" stroke-width="3.5" fill="none" stroke-dasharray="8 5" marker-end="url(#a2)"/>
+  <text x="790" y="795" text-anchor="middle" font-size="15" font-weight="700" fill="#dc2626">پرداخت موفق ⇒ فروش توقف · شرط توقف سخت‌گیر</text>
+
+  <text x="700" y="840" text-anchor="middle" font-size="14" fill="#94a3b8">Rules are data (lifecycle_rules) — admin edits without deploys · همه قوانین در پرووداکشن تا فعال‌سازی تدریجی خاموش‌اند</text>
+</svg>

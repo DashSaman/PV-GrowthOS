@@ -2,7 +2,25 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
-## [1.0.0] — 2026-10-03 — Phase 7: Hardening + Definition of Done
+## [1.0.0] — 2026-10-03 — PRODUCTION DEPLOYMENT (v1.0.0)
+
+### Deployed
+- pv-growth-app on host RoboT (127.0.0.1:8350, pv_growth_net 172.23.77.0/24, limits 384M/0.75CPU/200pids) — built off-server, docker-save/load
+- DB pv_growth @ PostgreSQL 14 (alembic 0007, 28 tables, least-privilege role)
+- LIVE read-only Mirza integration: MySQL role pv_growth_ro (SELECT invoice/user), periodic seen-set sync (7,491 invoices scanned; real PAYMENT_SUCCESS/SERVICE_CREATED/CHECKOUT_STARTED events; failures isolated)
+- socat forwarders (pg/mysql) as GrowthOS-owned systemd units; 2 GB persistent swap; verified backup + live rollback rehearsal; before/after smoke: all protected services identical
+- Feature flags all OFF (passive stage); scheduler + admin dashboard live
+
+### Fixed during deploy
+- missing jobs/scheduler module (startup crash with scheduler on) + regression test
+- empty handler registry at runtime (lifecycle.scan stuck) + regression test
+- Mirza sync redesigned: hex invoice PK → seen-set scan; forward-only; limit/cycle
+- MySQL grant for socat (localhost) clients
+
+### Docs
+- bilingual READMEs rewritten to production reality; 3 new diagrams (lifecycle, referral, deployment isolation); docs tree + operations RUNBOOK; SERVER_RESOURCE_MAP final; deployment audit artifacts; Persian PDF report updated (22 pages)
+
+## [0.8.0] — 2026-10-03 — Phase 7: Hardening (pre-deploy)
 
 ### Added
 - scripts/dod_audit.py: machine-verifiable completion audit — 42 PASS / 0 FAIL / 4 BLOCKED (external-only)

@@ -1,0 +1,105 @@
+<svg width="1400" height="880" viewBox="0 0 1400 880" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Tahoma, sans-serif">
+  <defs>
+    <marker id="d1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1400" height="880" fill="#f8fafc"/>
+  <text x="700" y="48" text-anchor="middle" font-size="30" font-weight="700" fill="#0f172a">PV GrowthOS — Production Deployment Isolation</text>
+  <text x="700" y="80" text-anchor="middle" font-size="17" fill="#475569" direction="rtl">استقرار واقعی ۲۰۲۶-۱۰-۰۳ — جداسازی کامل از سرویس‌های محافظت‌شده (بدون وقفه)</text>
+
+  <!-- host box -->
+  <rect x="30" y="105" width="1340" height="640" rx="16" fill="#ffffff" stroke="#334155" stroke-width="2.5"/>
+  <rect x="30" y="105" width="1340" height="44" rx="16" fill="#334155"/>
+  <rect x="30" y="131" width="1340" height="18" fill="#334155"/>
+  <text x="60" y="134" font-size="16" font-weight="700" fill="#fff">Host: RoboT · Ubuntu 22.04 · 2 vCPU · 4 GB RAM (+2 GB swap جدید) · 38 GB disk</text>
+  <text x="1340" y="134" text-anchor="end" font-size="13" fill="#cbd5e1">91.107.240.235</text>
+
+  <!-- growth zone -->
+  <rect x="55" y="170" width="620" height="550" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="2.5"/>
+  <text x="365" y="200" text-anchor="middle" font-size="17" font-weight="800" fill="#065f46">GROWTHOS OWNED — /opt/pv-growth</text>
+
+  <rect x="85" y="225" width="560" height="130" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+  <text x="105" y="255" font-size="15" font-weight="700" fill="#065f46">container: pv-growth-app (image pv-growth-app:&lt;sha&gt;)</text>
+  <g font-size="13.5" fill="#047857">
+    <text x="105" y="282">bind: 127.0.0.1:8350 فقط · restart=unless-stopped</text>
+    <text x="105" y="306">limits: 384M mem / 128M res / 0.75 CPU / 200 pids · مصرف واقعی ~64M</text>
+    <text x="105" y="330">دیتابیس: pv_growth @ PostgreSQL موجود · alembic 0007 · ۲۸ جدول</text>
+  </g>
+
+  <rect x="85" y="375" width="270" height="100" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+  <text x="220" y="405" text-anchor="middle" font-weight="700" fill="#065f46" font-size="14">network: pv_growth_net</text>
+  <text x="220" y="430" text-anchor="middle" font-size="13" fill="#047857">172.23.77.0/24 (بررسی‌شده، بدون تداخل)</text>
+  <text x="220" y="452" text-anchor="middle" font-size="13" fill="#047857">جدید — متعلق به GrowthOS</text>
+
+  <rect x="375" y="375" width="270" height="100" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+  <text x="510" y="405" text-anchor="middle" font-weight="700" fill="#065f46" font-size="14">socat forwarders (2)</text>
+  <text x="510" y="430" text-anchor="middle" font-size="13" fill="#047857">172.23.77.1:5432 → localhost PG</text>
+  <text x="510" y="452" text-anchor="middle" font-size="13" fill="#047857">172.23.77.1:3306 → localhost MySQL</text>
+
+  <rect x="85" y="495" width="560" height="105" rx="10" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="105" y="522" font-weight="700" font-size="14" fill="#065f46">ادغام فقط-خواندنی میرزا (فعال در پرووداکشن)</text>
+  <g font-size="13" fill="#047857">
+    <text x="105" y="546">کاربر MySQL: pv_growth_ro — فقط SELECT روی hajsaman.invoice/user</text>
+    <text x="105" y="568">سینک دوره‌ای: ۷۴۹۱ فاکتور اسکن شد → رویدادهای PAYMENT_SUCCESS واقعی</text>
+    <text x="105" y="590">watermark/seen-set + idempotency keys — بدون تغییر در میرزا</text>
+  </g>
+
+  <rect x="85" y="615" width="560" height="80" rx="10" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="105" y="642" font-weight="700" font-size="14" fill="#065f46"> فیچر فلگ‌ها: هر ۱۰ ماژول OFF (استقرار غیرفعال/مشاهده‌ای)</text>
+  <text x="105" y="668" font-size="13" fill="#047857">فعال‌سازی تدریجی پس از تأمین توکن تلگرام و تأیید مالک — هرگز همه با هم</text>
+
+  <!-- protected zone -->
+  <rect x="710" y="170" width="635" height="550" rx="12" fill="#fef2f2" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="10 6"/>
+  <text x="1027" y="200" text-anchor="middle" font-size="17" font-weight="800" fill="#991b1b">PROTECTED — دست‌نخورده (before = after)</text>
+
+  <g font-size="14">
+    <rect x="740" y="225" width="275" height="95" rx="10" fill="#ffffff" stroke="#fca5a5"/>
+    <text x="877" y="255" text-anchor="middle" font-weight="700" fill="#7f1d1d">Mirza</text>
+    <text x="877" y="280" text-anchor="middle" font-size="12.5" fill="#991b1b">robot.ahsg.top · 200→200</text>
+    <text x="877" y="300" text-anchor="middle" font-size="12.5" fill="#991b1b">hajsaman MySQL · فقط خوانده می‌شود</text>
+
+    <rect x="1040" y="225" width="275" height="95" rx="10" fill="#ffffff" stroke="#fca5a5"/>
+    <text x="1177" y="255" text-anchor="middle" font-weight="700" fill="#7f1d1d">PV Reseller Dashboard</text>
+    <text x="1177" y="280" text-anchor="middle" font-size="12.5" fill="#991b1b">npanel.softarg.ir · 200→200</text>
+    <text x="1177" y="300" text-anchor="middle" font-size="12.5" fill="#991b1b">127.0.0.1:31080 · pv_reseller_net</text>
+
+    <rect x="740" y="340" width="275" height="95" rx="10" fill="#ffffff" stroke="#fca5a5"/>
+    <text x="877" y="370" text-anchor="middle" font-weight="700" fill="#7f1d1d">AKH Bot</text>
+    <text x="877" y="395" text-anchor="middle" font-size="12.5" fill="#991b1b">rasteh.softarg.ir · 401→401 (زنده)</text>
+    <text x="877" y="415" text-anchor="middle" font-size="12.5" fill="#991b1b">127.0.0.1:8307 · akhbot_internal</text>
+
+    <rect x="1040" y="340" width="275" height="95" rx="10" fill="#ffffff" stroke="#fca5a5"/>
+    <text x="1177" y="370" text-anchor="middle" font-weight="700" fill="#7f1d1d">X-UI / Xray / Hedioum</text>
+    <text x="1177" y="395" text-anchor="middle" font-size="12.5" fill="#991b1b">x-ui active · xray running</text>
+    <text x="1177" y="415" text-anchor="middle" font-size="12.5" fill="#991b1b">hedioum active · مشتریان واقعی VPN</text>
+
+    <rect x="740" y="455" width="275" height="95" rx="10" fill="#ffffff" stroke="#fca5a5"/>
+    <text x="877" y="485" text-anchor="middle" font-weight="700" fill="#7f1d1d">Apache</text>
+    <text x="877" y="510" text-anchor="middle" font-size="12.5" fill="#991b1b">configtest OK · 200→200</text>
+    <text x="877" y="530" text-anchor="middle" font-size="12.5" fill="#991b1b">بدون vhost جدید (localhost-only)</text>
+
+    <rect x="1040" y="455" width="275" height="95" rx="10" fill="#ffffff" stroke="#fca5a5"/>
+    <text x="1177" y="485" text-anchor="middle" font-weight="700" fill="#7f1d1d">PostgreSQL 14 / MySQL</text>
+    <text x="1177" y="510" text-anchor="middle" font-size="12.5" fill="#991b1b">postgres/pvnaive/hajsaman دست‌نخورده</text>
+    <text x="1177" y="530" text-anchor="middle" font-size="12.5" fill="#991b1b">pv_growth جدید + کاربر حداقل‌دسترسی</text>
+
+    <rect x="740" y="570" width="575" height="120" rx="10" fill="#ffffff" stroke="#fca5a5"/>
+    <text x="1027" y="600" text-anchor="middle" font-weight="700" fill="#7f1d1d">WireGuard (wgm3) · GRE/SIT tunnels · watchdogs · iptables/nft</text>
+    <g font-size="12.5" fill="#991b1b">
+      <text x="1027" y="625" text-anchor="middle">قواعد iptables/nft فقط توسط docker برای ساب‌نت جدید GrowthOS افزوده شد</text>
+      <text x="1027" y="648" text-anchor="middle">checksum های بیس‌لاین ثبت شد؛ سرویس‌های تونل قبل = بعد</text>
+      <text x="1027" y="671" text-anchor="middle">pv-gre.service از قبل failed بود (EXISTING_ISSUES) — دست نخورد</text>
+    </g>
+  </g>
+
+  <!-- flow arrows -->
+  <path d="M 365 290 C 480 290, 560 290, 640 290" stroke="#475569" stroke-width="3" fill="none" marker-end="url(#d1)"/>
+  <text x="505" y="280" text-anchor="middle" font-size="12.5" fill="#475569">/health /ready · admin API</text>
+  <path d="M 645 425 C 670 425, 690 430, 705 435" stroke="#475569" stroke-width="3" fill="none" marker-end="url(#d1)"/>
+  <text x="700" y="415" text-anchor="middle" font-size="12" fill="#475569">SELECT-only</text>
+
+  <rect x="30" y="765" width="1340" height="80" rx="10" fill="#0f172a"/>
+  <text x="700" y="795" text-anchor="middle" font-size="14.5" fill="#a5f3fc">Deploy chain: build لوکال/CI → docker save/load (سرور هرگز بیلد نمی‌کند) → preflight → migrate → health → smoke before/after → rollback تمرین‌شده</text>
+  <text x="700" y="822" text-anchor="middle" font-size="13" fill="#94a3b8">swap 2GB جدید + persistent · بکاپ pg_dump تأییدشده · rollback: docker stop/start فقط GrowthOS — سرویس‌های محافظت‌شده بی‌تغییر</text>
+</svg>

@@ -4,8 +4,9 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-ALL PHASES (0–7) COMPLETE — local scope. Remaining items are external-only
-(server SSH / credentials / CI observation), tracked in BLOCKERS.md.
+**v1.0.0 DEPLOYED TO PRODUCTION** (host RoboT, 2026-10-03). All 8 phases
+implemented; container healthy; real Mirza data flowing; all feature flags OFF
+(passive stage). Remaining blocker: dedicated Telegram bot token (BLOCKERS.md B2/B3).
 
 ## Environment
 
@@ -27,9 +28,8 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-Nothing local. Owner actions pending (see BLOCKERS.md B1–B6): run DEPLOYMENT.md
-runbook on the server (preflight, sentinelx cleanup, deploy, smoke), provide
-Telegram/Mirza/provisioning credentials, add DOCKER_REGISTRY secret.
+Nothing. Production is live in passive mode; activation of customer-facing
+automation awaits the owner-supplied Telegram token + go-ahead (gradual).
 
 ## Phase 7 summary (hardening)
 
@@ -119,7 +119,10 @@ See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
 ## Test Results
 
-- Final: 73 tests passing locally · ruff clean · DoD audit 42/0/4
+- Production deployed 2026-10-03: pv-growth-app @ 127.0.0.1:8350, alembic 0007,
+  Mirza read-only sync LIVE (7,491 invoices scanned, real payment events),
+  79 tests green, CI green. Deploy evidence: docs/deployment-audits/
+- DoD audit final: see scripts/dod_audit.py output in the completion report
 - **CI verified green on GitHub Actions (run #11, commit f046695):**
   lint + tests on SQLite AND PostgreSQL 14 matrix + migration up/down +
   pip-audit + docker build — all passing (SQLite locally;

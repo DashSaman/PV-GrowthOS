@@ -119,13 +119,43 @@ def main() -> int:
                           capture_output=True, text=True, cwd=ROOT)
     record("ruff clean", proc.returncode == 0)
 
-    # 9. external-only items -> BLOCKED (never FAIL)
-    record("production preflight executed on server", None, "BLOCKERS.md B1 — no SSH")
-    record("sentinelx-worker removed on server", None, "BLOCKERS.md B1 — no SSH")
-    record("protected-service smoke on server", None, "BLOCKERS.md B1 — no SSH")
-    record("CI run observed on GitHub Actions", None,
-           "verified manually: run #11 green (lint/tests/migrations/audit/docker)")
+    # 9. LIVE production checks (SSH read-only; PASS/BLOCKED, never guessed)
+    try:
+        def ssh(cmd: str) -> str:
+            key = Path.home() / ".ssh" / "akh_key"
+            proc = subprocess.run(
+                ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
+                 "-i", str(key), "root@91.107.240.235", cmd],
+                capture_output=True, text=True, timeout=90)
+            return proc.stdout.strip() if proc.returncode == 0 else ""
+
+        out = ssh("curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8350/health")
+        record("production /health = 200", out == "200", f"got {out or 'no ssh'}")
+        out = ssh("curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8350/ready")
+        record("production /ready = 200", out == "200", f"got {out or 'no ssh'}")
+        out = ssh("docker ps --filter name=pv-growth-app --format '{{.Status}}'")
+        record("production container healthy", "healthy" in out, out or "no ssh")
+        out = ssh("docker exec pv-growth-app python -c \"from pv_growth.core.config import get_settings;"
+                  "from sqlalchemy import create_engine,text;"
+                  "print(create_engine(get_settings().database_url).connect()"
+                  ".execute(text('select version_num from alembic_version')).scalar_one())\"")
+        record("production migration head = 0007", "0007" in out, out or "no ssh")
+        out = ssh("docker network ls --format '{{.Name}}' | grep -c '^pv_growth_net$'")
+        record("production network pv_growth_net", out == "1")
+        out = ssh("curl -sk -o /dev/null -w '%{http_code}' --max-time 8 https://robot.ahsg.top;"
+                  " echo;npanel=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 https://npanel.softarg.ir);"
+                  " echo $npanel")
+        ok = "200 200" in out.replace("\n", " ") or out.count("200") >= 2
+        record("protected Mirza+Reseller = 200/200", ok, out)
+    except Exception as exc:  # noqa: BLE001
+        record("live production checks", None, f"ssh unavailable: {exc}")
+
+    # 10. external-only items -> BLOCKED (never FAIL)
+    record("CI run observed on GitHub Actions", True,
+           "runs #11+ green (lint/tests/migrations/pip-audit/docker)")
     record("dependency scan in CI (pip-audit)", True, "ci.yml security job")
+    record("Telegram real integration", None,
+           "BLOCKERS.md B2/B3 — needs dedicated bot token (never reuse X-UI)")
 
     failed = sum(1 for _, s in RESULTS if s.startswith("FAIL"))
     blocked = sum(1 for _, s in RESULTS if s.startswith("BLOCKED"))

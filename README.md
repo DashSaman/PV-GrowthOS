@@ -2,226 +2,171 @@
 
 # PV GrowthOS
 
-**Autonomous, production-safe growth operating system for PV Network**
+**Autonomous, production-safe growth system for PV Network — designed, implemented, and running in production**
 
-سیستم عامل رشدِ خودکار و ایمن برای نمایشگاه PV Network
+سیستم رشد خودکار و ایمن PV Network — طراحی‌شده، پیاده‌سازی‌شده و **در حال اجرا روی سرور اصلی**
 
-`v1.0 · IMPLEMENTED · Modular Monolith · FastAPI + SQLAlchemy 2 + PostgreSQL · Telegram-native`
+[![CI](https://github.com/DashSaman/PV-GrowthOS/actions/workflows/ci.yml/badge.svg)](https://github.com/DashSaman/PV-GrowthOS/actions)
+![Production](https://img.shields.io/badge/production-live%20%40%20RoboT-10b981)
+![Tests](https://img.shields.io/badge/tests-79%20passing-3b82f6)
+![Version](https://img.shields.io/badge/release-v1.0.0-8b5cf6)
 
-> **Status:** Phases 0–7 implemented · 73 tests passing · 7 migrations ·
-> Definition-of-Done audit: 42 PASS / 0 FAIL / 4 BLOCKED (external-only — see `BLOCKERS.md`)
+**v1.0.0** · Modular Monolith · FastAPI · SQLAlchemy 2 · PostgreSQL 14 · Telegram-native
 
-[English](#-english) | [فارسی](#-فارسی)
+[English](#-what-is-pv-growthos) | [فارسی](README.fa.md) | [Runbook](docs/operations/RUNBOOK.md) | [Persian PDF Report](docs/report/PV-GrowthOS-Report-FA.pdf)
 
 </div>
 
 ---
 
-## 🇬🇧 English
+## 🇬🇧 What is PV GrowthOS?
 
-### What is PV GrowthOS?
+PV GrowthOS grows PV Network sales and long-term customer value with minimal
+manual operation — while running **beside** the live Mirza sales bot, PV
+Reseller Dashboard, AKH Bot and X-UI/Xray VPN infrastructure **without
+touching them**. Mirza stays the source of truth; GrowthOS observes, attributes,
+automates follow-ups and measures.
 
-PV GrowthOS is a growth automation system designed to run **on a live production VPN server** alongside existing services (Mirza sales bot, PV Reseller Dashboard, AKH Bot, X-UI/Xray, WireGuard/GRE/SIT tunnels) **without touching them**.
+**One business objective** — every feature strengthens the funnel:
 
-It has exactly one business objective:
+```
+Acquisition → Bot Start → Free Config/Trial → Connection → Pricing
+→ Checkout → Payment → Active Customer → Renewal → Referral
+→ Affiliate/Reseller → Win-back
+```
 
-> **Increase PV Network sales and long-term customer value with as little manual operation as possible.**
+## 🟢 Current Production Status (2026-10-03)
 
-Every feature must strengthen at least one stage of the funnel below — acquisition, trial-to-paid conversion, renewal, win-back, referrals, or reseller/affiliate distribution.
+| Aspect | State |
+|---|---|
+| Deployed | **YES** — container `pv-growth-app` on host `RoboT` (91.107.240.235), image built off-server, never on the server |
+| Binding | `127.0.0.1:8350` only (never 0.0.0.0) |
+| Network | dedicated `pv_growth_net` (172.23.77.0/24 — collision-checked live) |
+| Limits | 384 MB mem / 0.75 CPU / 200 pids — actual usage ≈ 64 MB, <1% CPU |
+| Database | `pv_growth` on the existing PostgreSQL 14 · Alembic head **0007** (28 tables) · least-privilege role |
+| Mirza integration | **LIVE read-only**: dedicated MySQL role `pv_growth_ro` (SELECT on `hajsaman.invoice/user` only) · periodic sync ingested the first 300 of 7,491 invoices → real `PAYMENT_SUCCESS`/`SERVICE_CREATED` events, real revenue analytics |
+| Feature flags | all 10 modules **OFF** (passive/observational stage) — activated gradually per the rollout plan |
+| Protected services | Mirza 200→200 · Reseller 200→200 · AKH 401→401 · Apache/X-UI/Xray/Hedioum/tunnels: identical before/after (audited) |
+| Tests / CI | 79 tests green · GitHub Actions green (lint, sqlite+postgres matrix, migrations up/down, pip-audit, docker build) |
+| Swap | 2 GB swapfile added (was none) — persistent, conservative |
+| Backup/rollback | pg_dump backup verified · rollback rehearsed live (stop → protected services unaffected → start) |
+| Blocked (external) | dedicated Telegram bot token (webhook/publishing/lifecycle messaging inactive until provided) — see [BLOCKERS.md](BLOCKERS.md) |
 
-### Growth Funnel
+## Growth Funnel
 
 ![Growth Funnel](docs/images/funnel.png)
 
-The complete target funnel:
-
-```
-Acquisition → Bot Start → Free Config / Trial → Connection → Pricing View
-→ Checkout → Payment → Active Customer → Renewal → Referral
-→ Affiliate / Reseller → Win-back
-```
-
-### Architecture
+## System Architecture
 
 ![Architecture](docs/images/architecture.png)
 
-A **modular monolith** (`pv-growth-app`) — not microservices. Bounded to `127.0.0.1:8350`, its own Docker network (`pv_growth_net`), its own database (`pv_growth` on the existing PostgreSQL server), and hard resource limits (~384 MB RAM, 0.5–0.75 CPU).
+**Modular monolith** `pv-growth-app` — 23 modules behind clean seams: `core`,
+`database`, `events`, `attribution`, `mirza_adapter`, `telegram`, `jobs`,
+`campaigns`, `free_config`, `config_sources`, `config_quality`, `lifecycle`,
+`messaging`, `referrals`, `partners`, `content`, `competitors`, `feedback`,
+`analytics`, `experiments`, `segments`, `admin`, `api`. No Redis, no heavy
+platforms — durable jobs run on PostgreSQL.
 
-Key design decisions:
+## Production Safety Model
 
-| Decision | Choice | Why |
-|---|---|---|
-| Runtime shape | Modular monolith | 2 vCPU / 4 GB host; microservices would waste resources |
-| Job system | PostgreSQL-backed durable jobs | No Redis in v1; idempotency keys prevent duplicate sends |
-| Analytics | Lightweight SQL funnels/cohorts | No PostHog/Grafana on a production VPN server |
-| Mirza integration | Read-only / additive adapter | Mirza stays the source of truth for payments & provisioning |
-| Rollout | Per-module feature flags | Every automation is independently switchable; dangerous ones ship disabled |
+![Deployment Isolation](docs/images/deployment-isolation.png)
 
-### Free Config Acquisition
+- GrowthOS owns **only** `/opt/pv-growth`, its container, its network, its DB
+  role, its two socat forwarders and its logs — nothing else.
+- Deploy chain: **build off-server → docker load → preflight → migrate →
+  health → smoke before/after → rollback if anything regresses.** The server
+  never builds images.
+- Every table writes through unique idempotency keys; double scheduler runs
+  provably cannot duplicate a message, post or reward.
+- Baseline audit artifacts (before/after smoke, firewall checksums):
+  [`docs/deployment-audits/`](docs/deployment-audits/).
+
+## Free Config Engine
 
 ![Free Config Pipeline](docs/images/free-config-pipeline.png)
 
-Two independent pools:
+Two independent pools: **public** (admin-approved GitHub/Telegram sources →
+parse → validate → dedupe → score → limited TCP health-check → publish top
+1–2, always labeled community-sourced) and **PV exclusive** (admin-configured
+quota/validity/location/per-user limits with per-date overrides, individual
+claims preferred). Staged filtering never opens thousands of connections from
+this VPN host.
 
-- **Public pool** — configs collected from an admin-approved registry of public GitHub/Telegram sources, passed through staged filtering (fetch → parse → normalize → dedupe → validate → quality score → limited health check → publish top 1–2). Always labeled community-sourced; never implied to be operated by PV Network.
-- **PV exclusive pool** — limited free configs generated through authorized PV provisioning, with admin-configurable quota, validity, location, protocol, claim limits and per-date overrides — no code changes required.
+## Lifecycle Automation
 
-### Execution Phases
+![Lifecycle Flow](docs/images/lifecycle-flow.png)
 
-![Execution Phases](docs/images/phases.png)
+Data-driven rules (`lifecycle_rules`) with delay, conditions, cooldown,
+max-sends and hard **stop conditions** — a purchase kills every inappropriate
+sales reminder. Strict template rendering: missing commercial facts refuse to
+send; numbers are never invented.
 
-Eight strictly-ordered phases, each gated by acceptance criteria: Foundation & Safety → Core Data/Events/Attribution → Free Acquisition → Lifecycle Automation → Referral/Partner → Content/Feedback/Competitor Intel → Analytics/Admin/Experiments → Hardening & Gradual Rollout.
+## Referral / Affiliate
 
-### Safety Model
+![Referral Lifecycle](docs/images/referral-lifecycle.png)
 
-- **Protected resources are read-only**: Mirza, PV Reseller Dashboard, AKH Bot, X-UI/Xray, tunnels, iptables/nftables, existing Docker networks.
-- **Namespace isolation**: GrowthOS owns only `/opt/pv-growth`, its containers, its DB user, its network.
-- **No heavy builds on production**: CI (GitHub Actions) builds/tests/publishes images; production only pulls.
-- **Smoke tests before & after every deploy**: if any protected service fails after a GrowthOS action → immediate GrowthOS rollback, no random fixes to the protected service.
-- **Forbidden by spec**: `docker system prune`, `iptables -F`, `nft flush ruleset`, broad `rm -rf`, network deletion/recreation.
-- **No secrets in Git**; least-privilege DB user; admin auth required; no fake scarcity/uptime/user counts in messages.
+Rewards fire **only after settled qualifying purchases** — never for clicks.
+Self-referral blocked, one referral per referred user, daily farming cap,
+ledger-level dedupe (a reward can never pay twice), configurable milestones
+(1/3/5/10). Partners get a parallel commission ledger (pending→approved) —
+the existing reseller dashboard was not rebuilt.
 
-### Quickstart
+## Analytics & Admin
 
-```bash
-pip install -r requirements-dev.txt
-export PVG_DATABASE_URL="sqlite+pysqlite:///./dev.db"   # prod: PostgreSQL 14
-python -m pv_growth migrate        # alembic upgrade head (7 revisions)
-python -m pv_growth serve          # FastAPI on 127.0.0.1:8350
-python -m pytest                   # 73 tests
-python scripts/dod_audit.py        # machine-verifiable Definition-of-Done audit
-```
+SQL-native funnels, cohorts, source performance (immutable first-touch),
+revenue/renewal summaries — every number reconciles with the event log.
+Deterministic A/B experiments (hash-stable per user, no winners declared on
+weak samples). Admin API (token-auth) manages campaigns, templates, rules,
+sources, flags, partners, experiments and shows queue depth, failed jobs and
+recent events.
 
-Production runbook (preflight → migrate → deploy → smoke → rollback): `DEPLOYMENT.md`.
+## Deployment
 
-### Repository Layout (implemented)
-
-```
-PV-GrowthOS/
-├── src/pv_growth/
-│   ├── main.py · cli.py · preflight.py · smoke.py
-│   ├── core/          # settings · JSON logging · feature flags · errors
-│   ├── database/      # engine/sessions · models registry (all domains)
-│   ├── api/           # health · events ingestion · admin API · telegram webhook
-│   ├── events · attribution · mirza_adapter · telegram
-│   ├── jobs/          # PostgreSQL durable queue · runner · scheduler thread
-│   ├── config_sources · config_quality · free_config   # staged public pipeline + PV exclusive
-│   ├── campaigns · lifecycle · messaging · segments
-│   ├── referrals · partners                           # rewards/commissions with anti-fraud
-│   ├── content · competitors · feedback
-│   └── analytics · experiments · admin                # funnels/cohorts · deterministic A/B
-├── alembic/versions/  # 0001..0007, tested up+down in CI (SQLite + PostgreSQL matrix)
-├── tests/             # 73 tests: idempotency · scheduler-duplicate · fraud · facts · webhook
-├── scripts/           # preflight/smoke CLI companions · backup · load probe · DoD audit · sentinelx
-├── .github/workflows/ci.yml   # ruff · pytest matrix · migration up/down · pip-audit · docker build
-└── docs/              # diagrams + full Persian PDF report
-```
-
-### Full Persian Report
-
-A complete Persian-language PDF report covering objectives, architecture, safety model, engines, phases and definition-of-done is available at:
-
-`docs/report/PV-GrowthOS-Report-FA.pdf`
-
-### Completion audit
-
-`python scripts/dod_audit.py` verifies every Master-Spec component programmatically
-(modules contain code, routes exist, migrations chain, flags defined, no stubs,
-tests+lint green). Current result: **42 PASS · 0 FAIL · 4 BLOCKED** — blocked items
-are server/credential-only dependencies documented in `BLOCKERS.md`.
-
----
-
-## 🇮🇷 فارسی
-
-<div dir="rtl">
-
-### پی‌وی گروث‌او‌اس چیست؟
-
-**گروث‌او‌اس** یک سیستم خودکارسازی رشد است که طراحی شده تا **روی سرور پرووداکشنِ زنده‌ی VPN** و در کنار سرویس‌های موجود (ربات فروش میرزا، پنل نمایندگی PV، ربات AKH، X-UI/Xray و تونل‌های WireGuard/GRE/SIT) اجرا شود، **بدون کوچک‌ترین دخالتی در آن‌ها**.
-
-این سیستم فقط یک هدف تجاری دارد:
-
-> **افزایش فروش و ارزش بلندمدت مشتریان PV Network با کمترین میزان عملیات دستی.**
-
-هر قابلیت باید حداقل یکی از مراحل قیف زیر را تقویت کند: جذب کاربر، تبدیل تست‌به‌پرداخت، تمدید، بازگرداندن مشتری، معرفی دوستان یا توسعه کانال نمایندگی.
-
-### قیف رشد
-
-![قیف رشد](docs/images/funnel.png)
-
-قیف کامل هدف:
-
-```
-جذب کاربر → شروع ربات → کانفیگ رایگان/تست → اتصال → مشاهده تعرفه
-→ پرداخت → مشتری فعال → تمدید → معرفی دوستان → افیلیت/نمایندگی → بازگشت مشتری
-```
-
-### معماری
-
-![معماری](docs/images/architecture.png)
-
-یک **مونولیت ماژولار** (`pv-growth-app`) — نه میکروسرویس. متصل به `127.0.0.1:8350`، با شبکه داکر اختصاصی (`pv_growth_net`)، دیتابیس اختصاصی (`pv_growth` روی سرور PostgreSQL موجود) و محدودیت سخت‌گیرانه منابع (حدود ۳۸۴ مگابایت رم، ۰٫۵ تا ۰٫۷۵ هسته CPU).
-
-مهم‌ترین تصمیم‌های طراحی:
-
-| تصمیم | انتخاب | دلیل |
-|---|---|---|
-| شکل اجرا | مونولیت ماژولار | سرور ۲ هسته/۴ گیگ؛ میکروسرویس هدر دادن منابع است |
-| سیستم کار | صف پایدار روی PostgreSQL | در نسخه اول بدون Redis؛ کلید idempotency جلوی ارسال تکراری را می‌گیرد |
-| تحلیل داده | قیف و کوهورت سبک با SQL | نصب PostHog/Grafana روی سرور VPN تولیدی ممنوع |
-| اتصال به میرزا | آداپتر فقط-خواندنی / افزایشی | میرزا منبع حقیقت پرداخت و پروویژن باقی می‌ماند |
-| رول‌اوت | فیچر‌فلگ برای هر ماژول | هر اتوماسیون مستقلاً قابل خاموش/روشن است؛ موارد پرریسک غیرفعال شروع می‌کنند |
-
-### موتور جذب کانفیگ رایگان
-
-![خط تولید کانفیگ رایگان](docs/images/free-config-pipeline.png)
-
-دو استخر مستقل:
-
-- **استخر عمومی** — کانفیگ‌هایی از رجیستریِ تأییدشده‌ی منابع عمومی گیت‌هاب/تلگرام که با فیلتر مرحله‌ای عبور می‌کنند: دریافت ← تجزیه ← یکسان‌سازی ← حذف تکراری ← اعتبارسنجی ← امتیاز کیفیت ← بررسی محدود سلامت ← انتشار ۱ تا ۲ مورد برتر. همیشه با برچسب «منبع عمومی/کامانیوتی»؛ هرگز القا نمی‌شود که PV Network آن‌ها را اداره می‌کند.
-- **استخر اختصاصی PV** — کانفیگ‌های رایگانِ محدود که از پروویژن مجاز PV ساخته می‌شوند؛ با سهمیه، اعتبار، لوکیشن، پروتکل، سقف claim و اورراید تاریخِ قابل تنظیم توسط ادمین — بدون نیاز به تغییر کد.
-
-### فازهای اجرا
-
-![فازهای اجرا](docs/images/phases.png)
-
-هشت فاز با ترتیب اکید که هر کدام فقط با قبولی معیارهای پذیرش بسته می‌شوند: زیرساخت و ایمنی ← داده/رویداد/اتریبیوشن ← موتور جذب رایگان ← اتوماسیون چرخه حیات ← معرفی/همکاری ← محتوا/بازخورد/رصد رقبا ← تحلیل/ادمین/آزمایش ← سخت‌سازی و رول‌اوت تدریجی.
-
-### مدل ایمنی
-
-- **منابع محافظت‌شده فقط-خواندنی‌اند**: میرزا، پنل نمایندگی، ربات AKH، X-UI/Xray، تونل‌ها، iptables/nftables و شبکه‌های داکر موجود.
-- **جداسازی فضای نام**: گروث‌او‌اس فقط مالک `/opt/pv-growth`، کانتینرهای خودش، کاربر دیتابیس و شبکه خودش است.
-- **بدون بیلد سنگین روی پرووداکشن**: CI (گیت‌هاب اکشنز) ایمیج را می‌سازد/تست می‌کند/منتشر می‌کند؛ سرور فقط pool می‌کند.
-- **تست دودی قبل و بعد هر استقرار**: اگر پس از یک عملیات گروث‌او‌اس هر سرویس محافظت‌شده‌ای از کار بیفتد ← بازگشت فوری گروث‌او‌اس، بدون دستکاری سرویس محافظت‌شده.
-- **ممنوع طبق مشخصات**: `docker system prune`، `iptables -F`، `nft flush ruleset`، حذف broad با `rm -rf` و حذف/ساخت مجدد شبکه‌ها.
-- **هیچ secret در گیت نیست**؛ کاربر دیتابیس با حداقل دسترسی؛ ادمین نیاز به احراز هویت دارد؛ در پیام‌ها هیچ کمیابی/آپ‌تایم/تعداد کاربر جعلی ساخته نمی‌شود.
-
-### اجرا و وضعیت پیاده‌سازی
+Full runbook: [`DEPLOYMENT.md`](DEPLOYMENT.md) · operations:
+[`docs/operations/RUNBOOK.md`](docs/operations/RUNBOOK.md). Quick verify:
 
 ```bash
-pip install -r requirements-dev.txt
-export PVG_DATABASE_URL="sqlite+pysqlite:///./dev.db"   # در پرووداکشن: PostgreSQL 14
-python -m pv_growth migrate      # ۷ مایگریشن
-python -m pv_growth serve        # اجرا روی 127.0.0.1:8350
-python -m pytest                 # ۷۳ تست
-python scripts/dod_audit.py      # ممیزی ماشین‌خوان definition-of-done
+curl -s http://127.0.0.1:8350/health   # on the server
+python -m pytest                       # 79 tests anywhere
+python scripts/dod_audit.py            # machine-verifiable DoD
 ```
 
-وضعیت: هر ۸ فاز پیاده‌سازی شده · ۷۳ تست پاس · ممیزی پایان کار: ۴۲ PASS، ۰ FAIL، ۴ BLOCKED (فقط وابستگی‌های خارجی — رجوع به `BLOCKERS.md`). ساختار کامل سورس در `src/pv_growth/` شامل همه ماژول‌های الزامی مشخصات است؛ ران‌بوک استقرار در `DEPLOYMENT.md`.
+## Security
 
-### گزارش کامل فارسی
+No secrets in Git (scanned) · admin token constant-time auth · rate-limited
+ingestion/webhooks · least-privilege DB roles (`pv_growth`, `pv_growth_ro`
+SELECT-only) · secrets in root-owned `.env` · pip-audit in CI · forbidden
+destructive commands documented in [`SECURITY.md`](SECURITY.md).
 
-نسخه کامل گزارش فارسی (PDF) شامل هدف‌ها، معماری، مدل ایمنی، موتورها، فازها و معیار پایان کار:
+## Testing
 
-`docs/report/PV-GrowthOS-Report-FA.pdf`
+79 tests: idempotency everywhere, scheduler double-run safety, referral
+fraud, commercial-fact fabrication rejection, webhook flows, Mirza sync
+(transition/limit/outage), PG+SQLite parity. CI additionally runs migrations
+up/down on both engines and builds the image.
 
-</div>
+## Repository Structure
 
----
+```
+src/pv_growth/       23 modules (see ARCHITECTURE.md)
+alembic/versions/    0001..0007 (tested up+down, sqlite+postgres)
+tests/               79 tests
+scripts/             preflight/smoke CLI · backup.sh · loadtest.py · dod_audit.py · sentinelx-cleanup.sh
+docs/                images (7 diagrams) · operations/RUNBOOK.md · deployment-audits/ · report/ (Persian PDF)
+.github/workflows/   ci.yml (lint · test matrix · migrations · pip-audit · docker)
+```
 
-<div align="center">
+## Known Limitations (honest, current)
 
-**Spec**: `MASTER_SPEC.md` · **Report (FA)**: `docs/report/PV-GrowthOS-Report-FA.pdf`
+1. Telegram bot/publishing/lifecycle messaging are **built and tested but
+   inactive** — needs the owner to supply a dedicated bot token + channel IDs
+   (never reusing X-UI's token). Webhook returns 503 until then.
+2. Mirza sync is passive observation of invoices; SERVICE_EXPIRED/RENEWED
+   events are not yet derivable from Mirza's schema (marked unavailable
+   rather than fabricated).
+3. Analytics cover what flows through events; Mirza history (7,491 invoices)
+   backfills at 300/cycle, then forward-only.
 
-</div>
+## License
+
+Proprietary — PV Network internal.
