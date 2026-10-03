@@ -2,7 +2,16 @@
 
 import uuid
 
+import pytest
+
 from pv_growth.database.models import AppConfig, Event, User
+
+
+@pytest.fixture(autouse=True)
+def _reset_watermark(session):
+    """The test DB is shared; each sync test starts from a clean watermark."""
+    session.query(AppConfig).filter_by(key=WATERMARK_KEY).delete()
+    session.commit()
 from pv_growth.mirza_adapter.mysql_reader import (
     WATERMARK_KEY,
     FakeMirzaMySQL,
