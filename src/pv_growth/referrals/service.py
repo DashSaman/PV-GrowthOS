@@ -10,7 +10,7 @@ from __future__ import annotations
 import secrets
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -74,7 +74,7 @@ def create_pending_referral(
     today_count = session.execute(
         select(func.count()).select_from(Referral).where(
             Referral.referrer_id == referrer_id,
-            func.date(Referral.created_at) == today.isoformat(),
+            cast(func.date(Referral.created_at), String) == today.isoformat(),
         )
     ).scalar_one()
     if today_count >= MAX_REFERRALS_PER_DAY:

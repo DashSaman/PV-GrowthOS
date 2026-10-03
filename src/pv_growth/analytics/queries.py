@@ -79,26 +79,26 @@ def source_performance(session: Session) -> list[dict]:
 
 
 def cohorts(session: Session) -> list[dict]:
-    """Monthly first-seen cohorts → converted users (PAYMENT_SUCCESS)."""
-    month = func.strftime("%Y-%m", User.created_at)
-    rows = session.execute(
-        select(month, func.count(User.id)).group_by(month).order_by(month)
-    ).all()
+    """Monthly first-seen cohorts → converted users (PAYMENT_SUCCESS).
+    Month grouping happens in Python: strftime() does not exist on PostgreSQL."""
+    users = session.execute(select(User.id, User.created_at)).all()
+    by_month: dict[str, list[int]] = {}
+    for uid, created_at in users:
+        by_month.setdefault(created_at.strftime("%Y-%m"), []).append(uid)
+
     out: list[dict] = []
-    for cohort_month, size in rows:
-        users = session.execute(
-            select(User.id).where(month == cohort_month)
-        ).scalars().all()
+    for cohort_month in sorted(by_month):
+        ids = by_month[cohort_month]
         converted = 0
-        for uid in users:
+        for uid in ids:
             hit = session.execute(
                 select(Event.id).where(
                     Event.user_id == uid, Event.event_type == "PAYMENT_SUCCESS"
                 ).limit(1)
             ).scalar_one_or_none()
             converted += hit is not None
-        out.append({"cohort": cohort_month, "users": size, "converted": converted,
-                    "conversion": round(converted / size, 4) if size else 0.0})
+        out.append({"cohort": cohort_month, "users": len(ids), "converted": converted,
+                    "conversion": round(converted / len(ids), 4) if ids else 0.0})
     return out
 
 
