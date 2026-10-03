@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/DashSaman/PV-GrowthOS/actions/workflows/ci.yml/badge.svg)](https://github.com/DashSaman/PV-GrowthOS/actions)
 ![Production](https://img.shields.io/badge/production-live%20%40%20RoboT-10b981)
-![Tests](https://img.shields.io/badge/tests-79%20passing-3b82f6)
+![Tests](https://img.shields.io/badge/tests-82%20passing-3b82f6)
 ![Version](https://img.shields.io/badge/release-v1.0.0-8b5cf6)
 
 **v1.0.0** · Modular Monolith · FastAPI · SQLAlchemy 2 · PostgreSQL 14 · Telegram-native
@@ -44,8 +44,12 @@ Acquisition → Bot Start → Free Config/Trial → Connection → Pricing
 | Network | dedicated `pv_growth_net` (172.23.77.0/24 — collision-checked live) |
 | Limits | 384 MB mem / 0.75 CPU / 200 pids — actual usage ≈ 64 MB, <1% CPU |
 | Database | `pv_growth` on the existing PostgreSQL 14 · Alembic head **0007** (28 tables) · least-privilege role |
-| Mirza integration | **LIVE read-only**: dedicated MySQL role `pv_growth_ro` (SELECT on `hajsaman.invoice/user` only) · periodic sync ingested the first 300 of 7,491 invoices → real `PAYMENT_SUCCESS`/`SERVICE_CREATED` events, real revenue analytics |
-| Feature flags | all 10 modules **OFF** (passive/observational stage) — activated gradually per the rollout plan |
+| Mirza integration | **LIVE read-only, 100% reconciled**: 7,272 payments + 213 checkouts + 7,032 renewals ingested from 7,496 invoices via role `pv_growth_ro` (SELECT on `hajsaman.invoice/user` only) · `SERVICE_EXPIRED` change-detection on observed `active→disabledn` transitions |
+| Telegram | **LIVE**: dedicated bot [@pvgrowthos_bot](https://t.me/pvgrowthos_bot) + channel [PV Network | Free Config](https://t.me/pvnetwork_freeconfig) (bot = admin) · long-polling (localhost-only topology, one mechanism) · deep-link attribution `freecfg_*` verified end-to-end |
+| Free Config | **LIVE pipeline**: 1,846 real configs staged from an approved public aggregator; one health-checked config published to the channel; exclusive campaign `exc_e2e` claimed idempotently (1 GB/24h quota) |
+| Referral | **LIVE E2E**: A→link→B→settled payment→exactly 1 reward; self-referral + duplicate reward + duplicate payment all rejected |
+| Lifecycle | **canary verified**: real onboarding message delivered to a paying user; strict fact-validation refused 240 sends lacking real numbers (safety worked) |
+| Feature flags | 6/10 ON: attribution, free-config, public, exclusive, lifecycle, referral · partner/content/competitor/experiments remain OFF (per rollout plan) |
 | Protected services | Mirza 200→200 · Reseller 200→200 · AKH 401→401 · Apache/X-UI/Xray/Hedioum/tunnels: identical before/after (audited) |
 | Tests / CI | 79 tests green · GitHub Actions green (lint, sqlite+postgres matrix, migrations up/down, pip-audit, docker build) |
 | Swap | 2 GB swapfile added (was none) — persistent, conservative |

@@ -1,0 +1,33 @@
+<!DOCTYPE html><html dir="rtl" lang="fa"><head><meta charset="utf-8">
+<style>
+body{font-family:Tahoma;background:#0f172a;color:#e2e8f0;margin:0;padding:24px}
+h1{font-size:20px;color:#6ee7b7}h2{font-size:14px;color:#a5f3fc;margin:16px 0 6px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.card{background:#1e293b;border-radius:10px;padding:12px}
+.k{font-size:11px;color:#94a3b8}.v{font-size:20px;font-weight:700;color:#fff}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td{padding:4px 8px;border-bottom:1px solid #334155}
+.on{color:#34d399}.off{color:#64748b}
+.bar{height:8px;background:#334155;border-radius:4px;overflow:hidden;margin-top:4px}
+.fill{height:100%;background:linear-gradient(90deg,#10b981,#3b82f6)}
+</style></head><body>
+<h1>PV GrowthOS — Admin Dashboard (127.0.0.1:8350)</h1>
+<h2>فیچر فلگ‌ها</h2>
+<div class="grid" id="flags"></div>
+<h2>قیف فروش</h2><div id="funnel"></div>
+<h2>درآمد و معرفی</h2><div class="grid" id="kpi"></div>
+<script>
+const DATA = {"flags": {"ATTRIBUTION_ENABLED": true, "FREE_CONFIG_ENABLED": true, "PUBLIC_CONFIG_ENABLED": true, "PV_EXCLUSIVE_CONFIG_ENABLED": true, "LIFECYCLE_AUTOMATION_ENABLED": true, "REFERRAL_ENABLED": true, "PARTNER_ENABLED": false, "CONTENT_ENGINE_ENABLED": false, "COMPETITOR_WATCH_ENABLED": false, "EXPERIMENTS_ENABLED": false}, "funnel": {"BOT_STARTED": 3, "TRIAL_CREATED": 3, "TRIAL_CONNECTED": 1, "PRICING_VIEWED": 0, "CHECKOUT_STARTED": 83, "PAYMENT_SUCCESS": 240}, "revenue": {"total_cents": 27362408010, "renewal_cents": 850000, "winback_cents": 0}, "referrals": {"total": 1, "valid": 1, "rewarded": 1}, "users": 275};
+const f = document.getElementById('flags');
+for (const [k,v] of Object.entries(DATA.flags))
+  f.insertAdjacentHTML('beforeend', `<div class="card"><div class="k">${k}</div><div class="v ${v?'on':'off'}">${v?'● روشن':'○ خاموش'}</div></div>`);
+const fu = document.getElementById('funnel');
+const max = Math.max(...Object.values(DATA.funnel));
+for (const [k,v] of Object.entries(DATA.funnel))
+  fu.insertAdjacentHTML('beforeend', `<div><div class="k">${k} — ${v}</div><div class="bar"><div class="fill" style="width:${max?v/max*100:0}%"></div></div></div>`);
+const kp = document.getElementById('kpi');
+const items = [['درآمد کل (ریال‌سانت)', DATA.revenue.total_cents],['تمدید', DATA.revenue.renewal_cents],
+ ['معرفی معتبر', DATA.referrals.valid],['کاربران', DATA.users]];
+for (const [k,v] of items)
+  kp.insertAdjacentHTML('beforeend', `<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`);
+</script></body></html>
