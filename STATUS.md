@@ -4,7 +4,7 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-Phase 0/1/2 — COMPLETE. Phase 3 is next.
+Phase 0–3 — COMPLETE. Phase 4 is next.
 
 ## Environment
 
@@ -26,7 +26,21 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-- Phase 3 (Lifecycle Sales Automation + durable job engine).
+- Phase 4 (Referral / Viral / Partner).
+
+## Phase 3 summary
+
+- PostgreSQL-backed durable job queue (no Redis): atomic row-claim, exponential
+  backoff retries, stale-lock recovery, idempotent enqueue; runner + background
+  scheduler thread wired to app lifespan
+- Messaging: strict template rendering (unknown/missing facts refuse to send —
+  commercial facts only from structured data), effect log with unique dedupe_key,
+  MESSAGE_SENT events
+- Lifecycle rules (data-driven): triggers (started_no_trial, trial_no_connect,
+  trial_no_purchase, checkout_abandoned, first_purchase_onboarding, winback),
+  delay/conditions/cooldown/max_sends/stop_conditions — purchase kills sales reminders
+- Segments: all 15 spec segments computed as pure functions of event history,
+  recomputed every scan
 
 ## Phase 2 summary
 
@@ -56,6 +70,6 @@ See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
 ## Test Results
 
-- Phase 0: 6 · Phase 1: +13 · Phase 2: +15 → 34 passed total (SQLite locally;
+- Phase 0: 6 · P1: +13 · P2: +15 · P3: +13 → 47 passed total (SQLite locally;
   CI additionally runs the same suite against PostgreSQL 14 + migration up/down).
 - `ruff check src tests`: clean.

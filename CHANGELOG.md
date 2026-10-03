@@ -2,6 +2,16 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
+## [0.4.0] — 2026-10-03 — Phase 3: Lifecycle Sales Automation
+
+### Added
+- Migration 0004: jobs (unique idempotency_key, due-index), message_templates, message_log (unique dedupe_key), lifecycle_rules
+- Durable job engine: atomic claim (single-row UPDATE), exponential backoff (60s→1h cap), stale-lock recovery, dead-end after max attempts; handler registry; foreground runner + background scheduler thread
+- Messaging engine: strict {{var}} rendering (missing/unknown facts refuse send), effect log, MESSAGE_SENT emission, idempotent sends
+- Lifecycle rule engine: data-driven triggers/delay/conditions/cooldown/max_sends/stop_conditions; purchase stops inappropriate sales reminders (tested)
+- Segment engine: all 15 segments, pure-function-of-events, recomputed on every scan
+- 13 new tests (47 total passing)
+
 ## [0.3.0] — 2026-10-03 — Phase 2: Free Acquisition Engine
 
 ### Added

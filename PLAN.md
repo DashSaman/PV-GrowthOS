@@ -11,7 +11,7 @@ phase starts. New ideas go to `BACKLOG.md` and never interrupt the active phase.
 | 0 | Foundation & Safety | ✅ COMPLETE |
 | 1 | Core Data / Events / Attribution / Mirza Adapter | ✅ COMPLETE |
 | 2 | Free Acquisition Engine | ✅ COMPLETE |
-| 3 | Lifecycle Sales Automation | ⬜ PENDING |
+| 3 | Lifecycle Sales Automation | ✅ COMPLETE |
 | 4 | Referral / Viral / Partner | ⬜ PENDING |
 | 5 | Content / Feedback / Competitor Intel | ⬜ PENDING |
 | 6 | Analytics / Admin / Experiments | ⬜ PENDING |
@@ -77,10 +77,11 @@ Acceptance (verified — tests/test_free_config.py, tests/test_config_quality.py
 Segments, Postgres-backed durable job engine, message templates, trial follow-up,
 checkout recovery, renewal reminders, expiry, win-back.
 
-Acceptance:
-- [ ] messages respect stop conditions (purchase stops sales reminders)
-- [ ] idempotency prevents duplicate sends
-- [ ] cooldown works
+Acceptance (verified — tests/test_jobs.py, tests/test_lifecycle.py):
+- [x] messages respect stop conditions (PAYMENT_SUCCESS stops sales reminders — tested)
+- [x] idempotency prevents duplicate sends (message_log dedupe_key; runner double-run = no-op — tested)
+- [x] cooldown works (24h default per purpose — tested)
+- [x] durable Postgres jobs: exclusive claim, backoff retries, stale-lock recovery (tested)
 
 ## Phase 4 — Referral / Viral / Partner
 

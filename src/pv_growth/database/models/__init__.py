@@ -12,5 +12,11 @@ from pv_growth.database.models.free_config import (  # noqa: F401
     PublishedPost,
     RawConfig,
 )
+from pv_growth.database.models.jobs import (  # noqa: F401
+    Job,
+    LifecycleRule,
+    MessageLog,
+    MessageTemplate,
+)
 from pv_growth.database.models.sources import SOURCE_KINDS, AttributionTouch, Source  # noqa: F401
 from pv_growth.database.models.users import User  # noqa: F401
