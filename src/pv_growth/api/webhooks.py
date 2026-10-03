@@ -124,6 +124,14 @@ def _handle_message(client, message: TgMessage) -> None:
                     "سلام! به PV Network خوش آمدید.\n"
                     "برای دریافت کانفیگ رایگان از کانال ما سر بزنید یا /help را بزنید.",
                 )
+        elif text.startswith("/claim"):
+            parts = text.split()
+            if len(parts) == 2:
+                _handle_callback(client, TgCallback(
+                    id=str(message.message_id), from_=tg_user,
+                    data=f"claim:{parts[1]}"))
+            else:
+                client.send_message(message.chat.get("id"), "استفاده: /claim <کد کمپین>")
 
 
 def _handle_callback(client, callback: TgCallback) -> None:
