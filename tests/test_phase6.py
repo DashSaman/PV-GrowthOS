@@ -102,7 +102,7 @@ def test_admin_dashboard_and_flags(client, session):
     body = resp.json()
     assert body["funnel"]["BOT_STARTED"] >= 1
     assert "LIFECYCLE_AUTOMATION_ENABLED" in body["flags"]
-    assert "queue_depth" in body and "failed_jobs" in body
+    assert "system" in body and "queue" in body["system"] and "healthy" in body["system"]
 
 
 def test_admin_flag_toggle_and_campaign_crud(client):

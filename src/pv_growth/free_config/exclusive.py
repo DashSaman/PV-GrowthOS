@@ -162,12 +162,11 @@ def claim_exclusive(
     if not flags.enabled("FREE_CONFIG_ENABLED") or not flags.enabled("PV_EXCLUSIVE_CONFIG_ENABLED"):
         raise ValidationError("exclusive free config disabled")
 
+    from pv_growth.campaigns.service import get_by_code
+
     day = day or date.today()
-    campaign = session.execute(
-        select(Campaign).where(Campaign.code == campaign_code,
-                               Campaign.kind == "free_config_exclusive")
-    ).scalar_one_or_none()
-    if campaign is None:
+    campaign = get_by_code(session, campaign_code)
+    if campaign is None or campaign.kind != "free_config_exclusive":
         raise ValidationError("unknown exclusive campaign")
 
     # idempotent re-claim FIRST: an existing claim for today returns as-is,

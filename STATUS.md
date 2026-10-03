@@ -4,7 +4,8 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-Phase 0–6 — COMPLETE. Phase 7 (hardening) in progress.
+ALL PHASES (0–7) COMPLETE — local scope. Remaining items are external-only
+(server SSH / credentials / CI observation), tracked in BLOCKERS.md.
 
 ## Environment
 
@@ -26,7 +27,19 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-- Phase 7 (Production Hardening & Rollout).
+Nothing local. Owner actions pending (see BLOCKERS.md B1–B6): run DEPLOYMENT.md
+runbook on the server (preflight, sentinelx cleanup, deploy, smoke), provide
+Telegram/Mirza/provisioning credentials, add DOCKER_REGISTRY secret.
+
+## Phase 7 summary (hardening)
+
+- Placeholder/TODO/FIXME scan: clean (audit-grade, scripted)
+- Machine-verifiable Definition-of-Done audit: scripts/dod_audit.py —
+  42 PASS · 0 FAIL · 4 BLOCKED (SSH-only items)
+- Missing spec modules campaigns/admin were added as real code (found by audit)
+- Backup script (pg_dump + gzip verify + 14-copy rotation), load probe,
+  resource limits enforced in compose (384M/0.75CPU/200pids)
+- pip-audit in CI; migration up/down on both DB engines; rollback rehearsed in CI
 
 ## Phase 6 summary
 
@@ -106,6 +119,6 @@ See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
 ## Test Results
 
-- Phase 0–6 cumulative: 73 passed total (SQLite locally;
+- Final: 73 tests passing · ruff clean · DoD audit 42/0/4 (SQLite locally;
   CI additionally runs the same suite against PostgreSQL 14 + migration up/down).
 - `ruff check src tests`: clean.

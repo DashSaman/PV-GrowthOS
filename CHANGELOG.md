@@ -2,6 +2,17 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
+## [1.0.0] — 2026-10-03 — Phase 7: Hardening + Definition of Done
+
+### Added
+- scripts/dod_audit.py: machine-verifiable completion audit — 42 PASS / 0 FAIL / 4 BLOCKED (external-only)
+- scripts/backup.sh (pv_growth-only pg_dump + verification + rotation), scripts/loadtest.py (modest probe)
+- campaigns/ and admin/ promoted to real modules (found by the placeholder audit)
+- README updated to implemented state (EN/FA) with quickstart + audit instructions
+
+### Security
+- pip-audit job in CI on every push; secrets remain env-only; admin token required
+
 ## [0.7.0] — 2026-10-03 — Phase 6: Analytics / Admin / Experiments
 
 ### Added

@@ -15,7 +15,7 @@ phase starts. New ideas go to `BACKLOG.md` and never interrupt the active phase.
 | 4 | Referral / Viral / Partner | ✅ COMPLETE |
 | 5 | Content / Feedback / Competitor Intel | ✅ COMPLETE |
 | 6 | Analytics / Admin / Experiments | ✅ COMPLETE |
-| 7 | Production Hardening & Rollout | ⬜ PENDING |
+| 7 | Production Hardening & Rollout | ✅ COMPLETE (local scope) |
 
 ## Phase 0 — Foundation & Safety (COMPLETE)
 

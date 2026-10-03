@@ -6,7 +6,10 @@
 
 سیستم عامل رشدِ خودکار و ایمن برای نمایشگاه PV Network
 
-`v1.0 · Modular Monolith · FastAPI + PostgreSQL · Telegram-native`
+`v1.0 · IMPLEMENTED · Modular Monolith · FastAPI + SQLAlchemy 2 + PostgreSQL · Telegram-native`
+
+> **Status:** Phases 0–7 implemented · 73 tests passing · 7 migrations ·
+> Definition-of-Done audit: 42 PASS / 0 FAIL / 4 BLOCKED (external-only — see `BLOCKERS.md`)
 
 [English](#-english) | [فارسی](#-فارسی)
 
@@ -78,23 +81,40 @@ Eight strictly-ordered phases, each gated by acceptance criteria: Foundation & S
 - **Forbidden by spec**: `docker system prune`, `iptables -F`, `nft flush ruleset`, broad `rm -rf`, network deletion/recreation.
 - **No secrets in Git**; least-privilege DB user; admin auth required; no fake scarcity/uptime/user counts in messages.
 
-### Repository Layout (planned)
+### Quickstart
+
+```bash
+pip install -r requirements-dev.txt
+export PVG_DATABASE_URL="sqlite+pysqlite:///./dev.db"   # prod: PostgreSQL 14
+python -m pv_growth migrate        # alembic upgrade head (7 revisions)
+python -m pv_growth serve          # FastAPI on 127.0.0.1:8350
+python -m pytest                   # 73 tests
+python scripts/dod_audit.py        # machine-verifiable Definition-of-Done audit
+```
+
+Production runbook (preflight → migrate → deploy → smoke → rollback): `DEPLOYMENT.md`.
+
+### Repository Layout (implemented)
 
 ```
-pv-growth-os/
-├── README.md · README.fa.md · MASTER_SPEC.md · ARCHITECTURE.md
-├── PLAN.md · STATUS.md · CHANGELOG.md · TEST_PLAN.md
-├── SECURITY.md · DEPLOYMENT.md · ROLLBACK.md
-├── BACKLOG.md · BLOCKERS.md · EXISTING_ISSUES.md · SERVER_RESOURCE_MAP.md
-├── app/                    # core · database · events · attribution · mirza_adapter
-│                          # telegram · free_config · config_sources · config_quality
-│                          # campaigns · lifecycle · messaging · referrals · partners
-│                          # content · competitors · feedback · analytics · experiments
-│                          # admin · jobs
-├── alembic/               # versioned, backward-compatible migrations
-├── tests/                 # unit · integration · idempotency · scheduler · fraud
-├── .github/workflows/     # lint → test → security → docker build/publish
-└── docs/images/           # diagrams (funnel, architecture, phases, pipeline)
+PV-GrowthOS/
+├── src/pv_growth/
+│   ├── main.py · cli.py · preflight.py · smoke.py
+│   ├── core/          # settings · JSON logging · feature flags · errors
+│   ├── database/      # engine/sessions · models registry (all domains)
+│   ├── api/           # health · events ingestion · admin API · telegram webhook
+│   ├── events · attribution · mirza_adapter · telegram
+│   ├── jobs/          # PostgreSQL durable queue · runner · scheduler thread
+│   ├── config_sources · config_quality · free_config   # staged public pipeline + PV exclusive
+│   ├── campaigns · lifecycle · messaging · segments
+│   ├── referrals · partners                           # rewards/commissions with anti-fraud
+│   ├── content · competitors · feedback
+│   └── analytics · experiments · admin                # funnels/cohorts · deterministic A/B
+├── alembic/versions/  # 0001..0007, tested up+down in CI (SQLite + PostgreSQL matrix)
+├── tests/             # 73 tests: idempotency · scheduler-duplicate · fraud · facts · webhook
+├── scripts/           # preflight/smoke CLI companions · backup · load probe · DoD audit · sentinelx
+├── .github/workflows/ci.yml   # ruff · pytest matrix · migration up/down · pip-audit · docker build
+└── docs/              # diagrams + full Persian PDF report
 ```
 
 ### Full Persian Report
@@ -102,6 +122,13 @@ pv-growth-os/
 A complete Persian-language PDF report covering objectives, architecture, safety model, engines, phases and definition-of-done is available at:
 
 `docs/report/PV-GrowthOS-Report-FA.pdf`
+
+### Completion audit
+
+`python scripts/dod_audit.py` verifies every Master-Spec component programmatically
+(modules contain code, routes exist, migrations chain, flags defined, no stubs,
+tests+lint green). Current result: **42 PASS · 0 FAIL · 4 BLOCKED** — blocked items
+are server/credential-only dependencies documented in `BLOCKERS.md`.
 
 ---
 
@@ -170,23 +197,18 @@ A complete Persian-language PDF report covering objectives, architecture, safety
 - **ممنوع طبق مشخصات**: `docker system prune`، `iptables -F`، `nft flush ruleset`، حذف broad با `rm -rf` و حذف/ساخت مجدد شبکه‌ها.
 - **هیچ secret در گیت نیست**؛ کاربر دیتابیس با حداقل دسترسی؛ ادمین نیاز به احراز هویت دارد؛ در پیام‌ها هیچ کمیابی/آپ‌تایم/تعداد کاربر جعلی ساخته نمی‌شود.
 
-### ساختار مخزن (طرح‌شده)
+### اجرا و وضعیت پیاده‌سازی
 
+```bash
+pip install -r requirements-dev.txt
+export PVG_DATABASE_URL="sqlite+pysqlite:///./dev.db"   # در پرووداکشن: PostgreSQL 14
+python -m pv_growth migrate      # ۷ مایگریشن
+python -m pv_growth serve        # اجرا روی 127.0.0.1:8350
+python -m pytest                 # ۷۳ تست
+python scripts/dod_audit.py      # ممیزی ماشین‌خوان definition-of-done
 ```
-pv-growth-os/
-├── README.md · README.fa.md · MASTER_SPEC.md · ARCHITECTURE.md
-├── PLAN.md · STATUS.md · CHANGELOG.md · TEST_PLAN.md
-├── SECURITY.md · DEPLOYMENT.md · ROLLBACK.md
-├── BACKLOG.md · BLOCKERS.md · EXISTING_ISSUES.md · SERVER_RESOURCE_MAP.md
-├── app/                    # هسته · دیتابیس · رویدادها · اتریبیوشن · آداپتر میرزا
-│                          # تلگرام · کانفیگ رایگان · منابع · کیفیت کانفیگ
-│                          # کمپین‌ها · چرخه حیات · پیام‌ها · معرفی · همکاری
-│                          # محتوا · رقبا · بازخورد · تحلیل · آزمایش · ادمین · کارها
-├── alembic/               # مایگریشن‌های نسخه‌دار و سازگار با گذشته
-├── tests/                 # واحد · یکپارچه · idempotency · زمان‌بند · ضدتقلب
-├── .github/workflows/     # lint → تست → امنیت → بیلد و انتشار داکر
-└── docs/images/           # نمودارها (قیف، معماری، فازها، خط تولید)
-```
+
+وضعیت: هر ۸ فاز پیاده‌سازی شده · ۷۳ تست پاس · ممیزی پایان کار: ۴۲ PASS، ۰ FAIL، ۴ BLOCKED (فقط وابستگی‌های خارجی — رجوع به `BLOCKERS.md`). ساختار کامل سورس در `src/pv_growth/` شامل همه ماژول‌های الزامی مشخصات است؛ ران‌بوک استقرار در `DEPLOYMENT.md`.
 
 ### گزارش کامل فارسی
 

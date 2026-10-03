@@ -21,7 +21,6 @@ from pv_growth.database.models import (
     MessageTemplate,
     Partner,
 )
-from pv_growth.jobs import service as jobs
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -34,14 +33,12 @@ def dashboard() -> dict:
 
     settings = get_settings()
     with session_scope(settings) as session:
-        from pv_growth.database.models import Job
-
         recent_events = session.execute(
             select(Event).order_by(Event.id.desc()).limit(20)
         ).scalars().all()
-        failed = session.execute(
-            select(Job).where(Job.status == "failed").limit(20)
-        ).scalars().all()
+        from pv_growth.admin.service import system_health
+
+        health = system_health(session)
         return {
             "flags": FlagService(settings).snapshot(),
             "funnel": queries.funnel(session),
@@ -50,11 +47,7 @@ def dashboard() -> dict:
             "referrals": queries.referral_stats(session),
             "sources": queries.source_performance(session),
             "campaigns": queries.campaign_performance(session),
-            "queue_depth": jobs.queue_depth(session),
-            "failed_jobs": [
-                {"id": j.id, "type": j.job_type, "error": (j.last_error or "")[:120]}
-                for j in failed
-            ],
+            "system": health,
             "recent_events": [
                 {"event_id": e.event_id, "type": e.event_type,
                  "user_id": e.user_id, "at": e.occurred_at.isoformat()}
