@@ -198,8 +198,8 @@ def _handle_callback(client, callback: TgCallback) -> None:
                 route = feedback.route(session, rating)
                 _safe_answer(client, callback.id, "ثبت شد، سپاسگزاریم!")
                 if route == "testimonial_invite":
-                    client.send_message(
-                        callback.from_.id,
+                    _safe_send(
+                        client, callback.from_.id,
                         "خوشحالیم که راضی بودید! اجازه می‌دهید نظر شما را (ناشناس) منتشر کنیم؟ "
                         "با ثبت رضایت در پیام بعدی اعلام کنید.",
                     )
