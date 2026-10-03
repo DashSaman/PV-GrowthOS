@@ -119,8 +119,8 @@ def _handle_message(client, message: TgMessage) -> None:
             if start_param and start_param.startswith("freecfg_"):
                 from pv_growth.telegram.client import InlineKeyboard
 
-                client.send_message(
-                    message.chat.get("id"),
+                _safe_send(
+                    client, message.chat.get("id"),
                     "🎁 کانفیگ رایگان PV Network آماده است!\nروی دکمه بزن تا دریافت کنی:",
                     InlineKeyboard([[
                         {"text": "🚀 دریافت کانفیگ",
@@ -128,8 +128,8 @@ def _handle_message(client, message: TgMessage) -> None:
                     ]]),
                 )
             else:
-                client.send_message(
-                    message.chat.get("id"),
+                _safe_send(
+                    client, message.chat.get("id"),
                     "سلام! به PV Network خوش آمدید.\n"
                     "برای دریافت کانفیگ رایگان از کانال ما سر بزنید یا /help را بزنید.",
                 )
