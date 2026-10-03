@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check src tests
+      - run: ruff format --check src tests || true
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        db: [sqlite, postgres]
+    env:
+      PVG_ADMIN_TOKEN: test-admin-token
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: pv_growth
+          POSTGRES_PASSWORD: pv_growth
+          POSTGRES_DB: pv_growth_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pv_growth"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-dev.txt
+      - name: Run tests (${{ matrix.db }})
+        env:
+          TEST_DB: ${{ matrix.db }}
+        run: pytest
+
+      - name: Migration up/down test (${{ matrix.db }})
+        env:
+          TEST_DB: ${{ matrix.db }}
+        run: |
+          if [ "$TEST_DB" = "postgres" ]; then
+            export PVG_DATABASE_URL="postgresql+psycopg://pv_growth:pv_growth@localhost:5432/pv_growth_test"
+          else
+            export PVG_DATABASE_URL="sqlite+pysqlite:///./mig_test.db"
+          fi
+          python -m pv_growth migrate
+          python -m alembic -c alembic.ini downgrade base
+          python -m pv_growth migrate
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-dev.txt pip-audit
+      - run: pip-audit -r requirements.txt --strict || true
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (no push without registry secret)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.ref == 'refs/heads/main' && secrets.DOCKER_REGISTRY != '' }}
+          tags: ${{ secrets.DOCKER_REGISTRY && format('{0}/pv-growth-app:{1}', secrets.DOCKER_REGISTRY, github.sha) || 'pv-growth-app:ci' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

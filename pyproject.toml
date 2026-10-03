@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pv-growth"
+version = "1.0.0"
+description = "PV GrowthOS — autonomous, production-safe growth system for PV Network"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S"]
+ignore = ["S101", "S108", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106", "E501"]
+"alembic/*" = ["E501", "I001"]

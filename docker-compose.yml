@@ -1,0 +1,40 @@
+# PV GrowthOS — production-oriented compose with hard resource limits.
+# The app binds 127.0.0.1:8350 on the host only. Never 0.0.0.0.
+# Create the network first: docker network create pv_growth_net --subnet 172.23.77.0/24
+# (only after the read-only preflight confirms the subnet is free).
+services:
+  pv-growth-app:
+    build: .
+    image: pv-growth-app:local
+    container_name: pv-growth-app
+    restart: unless-stopped
+    user: "10001:10001"
+    env_file: /opt/pv-growth/.env
+    environment:
+      PVG_ENV: production
+      PVG_HOST: 0.0.0.0
+      PVG_PORT: 8350
+      PVG_DATABASE_URL: ${PVG_DATABASE_URL}
+    ports:
+      - "127.0.0.1:8350:8350"
+    networks:
+      - pv_growth_net
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.75"
+          pids: 200
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx;httpx.get('http://127.0.0.1:8350/health',timeout=4).raise_for_status()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  pv_growth_net:
+    external: true
