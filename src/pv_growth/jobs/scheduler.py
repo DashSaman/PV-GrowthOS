@@ -44,6 +44,11 @@ class Scheduler:
             bucket = int(time.time() // self._settings.scheduler_interval_seconds)
             jobs.enqueue(session, "lifecycle.scan", {},
                          idempotency_key=f"lifecycle_scan:{bucket}")
+            # Mirza read-only sync every ~5 minutes (only when configured)
+            if self._settings.mirza_mysql_host:
+                mbucket = int(time.time() // 300)
+                jobs.enqueue(session, "mirza.sync", {},
+                             idempotency_key=f"mirza_sync:{mbucket}")
 
     def start(self) -> None:
         if self._thread is not None:

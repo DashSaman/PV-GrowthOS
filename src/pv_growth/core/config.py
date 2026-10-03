@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     mirza_base_url: str = ""
     mirza_token: str = ""
     mirza_timeout_seconds: float = 10.0
+    # read-only MySQL integration (hajsaman) via GrowthOS-owned forwarder
+    mirza_mysql_host: str = ""
+    mirza_mysql_port: int = 3306
+    mirza_mysql_user: str = "pv_growth_ro"
+    mirza_mysql_password: str = ""
 
     # --- PV provisioning (exclusive free configs) ---
     provisioning_base_url: str = ""
