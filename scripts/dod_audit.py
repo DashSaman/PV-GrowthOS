@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -123,8 +124,12 @@ def main() -> int:
     try:
         def ssh(cmd: str) -> str:
             key = Path.home() / ".ssh" / "akh_key"
-            proc = subprocess.run(
-                ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
+            ssh_bin = shutil.which("ssh")
+            if ssh_bin is None:
+                return ""
+            # audit tool: fixed host/key, read-only commands defined in this file
+            proc = subprocess.run(  # noqa: S603
+                [ssh_bin, "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
                  "-i", str(key), "root@91.107.240.235", cmd],
                 capture_output=True, text=True, timeout=90)
             return proc.stdout.strip() if proc.returncode == 0 else ""
