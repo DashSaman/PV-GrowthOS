@@ -33,7 +33,14 @@ def handler(job_type: str):
     return register
 
 
+def register_builtin_handlers() -> None:
+    """Import handler modules so their @handler decorators register.
+    Without this the registry is empty at runtime and every job errors."""
+    import pv_growth.lifecycle.service  # noqa: F401
+
+
 def dispatch(session: Session, settings: Settings, job_type: str, payload: dict) -> None:
+    register_builtin_handlers()
     fn = _HANDLERS.get(job_type)
     if fn is None:
         raise ValueError(f"no handler registered for job_type={job_type}")
@@ -70,6 +77,7 @@ def run_tick(settings: Settings, *, worker_id: str | None = None, batch: int = 1
 
 def run_forever() -> int:
     settings = Settings()
+    register_builtin_handlers()
     log.info("job runner started (foreground)")
     while True:
         count = run_tick(settings)

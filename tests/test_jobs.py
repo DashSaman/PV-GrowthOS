@@ -108,3 +108,20 @@ def test_app_starts_with_scheduler_enabled(settings, monkeypatch):
 
     with TestClient(create_app()) as c:
         assert c.get("/health").status_code == 200
+
+
+def test_builtin_handlers_register_and_scan_job_completes(settings, session):
+    """Regression: handler modules must be imported so the registry is
+    populated (first production deploy left lifecycle.scan jobs pending)."""
+    from pv_growth.jobs import runner
+
+    runner.register_builtin_handlers()
+    assert "lifecycle.scan" in runner._HANDLERS
+
+    jobs.enqueue(session, "lifecycle.scan", {}, idempotency_key="scan:1")
+    session.commit()
+    executed = runner.run_tick(settings, worker_id="t3")
+    assert executed == 1
+    from pv_growth.database.models import Job
+    done = session.query(Job).filter_by(idempotency_key="scan:1").one()
+    assert done.status == "done"
