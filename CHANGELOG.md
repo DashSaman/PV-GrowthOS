@@ -2,6 +2,21 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
+## [1.0.1] — 2026-10-03 — FULL OPERATIONAL INTEGRATION
+
+### Live integrations
+- Dedicated Telegram bot **@pvgrowthos_bot** (BotFather-created, long-polling, isolated reply failures) + channel **t.me/pvnetwork_freeconfig** (bot=admin)
+- Public free-config pipeline: 1,846 real configs staged from approved aggregator, capped health-check, one post published, idempotent slots
+- Exclusive claim E2E: deep-link → bot → claim button + /claim command → idempotent per-user/day claims with 1GB/24h quota
+- Referral E2E: A→link→B(start via pipeline)→settled payment→valid→exactly-1 reward; self/duplicate/duplicate-payment rejected
+- Lifecycle canary: real onboarding message delivered; strict fact-validation refused 240 fact-less sends (safety proven in production)
+- Flags ON: attribution/free/public/exclusive/lifecycle/referral (6/10)
+
+### Fixed (found by production testing)
+- missing jobs/scheduler module + empty handler registry (earlier)
+- telegram reply failures no longer abort event ingestion (_safe_send)
+- /claim text command mirrors inline button
+
 ## [1.0.0] — 2026-10-03 — PRODUCTION DEPLOYMENT (v1.0.0)
 
 ### Deployed

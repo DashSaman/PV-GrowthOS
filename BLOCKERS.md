@@ -5,11 +5,11 @@ around it. One missing credential never freezes the project (spec §27).
 
 | # | Blocker | Type | Workaround in place | State |
 |---|---|---|---|---|
-| B1 | No SSH access to the production Ubuntu server from the development machine | server access | Everything server-side ships as scripts/instructions: `preflight.py`, `smoke.py`, `scripts/sentinelx-cleanup.sh`, DEPLOYMENT.md runbook | OPEN — needs owner to run the runbook |
-| B2 | Telegram bot token (`PVG_TELEGRAM_BOT_TOKEN`) unavailable | credential | Telegram client built against the Bot API with an injectable fake transport; all flows unit-tested with the fake; webhook endpoint refuses traffic when token missing | OPEN |
-| B3 | Free-config / official channel IDs unavailable | credential | Channel targets are settings (`free_channel_id`, `official_channel_id`); publishing jobs validate target presence before send | OPEN |
+| B1 | ~~SSH access~~ **RESOLVED 2026-10-03**: authorized key akh_key used for the full deployment | server access | deployed, verified, all smoke green | ✅ CLOSED |
+| B2 | ~~Telegram bot token~~ **RESOLVED 2026-10-03**: dedicated @pvgrowthos_bot created via BotFather, long-polling live, channel connected | credential | bot + channel operational; E2E verified | ✅ CLOSED |
+| B3 | ~~channel IDs~~ **RESOLVED 2026-10-03**: t.me/pvnetwork_freeconfig created, bot is admin | credential | publishing verified with real posts | ✅ CLOSED |
 | B4 | Mirza API endpoint/token unavailable | credential | `MirzaClient` implements the read-only adapter contract; a `FakeMirza` serves tests; integration activates by setting `PVG_MIRZA_BASE_URL`/`PVG_MIRZA_TOKEN` | OPEN |
-| B5 | PV provisioning endpoint/token (exclusive pool) unavailable | credential | Provisioning client behind an interface + fake; exclusive campaigns queue claims until configured | OPEN |
+| B5 | PV provisioning endpoint/token (exclusive pool) unavailable | credential | Claims queue safely as pending_provision (verified); no fabricated configs. X-UI panel credentials are human-only. | OPEN (only remaining runtime credential) |
 | B6 | Container registry credentials (`DOCKER_REGISTRY` secret) unavailable | credential | CI builds (and tests) the image on every push; registry push step auto-enables when the secret exists | OPEN |
 
 ## Notes

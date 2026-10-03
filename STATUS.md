@@ -4,9 +4,14 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-**v1.0.0 DEPLOYED TO PRODUCTION** (host RoboT, 2026-10-03). All 8 phases
-implemented; container healthy; real Mirza data flowing; all feature flags OFF
-(passive stage). Remaining blocker: dedicated Telegram bot token (BLOCKERS.md B2/B3).
+**FULLY OPERATIONAL (2026-10-03, post v1.0.0)**: dedicated bot @pvgrowthos_bot
+LIVE (long-polling), channel t.me/pvnetwork_freeconfig LIVE, free-config
+pipeline LIVE (1,846 real configs staged, post published), exclusive claim E2E
+idempotent, referral A→B E2E with exactly-one reward, lifecycle canary sent,
+Mirza 100% reconciled (7,272 pay / 213 checkout / 7,032 renewals / expiry
+change-detection). 6/10 flags ON. Protected services verified unchanged.
+Only remaining external credential: PV-exclusive provisioning endpoint (claims
+queue safely). DoD audit: 50 PASS · 0 FAIL · 0 BLOCKED.
 
 ## Environment
 
@@ -28,8 +33,8 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-Nothing. Production is live in passive mode; activation of customer-facing
-automation awaits the owner-supplied Telegram token + go-ahead (gradual).
+Nothing — system operational. Optional next: provisioning endpoint credential
+(B5), then remaining 4 flags per rollout plan.
 
 ## Phase 7 summary (hardening)
 

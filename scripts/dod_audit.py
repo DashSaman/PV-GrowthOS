@@ -159,8 +159,10 @@ def main() -> int:
     record("CI run observed on GitHub Actions", True,
            "runs #11+ green (lint/tests/migrations/pip-audit/docker)")
     record("dependency scan in CI (pip-audit)", True, "ci.yml security job")
-    record("Telegram real integration", None,
-           "BLOCKERS.md B2/B3 — needs dedicated bot token (never reuse X-UI)")
+    out = ssh("docker exec pv-growth-app python -c \"from pv_growth.core.config import get_settings;"
+              "import httpx;r=httpx.get(f'{get_settings().telegram_api_base}/bot{get_settings().telegram_bot_token}/getMe',timeout=8);"
+              "print(r.json()['result']['username'])\"")
+    record("Telegram real integration (@pvgrowthos_bot live)", "pvgrowthos_bot" in (out or ""), out or "no ssh")
 
     failed = sum(1 for _, s in RESULTS if s.startswith("FAIL"))
     blocked = sum(1 for _, s in RESULTS if s.startswith("BLOCKED"))
