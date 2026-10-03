@@ -93,10 +93,11 @@ def _watermark(session: Session) -> int:
 def _advance_watermark(session: Session, invoice_id: int) -> None:
     row = session.get(AppConfig, WATERMARK_KEY)
     if row is None:
-        session.add(AppConfig(key=WATERMARK_KEY, value={"last_invoice_id": invoice_id}))
-    else:
-        row.value = {"last_invoice_id": invoice_id}
-        row.updated_at = utcnow()
+        row = AppConfig(key=WATERMARK_KEY, value={})
+        session.add(row)
+        session.flush()  # visible to later gets within the same transaction
+    row.value = {"last_invoice_id": invoice_id}
+    row.updated_at = utcnow()
 
 
 def sync_mirza(session: Session, settings: Settings,
