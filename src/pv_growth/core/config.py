@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     provisioning_base_url: str = ""
     provisioning_token: str = ""
     provisioning_timeout_seconds: float = 10.0
+    provisioning_inbound_ids: str = "1"
+    provisioning_sublink: str = ""
+    free_daily_budget: int = 25
 
     # --- scheduler / jobs (enable in production env when Phase 3 lands) ---
     scheduler_enabled: bool = False

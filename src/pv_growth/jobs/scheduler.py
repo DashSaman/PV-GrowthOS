@@ -60,6 +60,11 @@ class Scheduler:
                 mbucket = int(time.time() // 300)
                 jobs.enqueue(session, "mirza.sync", {},
                              idempotency_key=f"mirza_sync:{mbucket}")
+            # free-service expiry sweep (only when provisioning is configured)
+            if self._settings.provisioning_base_url and self._settings.provisioning_token:
+                sbucket = int(time.time() // 300)
+                jobs.enqueue(session, "provisioning.sweep", {},
+                             idempotency_key=f"prov_sweep:{sbucket}")
 
     def start(self) -> None:
         if self._thread is not None:

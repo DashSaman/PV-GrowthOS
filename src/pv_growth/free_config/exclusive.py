@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from pv_growth.core.config import Settings
-from pv_growth.core.errors import NotConfigured, ValidationError
+from pv_growth.core.errors import ValidationError
 from pv_growth.core.flags import FlagService
 from pv_growth.core.logging import get_logger
 from pv_growth.database.models import Campaign, ExclusiveClaim
@@ -53,41 +53,29 @@ class ProvisioningClient(Protocol):
                             validity_hours: int, protocol: str) -> dict: ...
 
 
-class HttpProvisioningClient:
-    """Authorized PV provisioning endpoint (settings-gated)."""
-
-    def __init__(self, settings: Settings) -> None:
-        import httpx
-
-        if not settings.provisioning_base_url or not settings.provisioning_token:
-            raise NotConfigured("provisioning endpoint not configured (PVG_PROVISIONING_*)")
-        self._client = httpx.Client(
-            base_url=settings.provisioning_base_url.rstrip("/"),
-            headers={"Authorization": f"Bearer {settings.provisioning_token}"},
-            timeout=settings.provisioning_timeout_seconds,
-        )
-
-    def create_temp_service(self, *, location: str, traffic_gb: int,
-                            validity_hours: int, protocol: str) -> dict:
-        resp = self._client.post("/api/temp-services", json={
-            "location": location, "traffic_gb": traffic_gb,
-            "validity_hours": validity_hours, "protocol": protocol,
-        })
-        resp.raise_for_status()
-        return resp.json()  # {"service_ref": ..., "config_uri": ...}
+# The old placeholder HttpProvisioningClient was removed: the single
+# provisioning boundary is pv_growth.provisioning.xui.XUIProvisioningAdapter
+# (the same X-UI panel API Mirza itself uses).
 
 
 class FakeProvisioningClient:
-    """Test double; service_ref deterministic per argument tuple."""
+    """Test double; deterministic service identity per idempotency key."""
 
     def __init__(self) -> None:
         self.created: list[dict] = []
 
+    def health(self) -> bool:
+        return True  # guard-compatible
+
     def create_temp_service(self, *, location: str, traffic_gb: int,
-                            validity_hours: int, protocol: str) -> dict:
+                            validity_hours: int, protocol: str,
+                            idempotency_key: str = "") -> dict:
+        from pv_growth.provisioning.xui import client_email_for
         payload = {
-            "service_ref": f"tmp-{location}-{traffic_gb}gb-{validity_hours}h-{protocol}",
+            "service_ref": client_email_for(idempotency_key or f"{location}:{traffic_gb}"),
             "config_uri": f"{protocol}://fake@{location}.pv.test:443",
+            "expiry_ts_ms": 0,
+            "replayed": False,
         }
         self.created.append({**payload, "location": location})
         return payload
@@ -197,18 +185,25 @@ def claim_exclusive(
         ).scalar_one()
         return existing, False
 
-    # provision via authorized interface; failure leaves claim queued, not lost
+    # provision via the single authorized boundary; guard first, fail closed
     try:
+        from pv_growth.provisioning.guard import check as guard_check
+        guard_check(session, settings, provisioning)
         service = provisioning.create_temp_service(
             location=plan.location, traffic_gb=plan.traffic_gb,
             validity_hours=plan.validity_hours, protocol=plan.protocol,
+            idempotency_key=claim_key,
         )
         claim.service_ref = service.get("service_ref")
-        claim.config_payload = {"config_uri": service.get("config_uri")}
+        claim.config_payload = {
+            "config_uri": service.get("config_uri"),
+            "expiry_ts_ms": service.get("expiry_ts_ms"),
+            "replayed": bool(service.get("replayed")),
+        }
         claim.status = "active"
     except Exception as exc:  # noqa: BLE001 — provisioning outage must not kill the claim
         log.error("provisioning failed; claim queued", claim_key=claim_key,
-                  error=str(exc))
+                  error=f"{type(exc).__name__}: {exc}")
         claim.status = "pending_provision"
 
     ingest(session, "FREE_CONFIG_CLAIMED",

@@ -204,6 +204,9 @@ def test_provisioning_failure_leaves_claim_queued(session, settings, exclusive_c
     flags = _flags_on(settings)
 
     class BrokenProvisioning:
+        def health(self):
+            return True  # guard passes; the create call itself fails
+
         def create_temp_service(self, **kwargs):
             raise RuntimeError("endpoint down")
 

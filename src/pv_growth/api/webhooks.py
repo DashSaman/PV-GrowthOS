@@ -155,16 +155,10 @@ def _handle_callback(client, callback: TgCallback) -> None:
                                      telegram_chat_id=callback.from_.id)
         if data.startswith("claim:"):
             campaign_code = data.split(":", 1)[1]
-            from pv_growth.free_config.exclusive import (
-                HttpProvisioningClient,
-                claim_exclusive,
-            )
-            try:
-                provisioning = HttpProvisioningClient(settings)
-            except NotConfigured:
-                # provisioning endpoint not provided yet (BLOCKERS.md) — the
-                # claim still records and stays queued, never silently fakes
-                provisioning = None
+            from pv_growth.free_config.exclusive import claim_exclusive
+            from pv_growth.provisioning import xui as _xui
+            # single provisioning boundary: the existing X-UI panel API
+            provisioning = _xui.get_provisioning(settings)
             try:
                 if provisioning is None:
                     class _QueuedProvisioning:
