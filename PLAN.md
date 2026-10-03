@@ -13,7 +13,7 @@ phase starts. New ideas go to `BACKLOG.md` and never interrupt the active phase.
 | 2 | Free Acquisition Engine | ✅ COMPLETE |
 | 3 | Lifecycle Sales Automation | ✅ COMPLETE |
 | 4 | Referral / Viral / Partner | ✅ COMPLETE |
-| 5 | Content / Feedback / Competitor Intel | ⬜ PENDING |
+| 5 | Content / Feedback / Competitor Intel | ✅ COMPLETE |
 | 6 | Analytics / Admin / Experiments | ⬜ PENDING |
 | 7 | Production Hardening & Rollout | ⬜ PENDING |
 
@@ -99,10 +99,10 @@ Acceptance (verified — tests/test_referrals.py):
 Official/free channel scheduling, content state machine (draft→validated→scheduled→published/failed),
 commercial-fact validation, feedback/rating with testimonial consent, targeted competitor watcher.
 
-Acceptance:
-- [ ] commercial facts cannot be fabricated
-- [ ] scheduler idempotent
-- [ ] competitor failures never affect VPN/Mirza
+Acceptance (verified — tests/test_phase5.py):
+- [x] commercial facts cannot be fabricated (contradiction vs campaign, hype, fake counts — all rejected)
+- [x] scheduler idempotent (double publish run = single post)
+- [x] competitor failures never affect VPN/Mirza (failures isolated and swallowed)
 
 ## Phase 6 — Analytics / Admin / Experiments
 

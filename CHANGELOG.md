@@ -2,6 +2,15 @@
 
 All notable changes to PV GrowthOS. Format loosely follows Keep a Changelog.
 
+## [0.6.0] — 2026-10-03 — Phase 5: Content / Feedback / Competitor Intel
+
+### Added
+- Migration 0006: content_items, feedback_ratings, competitor_sources, competitor_changes (unique dedupe)
+- Content engine: state machine + commercial-fact validation (fabrication/hype/fake-counts rejected); idempotent channel publishing
+- Feedback engine: windowed idempotent ratings, consent-gated testimonials, recovery routing
+- Competitor watcher: configured regex extraction, structured diff records, fully isolated failures
+- 10 new tests (66 total passing)
+
 ## [0.5.0] — 2026-10-03 — Phase 4: Referral / Viral / Partner
 
 ### Added

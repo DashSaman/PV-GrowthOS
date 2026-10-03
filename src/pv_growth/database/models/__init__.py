@@ -5,6 +5,12 @@ Alembic's env.py imports this package; new domain models must be added here.
 
 from pv_growth.database.models._flag import FeatureFlag  # noqa: F401
 from pv_growth.database.models.campaigns import Campaign  # noqa: F401
+from pv_growth.database.models.engagement import (  # noqa: F401
+    CompetitorChange,
+    CompetitorSource,
+    ContentItem,
+    FeedbackRating,
+)
 from pv_growth.database.models.events import EVENT_TYPES, Event  # noqa: F401
 from pv_growth.database.models.free_config import (  # noqa: F401
     ConfigSource,

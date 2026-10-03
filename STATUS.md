@@ -4,7 +4,7 @@ Last updated: 2026-10-03
 
 ## Current Phase
 
-Phase 0–4 — COMPLETE. Phase 5 is next.
+Phase 0–5 — COMPLETE. Phase 6 is next.
 
 ## Environment
 
@@ -26,7 +26,17 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-- Phase 5 (Content / Feedback / Competitor intelligence).
+- Phase 6 (Analytics / Admin / Experiments).
+
+## Phase 5 summary
+
+- Content engine: draft→validated→scheduled→published/failed state machine;
+  commercial-fact validation against campaign records (contradictions, hype,
+  fake user counts all rejected); idempotent publishing
+- Feedback: 1–5 ratings idempotent per window; testimonial ONLY with stored
+  consent; low ratings route to recovery workflow
+- Competitor watch: admin-configured regex fields, structured change records
+  (field/old/new/url/observed_at), deduped; failures fully isolated
 
 ## Phase 4 summary
 
@@ -81,6 +91,6 @@ See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
 ## Test Results
 
-- Phase 0: 6 · P1: +13 · P2: +15 · P3: +13 · P4: +9 → 56 passed total (SQLite locally;
+- Phase 0–5 cumulative: 66 passed total (SQLite locally;
   CI additionally runs the same suite against PostgreSQL 14 + migration up/down).
 - `ruff check src tests`: clean.
