@@ -6,9 +6,13 @@ via dedupe_key — scheduler double runs cannot double-post."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from datetime import timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from pv_growth.content.publishers import Publisher
 from pv_growth.core.config import Settings
 from pv_growth.core.errors import ValidationError
 from pv_growth.core.flags import FlagService
@@ -87,7 +91,7 @@ def schedule(session: Session, item: ContentItem, when) -> ContentItem:
 
 
 def publish_due(session: Session, settings: Settings, flags: FlagService,
-                telegram, *, now=None) -> int:
+                publishers: Mapping[str, Publisher], *, now=None) -> int:
     """Publish all due scheduled items (idempotent). Returns published count."""
     if not flags.enabled("CONTENT_ENGINE_ENABLED"):
         return 0
@@ -106,20 +110,30 @@ def publish_due(session: Session, settings: Settings, flags: FlagService,
             item.status = "failed"
             log.warning("content render failed", item_id=item.id, error=str(exc))
             continue
-        channel = (settings.official_channel_id if item.channel == "official"
-                   else settings.free_channel_id)
-        if not channel:
+        publisher = publishers.get(item.channel)
+        if publisher is None:
             item.status = "failed"
+            log.warning("content publisher unavailable", item_id=item.id, channel=item.channel)
             continue
         try:
-            result = telegram.send_channel_post(channel, body)
+            result = publisher.publish(item, body)
         except Exception as exc:  # noqa: BLE001 — publish failure is per-item
-            item.status = "failed"
-            log.error("content publish failed", item_id=item.id, error=str(exc))
+            if bool(getattr(exc, "retryable", False)):
+                item.scheduled_at = now + timedelta(minutes=5)
+                item.updated_at = utcnow()
+                log.warning(
+                    "content publish retry scheduled",
+                    item_id=item.id,
+                    retry_at=item.scheduled_at.isoformat(),
+                    error=type(exc).__name__,
+                )
+            else:
+                item.status = "failed"
+                log.error("content publish failed", item_id=item.id, error=str(exc))
             continue
         item.status = "published"
         item.published_at = utcnow()
-        item.message_id = result.get("message_id")
+        item.message_id = int(result.remote_id) if result.remote_id.isdigit() else None
         ingest(session, "MESSAGE_SENT", user_id=None,
                idempotency_key=f"content:{item.id}",
                metadata={"kind": "channel_post", "content_id": item.id,

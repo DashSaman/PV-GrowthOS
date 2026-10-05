@@ -3,18 +3,28 @@ rules, sources, flags, partners, experiments, content."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from dataclasses import asdict
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from pv_growth.api.deps import require_admin
+from pv_growth.content import service as content_service
+from pv_growth.content.optimizer import rank_candidates
+from pv_growth.content.planner import plan_cycle
 from pv_growth.core.config import get_settings
+from pv_growth.core.errors import ValidationError
 from pv_growth.core.flags import FLAG_KEYS, FlagService
 from pv_growth.database.base import session_scope
 from pv_growth.database.models import (
     Campaign,
     CompetitorSource,
     ConfigSource,
+    ContentInsight,
+    ContentItem,
+    ContentPublication,
     Event,
     Experiment,
     LifecycleRule,
@@ -225,6 +235,192 @@ def sources_create(payload: ConfigSourceIn) -> dict:
     with session_scope(get_settings()) as session:
         session.add(ConfigSource(kind=payload.kind, name=payload.name, url=payload.url))
         return {"name": payload.name}
+
+
+# ---------- content ----------
+
+class ContentIn(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    kind: str = Field(default="education", min_length=1, max_length=32)
+    channel: str = Field(default="free", min_length=1, max_length=32)
+    format: str = Field(default="text", min_length=1, max_length=16)
+    body: str = Field(min_length=1)
+    facts: dict = Field(default_factory=dict)
+    creative: dict = Field(default_factory=dict)
+    dedupe_key: str | None = Field(default=None, max_length=128)
+    campaign_code: str | None = Field(default=None, max_length=64)
+
+
+class ContentScheduleIn(BaseModel):
+    when: datetime
+
+
+def _content_out(item: ContentItem) -> dict:
+    return {
+        "id": item.id,
+        "title": item.title,
+        "kind": item.kind,
+        "channel": item.channel,
+        "format": item.format,
+        "body": item.body,
+        "facts": item.facts,
+        "creative": item.creative,
+        "status": item.status,
+        "dedupe_key": item.dedupe_key,
+        "campaign_code": item.campaign_code,
+        "scheduled_at": item.scheduled_at.isoformat() if item.scheduled_at else None,
+        "published_at": item.published_at.isoformat() if item.published_at else None,
+        "message_id": item.message_id,
+    }
+
+
+def _require_content(session, item_id: int) -> ContentItem:
+    item = session.get(ContentItem, item_id)
+    if item is None:
+        raise HTTPException(404, "content item not found")
+    return item
+
+
+@router.get("/content")
+def content_list() -> list[dict]:
+    with session_scope(get_settings()) as session:
+        rows = session.execute(select(ContentItem).order_by(ContentItem.id.desc()).limit(200)).scalars()
+        return [_content_out(item) for item in rows]
+
+
+@router.post("/content", status_code=201)
+def content_create(payload: ContentIn) -> dict:
+    with session_scope(get_settings()) as session:
+        item = ContentItem(**payload.model_dump())
+        session.add(item)
+        session.flush()
+        return _content_out(item)
+
+
+@router.post("/content/{item_id}/validate")
+def content_validate(item_id: int) -> dict:
+    with session_scope(get_settings()) as session:
+        item = _require_content(session, item_id)
+        try:
+            content_service.transition(session, item, "validated")
+        except ValidationError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return _content_out(item)
+
+
+@router.post("/content/{item_id}/schedule")
+def content_schedule(item_id: int, payload: ContentScheduleIn) -> dict:
+    with session_scope(get_settings()) as session:
+        item = _require_content(session, item_id)
+        try:
+            content_service.schedule(session, item, payload.when)
+        except ValidationError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return _content_out(item)
+
+
+@router.post("/content/{item_id}/retry")
+def content_retry(item_id: int) -> dict:
+    with session_scope(get_settings()) as session:
+        item = _require_content(session, item_id)
+        try:
+            content_service.transition(session, item, "draft")
+        except ValidationError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return _content_out(item)
+
+
+# ---------- Instagram growth loop ----------
+
+@router.get("/instagram/readiness")
+def instagram_readiness() -> dict:
+    settings = get_settings()
+    missing = []
+    required = {
+        "instagram_account_id": settings.instagram_account_id,
+        "instagram_access_token": settings.instagram_access_token,
+        "instagram_api_version": settings.instagram_api_version,
+        "media_public_base_url": settings.media_public_base_url,
+        "media_store_root": settings.media_store_root,
+    }
+    for name, value in required.items():
+        if not value:
+            missing.append(name)
+    flags = FlagService(settings).snapshot()
+    api_configured = all(required[name] for name in (
+        "instagram_account_id", "instagram_access_token", "instagram_api_version"
+    ))
+    media_configured = bool(
+        required["media_public_base_url"] and required["media_store_root"]
+    )
+    return {
+        "api_credentials_configured": api_configured,
+        "public_media_store_configured": media_configured,
+        "content_engine_enabled": flags["CONTENT_ENGINE_ENABLED"],
+        "instagram_automation_enabled": flags["INSTAGRAM_AUTOMATION_ENABLED"],
+        "ready_for_canary": api_configured and media_configured,
+        "missing": missing,
+    }
+
+
+@router.get("/instagram/publications")
+def instagram_publications() -> list[dict]:
+    with session_scope(get_settings()) as session:
+        rows = session.execute(
+            select(ContentPublication)
+            .where(ContentPublication.provider == "instagram")
+            .order_by(ContentPublication.id.desc())
+            .limit(200)
+        ).scalars().all()
+        return [{
+            "id": row.id,
+            "content_id": row.content_id,
+            "status": row.status,
+            "container_id": row.container_id,
+            "media_id": row.media_id,
+            "error_category": row.error_category,
+            "attempt": row.attempt,
+            "published_at": row.published_at.isoformat() if row.published_at else None,
+        } for row in rows]
+
+
+@router.get("/instagram/insights")
+def instagram_insights() -> list[dict]:
+    with session_scope(get_settings()) as session:
+        rows = session.execute(
+            select(ContentInsight).order_by(ContentInsight.id.desc()).limit(500)
+        ).scalars().all()
+        return [{
+            "id": row.id,
+            "publication_id": row.publication_id,
+            "captured_at": row.captured_at.isoformat(),
+            "metrics": row.metrics,
+        } for row in rows]
+
+
+@router.post("/instagram/plan/preview")
+def instagram_plan_preview() -> list[dict]:
+    """Run real fact validation/planning inside a rolled-back savepoint."""
+    settings = get_settings()
+    with session_scope(settings) as session:
+        savepoint = session.begin_nested()
+        try:
+            planned = plan_cycle(session, settings)
+            preview = [_content_out(item) for item in planned]
+        finally:
+            savepoint.rollback()
+        return preview
+
+
+@router.get("/instagram/rankings")
+def instagram_rankings() -> list[dict]:
+    with session_scope(get_settings()) as session:
+        content_ids = list(session.execute(
+            select(ContentItem.id).where(
+                ContentItem.channel == "instagram", ContentItem.status == "published"
+            )
+        ).scalars().all())
+        return [asdict(score) for score in rank_candidates(session, content_ids)]
 
 
 # ---------- partners / experiments / competitor sources ----------

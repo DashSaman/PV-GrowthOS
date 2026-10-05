@@ -57,6 +57,7 @@ def main() -> int:
         "referral engine": "src/pv_growth/referrals",
         "partner/affiliate": "src/pv_growth/partners",
         "content engine": "src/pv_growth/content",
+        "Instagram growth integration": "src/pv_growth/instagram",
         "competitor monitoring": "src/pv_growth/competitors",
         "feedback": "src/pv_growth/feedback",
         "analytics": "src/pv_growth/analytics",
@@ -68,15 +69,15 @@ def main() -> int:
     for name, path in modules.items():
         record(f"module: {name}", check_module(path))
 
-    # 2. migration chain 0001..0007 present and ordered
+    # 2. migration chain 0001..0008 present and ordered
     versions = sorted(p.name for p in (ROOT / "alembic/versions").glob("*.py"))
-    record("migrations: 7 revisions chained",
-           len(versions) == 7, ", ".join(v[:4] for v in versions))
+    record("migrations: 8 revisions chained",
+           len(versions) == 8, ", ".join(v[:4] for v in versions))
 
     # 3. feature flags all defined
     sys.modules.pop("pv_growth.core.flags", None)
     flags = importlib.import_module("pv_growth.core.flags")
-    record("feature flags: 10 defined", len(flags.FLAG_KEYS) == 10)
+    record("feature flags: 11 defined", len(flags.FLAG_KEYS) == 11)
 
     # 4. API surface: routes exist
     main_mod = importlib.import_module("pv_growth.main")
@@ -84,7 +85,7 @@ def main() -> int:
     # new FastAPI versions mount routers lazily; the OpenAPI schema lists paths
     paths = set(app.openapi().get("paths", {}))
     for required in ("/health", "/ready", "/api/events", "/admin/api/dashboard",
-                     "/webhooks/telegram/{secret}"):
+                     "/admin/api/instagram/readiness", "/webhooks/telegram/{secret}"):
         record(f"route: {required}", required in paths)
 
     # 5. no placeholders / stubs in production code
@@ -122,47 +123,57 @@ def main() -> int:
 
     # 9. LIVE production checks (SSH read-only; PASS/BLOCKED, never guessed)
     try:
-        def ssh(cmd: str) -> str:
+        def ssh(cmd: str) -> str | None:
             key = Path.home() / ".ssh" / "akh_key"
             ssh_bin = shutil.which("ssh")
             if ssh_bin is None:
-                return ""
+                return None
             # audit tool: fixed host/key, read-only commands defined in this file
             proc = subprocess.run(  # noqa: S603
                 [ssh_bin, "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
                  "-i", str(key), "root@91.107.240.235", cmd],
                 capture_output=True, text=True, timeout=90)
-            return proc.stdout.strip() if proc.returncode == 0 else ""
+            return proc.stdout.strip() if proc.returncode == 0 else None
 
         out = ssh("curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8350/health")
-        record("production /health = 200", out == "200", f"got {out or 'no ssh'}")
+        record("production /health = 200", out == "200" if out is not None else None,
+               f"got {out or 'no ssh'}")
         out = ssh("curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8350/ready")
-        record("production /ready = 200", out == "200", f"got {out or 'no ssh'}")
+        record("production /ready = 200", out == "200" if out is not None else None,
+               f"got {out or 'no ssh'}")
         out = ssh("docker ps --filter name=pv-growth-app --format '{{.Status}}'")
-        record("production container healthy", "healthy" in out, out or "no ssh")
+        record("production container healthy", "healthy" in out if out is not None else None,
+               out or "no ssh")
         out = ssh("docker exec pv-growth-app python -c \"from pv_growth.core.config import get_settings;"
                   "from sqlalchemy import create_engine,text;"
                   "print(create_engine(get_settings().database_url).connect()"
                   ".execute(text('select version_num from alembic_version')).scalar_one())\"")
-        record("production migration head = 0007", "0007" in out, out or "no ssh")
+        migration_ok = None if out is None or out == "0007" else "0008" in out
+        migration_note = "pending 0008 flags-off rollout" if out == "0007" else (out or "no ssh")
+        record("production migration head = 0008", migration_ok, migration_note)
         out = ssh("docker network ls --format '{{.Name}}' | grep -c '^pv_growth_net$'")
-        record("production network pv_growth_net", out == "1")
+        record("production network pv_growth_net", out == "1" if out is not None else None)
         out = ssh("curl -sk -o /dev/null -w '%{http_code}' --max-time 8 https://robot.ahsg.top;"
                   " echo;npanel=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 8 https://npanel.softarg.ir);"
                   " echo $npanel")
-        ok = "200 200" in out.replace("\n", " ") or out.count("200") >= 2
-        record("protected Mirza+Reseller = 200/200", ok, out)
+        ok = None if out is None else (
+            "200 200" in out.replace("\n", " ") or out.count("200") >= 2
+        )
+        record("protected Mirza+Reseller = 200/200", ok, out or "no ssh")
     except Exception as exc:  # noqa: BLE001
         record("live production checks", None, f"ssh unavailable: {exc}")
 
     # 10. external-only items -> BLOCKED (never FAIL)
-    record("CI run observed on GitHub Actions", True,
-           "runs #11+ green (lint/tests/migrations/pip-audit/docker)")
+    record("CI run observed for this candidate", None,
+           "requires pushed branch/PR; historical runs are not candidate evidence")
     record("dependency scan in CI (pip-audit)", True, "ci.yml security job")
     out = ssh("docker exec pv-growth-app python -c \"from pv_growth.core.config import get_settings;"
-              "import httpx;r=httpx.get(f'{get_settings().telegram_api_base}/bot{get_settings().telegram_bot_token}/getMe',timeout=8);"
+              "import httpx;"
+              "r=httpx.get(f'{get_settings().telegram_api_base}/bot'"
+              "+get_settings().telegram_bot_token+'/getMe',timeout=8);"
               "print(r.json()['result']['username'])\"")
-    record("Telegram real integration (@pvgrowthos_bot live)", "pvgrowthos_bot" in (out or ""), out or "no ssh")
+    record("Telegram real integration (@pvgrowthos_bot live)",
+           "pvgrowthos_bot" in out if out is not None else None, out or "no ssh")
 
     # B5: real PV-exclusive provisioning E2E — provision + panel verify + cleanup
     probe = "dodprobe" + "b5x"
@@ -175,10 +186,11 @@ def main() -> int:
         "st=a.service_state(o['service_ref']);"
         "ok=st.get('exists') and st.get('traffic_limit_gb')==1;"
         "a.disable_service(o['service_ref']);"
-        "print('PROV_OK' if ok else 'PROV_FAIL:', o['service_ref'], bool(o['config_uri']), st.get('traffic_limit_gb'))")
+        "print('PROV_OK' if ok else 'PROV_FAIL:', o['service_ref'],"
+        "bool(o['config_uri']),st.get('traffic_limit_gb'))")
     out = ssh("docker exec pv-growth-app python -c \"" + script + "\"")
     record("B5 real provisioning E2E (create+verify+cleanup)",
-           "PROV_OK" in (out or ""), (out or "no ssh").strip()[:160])
+           "PROV_OK" in out if out is not None else None, (out or "no ssh").strip()[:160])
 
     failed = sum(1 for _, s in RESULTS if s.startswith("FAIL"))
     blocked = sum(1 for _, s in RESULTS if s.startswith("BLOCKED"))

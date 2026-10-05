@@ -8,7 +8,9 @@ from pv_growth.database.models.campaigns import Campaign  # noqa: F401
 from pv_growth.database.models.engagement import (  # noqa: F401
     CompetitorChange,
     CompetitorSource,
+    ContentInsight,
     ContentItem,
+    ContentPublication,
     FeedbackRating,
 )
 from pv_growth.database.models.events import EVENT_TYPES, Event  # noqa: F401

@@ -36,6 +36,7 @@ def handler(job_type: str):
 def register_builtin_handlers() -> None:
     """Import handler modules so their @handler decorators register.
     Without this the registry is empty at runtime and every job errors."""
+    import pv_growth.content.jobs  # noqa: F401
     import pv_growth.lifecycle.service  # noqa: F401
     import pv_growth.mirza_adapter.sync_job  # noqa: F401
     import pv_growth.provisioning.lifecycle_job  # noqa: F401
@@ -89,4 +90,3 @@ def run_forever() -> int:
 
 
 from pv_growth.jobs.scheduler import Scheduler  # noqa: E402,F401 — re-export
-

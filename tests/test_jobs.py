@@ -125,3 +125,23 @@ def test_builtin_handlers_register_and_scan_job_completes(settings, session):
     from pv_growth.database.models import Job
     done = session.query(Job).filter_by(idempotency_key="scan:1").one()
     assert done.status == "done"
+
+
+def test_content_publish_job_is_registered():
+    from pv_growth.jobs import runner
+
+    runner.register_builtin_handlers()
+
+    assert "content.publish_due" in runner._HANDLERS
+
+
+def test_content_scheduler_enqueue_is_deduplicated(settings, session):
+    from pv_growth.jobs.scheduler import Scheduler
+
+    scheduler = Scheduler(settings)
+    scheduler._enqueue_periodic()
+    scheduler._enqueue_periodic()
+
+    rows = session.query(Job).filter_by(job_type="content.publish_due").all()
+    assert len(rows) == 1
+    assert rows[0].idempotency_key.startswith("content_publish:")
