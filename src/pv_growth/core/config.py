@@ -36,6 +36,19 @@ class Settings(BaseSettings):
     free_channel_id: str = ""
     official_channel_id: str = ""
 
+    # --- Instagram (supported Meta API; Professional account required) ---
+    instagram_account_id: str = ""
+    instagram_access_token: str = ""
+    instagram_api_base: str = "https://graph.facebook.com"
+    instagram_api_version: str = ""  # explicit at enable time; never guess a current version
+    instagram_timeout_seconds: float = 15.0
+
+    # --- generated media / public asset store ---
+    media_public_base_url: str = ""
+    media_store_root: str = ""
+    media_store_token: str = ""
+    media_retention_hours: int = 48
+
     # --- mirza (source of truth; read-only adapter) ---
     mirza_base_url: str = ""
     mirza_token: str = ""
@@ -78,6 +91,7 @@ class Settings(BaseSettings):
     flag_referral_enabled: bool = False
     flag_partner_enabled: bool = False
     flag_content_engine_enabled: bool = False
+    flag_instagram_automation_enabled: bool = False
     flag_competitor_watch_enabled: bool = False
     flag_experiments_enabled: bool = False
 

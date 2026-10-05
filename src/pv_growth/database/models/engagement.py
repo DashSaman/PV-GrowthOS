@@ -24,8 +24,10 @@ class ContentItem(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     kind: Mapped[str] = mapped_column(String(32), nullable=False, default="education")
     channel: Mapped[str] = mapped_column(String(32), nullable=False, default="free")
+    format: Mapped[str] = mapped_column(String(16), nullable=False, default="text")
     body: Mapped[str] = mapped_column(Text, nullable=False)
     facts: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
+    creative: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft",
                                         index=True)
     dedupe_key: Mapped[str | None] = mapped_column(String(128))
@@ -36,6 +38,48 @@ class ContentItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow,
                                                  onupdate=utcnow)
+
+
+class ContentPublication(Base):
+    """Remote publication state used to reconcile retries safely."""
+
+    __tablename__ = "content_publications"
+    __table_args__ = (
+        UniqueConstraint("provider", "content_id", name="uq_content_publication_provider_content"),
+        UniqueConstraint("provider", "container_id", name="uq_content_publication_provider_container"),
+        UniqueConstraint("provider", "media_id", name="uq_content_publication_provider_media"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    content_id: Mapped[int] = mapped_column(ForeignKey("content_items.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", index=True)
+    container_id: Mapped[str | None] = mapped_column(String(128))
+    media_id: Mapped[str | None] = mapped_column(String(128))
+    error_category: Mapped[str | None] = mapped_column(String(64))
+    error_detail: Mapped[str | None] = mapped_column(Text)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(), nullable=False, default=utcnow, onupdate=utcnow
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime())
+
+
+class ContentInsight(Base):
+    """Normalized snapshot of metrics for one remote publication."""
+
+    __tablename__ = "content_insights"
+    __table_args__ = (
+        UniqueConstraint("publication_id", "captured_at", name="uq_content_insight_snapshot"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    publication_id: Mapped[int] = mapped_column(
+        ForeignKey("content_publications.id"), index=True, nullable=False
+    )
+    captured_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
+    metrics: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
 
 
 class FeedbackRating(Base):

@@ -70,23 +70,107 @@ def test_content_state_machine(session):
         content.transition(session, fresh, "published")
 
 
+def _telegram_publisher(settings):
+    from pv_growth.content.publishers import TelegramPublisher
+
+    configured = settings.model_copy(update={"free_channel_id": "@freech",
+                                             "official_channel_id": "@official"})
+    transport = FakeTelegramTransport()
+    return TelegramPublisher(TelegramClient(transport, configured), configured), transport
+
+
+def test_telegram_publisher_returns_remote_id(settings, session):
+    from pv_growth.content.publishers import PublishResult
+
+    publisher, transport = _telegram_publisher(settings)
+    item = _content(session, channel="free", body="hello")
+
+    result = publisher.publish(item, "rendered hello")
+
+    assert result == PublishResult(remote_id="1", metadata={"channel": "@freech"})
+    assert transport.sent_texts() == ["rendered hello"]
+
+
 def test_publish_due_idempotent(settings, session, monkeypatch):
     flags = FlagService(settings.model_copy(update={
         "flag_content_engine_enabled": True}))
-    settings_kw = settings.model_copy(update={"free_channel_id": "@freech",
-                                              "official_channel_id": "@official"})
-    tg = TelegramClient(FakeTelegramTransport(), settings)
+    publisher, transport = _telegram_publisher(settings)
     item = _content(session, facts={"price": 99001, "traffic_gb": 5})  # unique marker
     content.transition(session, item, "validated")
     content.schedule(session, item, utcnow() - timedelta(minutes=1))
 
-    content.publish_due(session, settings_kw, flags, tg)
-    content.publish_due(session, settings_kw, flags, tg)  # double run
+    content.publish_due(session, settings, flags, {"free": publisher})
+    content.publish_due(session, settings, flags, {"free": publisher})  # double run
     # this item published exactly once and never twice (idempotent scheduler)
     assert item.status == "published" and item.message_id is not None
-    my_sends = [p for m, p in tg._t.calls
+    my_sends = [p for m, p in transport.calls
                 if m == "sendMessage" and "99001" in p.get("text", "")]
     assert len(my_sends) == 1
+
+
+def test_publish_due_unknown_channel_does_not_block_later_item(settings, session):
+    flags = FlagService(settings.model_copy(update={"flag_content_engine_enabled": True}))
+    publisher, transport = _telegram_publisher(settings)
+    unknown = _content(session, channel="unknown", facts={"price": 12001, "traffic_gb": 5})
+    valid = _content(session, channel="free", facts={"price": 12002, "traffic_gb": 5})
+    for item in (unknown, valid):
+        content.transition(session, item, "validated")
+        content.schedule(session, item, utcnow() - timedelta(minutes=1))
+
+    published = content.publish_due(session, settings, flags, {"free": publisher})
+
+    assert published == 1
+    assert unknown.status == "failed"
+    assert valid.status == "published"
+    assert len(transport.sent_texts()) == 1
+
+
+class _ExplodingPublisher:
+    def publish(self, item, rendered_body):
+        raise RuntimeError("simulated publisher outage")
+
+
+class _RetryablePublisher:
+    class RetryableError(RuntimeError):
+        retryable = True
+
+    def publish(self, item, rendered_body):
+        raise self.RetryableError("temporary upstream outage")
+
+
+def test_publish_due_publisher_error_isolated_per_item(settings, session):
+    flags = FlagService(settings.model_copy(update={"flag_content_engine_enabled": True}))
+    publisher, transport = _telegram_publisher(settings)
+    broken = _content(session, channel="broken", facts={"price": 13001, "traffic_gb": 5})
+    valid = _content(session, channel="free", facts={"price": 13002, "traffic_gb": 5})
+    for item in (broken, valid):
+        content.transition(session, item, "validated")
+        content.schedule(session, item, utcnow() - timedelta(minutes=1))
+
+    published = content.publish_due(
+        session, settings, flags, {"broken": _ExplodingPublisher(), "free": publisher}
+    )
+
+    assert published == 1
+    assert broken.status == "failed"
+    assert valid.status == "published"
+    assert len(transport.sent_texts()) == 1
+
+
+def test_publish_due_reschedules_retryable_failure_without_human(settings, session):
+    flags = FlagService(settings.model_copy(update={"flag_content_engine_enabled": True}))
+    item = _content(session, channel="retry", facts={"price": 13003, "traffic_gb": 5})
+    content.transition(session, item, "validated")
+    now = utcnow()
+    content.schedule(session, item, now - timedelta(minutes=1))
+
+    published = content.publish_due(
+        session, settings, flags, {"retry": _RetryablePublisher()}, now=now
+    )
+
+    assert published == 0
+    assert item.status == "scheduled"
+    assert item.scheduled_at > now
 
 
 # ---------- feedback ----------

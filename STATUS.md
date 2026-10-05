@@ -1,10 +1,16 @@
 # STATUS.md
 
-Last updated: 2026-10-03
+Last updated: 2026-10-05
 
 ## Current Phase
 
-**FULLY OPERATIONAL — B5 CLOSED (2026-10-04, v1.0.2)**: dedicated bot @pvgrowthos_bot
+**CORE GROWTHOS OPERATIONAL; INSTAGRAM GROWTH CANDIDATE READY, CANARY BLOCKED ON
+EXTERNAL META/MEDIA + OFF-SERVER IMAGE DISTRIBUTION (2026-10-05).** The existing
+production remains on image `pv-growth-app:3de525a`, Alembic `0007`, healthy,
+with `CONTENT_ENGINE_ENABLED=false` and Instagram automation absent/default-off.
+No Instagram code has been enabled on production yet.
+
+The existing core remains operational: dedicated bot @pvgrowthos_bot
 LIVE (long-polling), channel t.me/pvnetwork_freeconfig LIVE, free-config
 pipeline LIVE (1,846 real configs staged, post published), exclusive claim E2E
 idempotent, referral A→B E2E with exactly-one reward, lifecycle canary sent,
@@ -15,15 +21,41 @@ B5 closed: real PV-exclusive provisioning reuses Mirza's own X-UI panel API
 expiry sweep with panel evidence). Production E2E verified end-to-end:
 claim → provision → panel-visible 1GB/24h service → subscription config URI →
 duplicate idempotent → cleanup. DoD audit: 51 PASS · 0 FAIL · 0 BLOCKED
-(including a live create+verify+cleanup probe on every audit run).
+(including the historical live create+verify+cleanup probe).
+
+### Instagram/content growth candidate (2026-10-05)
+
+- Content Engine publisher boundary, durable `content.publish_due`, scheduler,
+  authenticated admin create/validate/schedule/retry are wired.
+- Alembic `0008` adds content format/creative metadata plus reconciled Instagram
+  publication IDs and insight snapshots; PostgreSQL round trip
+  `0007 → 0008 → 0007 → 0008` passed on a disposable production-host database.
+- Supported Graph API boundary covers container create/status/publish, resumable
+  video upload and owned-media insights with explicit timeout/retry classification;
+  API version is configuration, never guessed.
+- Remote publication state is fail-closed: container IDs persist before later
+  mutations and ambiguous publish results are reconciled/refused, never blindly
+  replayed.
+- Deterministic branded JPEG (1:1) and MP4 (9:16) renderer, bounded retention,
+  and explicit public `MediaStore` are implemented. Planner media is materialized
+  before remote container creation when a store is configured.
+- Autonomous planner copies commercial facts only from active Campaign records,
+  schedules a reel/post/story mix with deterministic dedupe, and uses attributable
+  `social_<campaign>` bot CTAs. Trend-provider failure falls back to evergreen.
+- Optimizer normalizes owned insights and ranks purchase > trial > bot-start >
+  engagement/reach; weak samples cannot be declared winners.
+- Admin exposes secret-free readiness/publication/insight/ranking views and a
+  rollback-only dry-run preview. Meta/store tokens are never returned.
+- Local suite/static gates pass on the feature candidate. Live Instagram canary
+  remains correctly BLOCKED by B7/B8.
 
 ## Environment
 
-Development is happening on a workstation (Windows/Git Bash, Python 3.12).
-The production Ubuntu 22.04 server is **not reachable** from this machine —
-all server-side actions (preflight run, sentinelx removal, deployment) are
-recorded as blockers with ready-to-run scripts. All code, tests, CI and docs
-are being built here and pushed to GitHub.
+Development uses Python 3.12 in an isolated worktree. The Ubuntu 22.04
+production server is reachable through the authorized Remote Desktop Commander
+device; read-only 2026-10-05 predeploy baselines and the disposable PostgreSQL
+migration round-trip were executed there. Production replacement is intentionally
+not attempted until an immutable image is built off-server and transferable.
 
 ## Done
 
@@ -37,8 +69,10 @@ are being built here and pushed to GitHub.
 
 ## In Progress
 
-Nothing — system operational. Optional next: provisioning endpoint credential
-(B5), then remaining 4 flags per rollout plan.
+Instagram rollout: publish feature branch/CI candidate, obtain a transferable
+off-server image (B6), then flags-off deploy to `0008`. B7/B8 are the one-time
+gates for dry run and a single real Meta canary; continuous formats stay disabled
+until their individual canaries pass.
 
 ## Phase 7 summary (hardening)
 
@@ -128,7 +162,8 @@ See `BLOCKERS.md` — all are external/credential-only; none freeze development.
 
 ## Test Results
 
-- Production deployed 2026-10-03: pv-growth-app @ 127.0.0.1:8350, alembic 0007,
+- Current production baseline re-verified 2026-10-05: pv-growth-app @ 127.0.0.1:8350,
+  image `pv-growth-app:3de525a`, healthy, alembic 0007,
   Mirza read-only sync LIVE (7,491 invoices scanned, real payment events),
   79 tests green, CI green. Deploy evidence: docs/deployment-audits/
 - DoD audit final: see scripts/dod_audit.py output in the completion report

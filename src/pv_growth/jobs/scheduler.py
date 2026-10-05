@@ -55,6 +55,15 @@ class Scheduler:
             bucket = int(time.time() // self._settings.scheduler_interval_seconds)
             jobs.enqueue(session, "lifecycle.scan", {},
                          idempotency_key=f"lifecycle_scan:{bucket}")
+            jobs.enqueue(session, "content.publish_due", {},
+                         idempotency_key=f"content_publish:{bucket}")
+            # Planning hourly is bounded; day/slot content dedupe is a second guard.
+            plan_bucket = int(time.time() // 3600)
+            jobs.enqueue(session, "content.plan", {},
+                         idempotency_key=f"content_plan:{plan_bucket}")
+            insights_bucket = int(time.time() // 900)
+            jobs.enqueue(session, "instagram.insights_sync", {},
+                         idempotency_key=f"instagram_insights:{insights_bucket}")
             # Mirza read-only sync every ~5 minutes (only when configured)
             if self._settings.mirza_mysql_host:
                 mbucket = int(time.time() // 300)

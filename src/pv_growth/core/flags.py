@@ -1,9 +1,8 @@
 """Feature flags: env-configured defaults, DB overrides, short-TTL cache.
 
 Every customer-facing or dangerous automation starts disabled. An env
-``PVG_FLAG_X_ENABLED=1`` forces a flag on regardless of the DB (used for
-tests and emergency enabling); the DB override (set via admin) wins over the
-built-in default otherwise.
+``PVG_FLAG_X_ENABLED=1`` supplies the environment default. A DB override set
+through admin wins in either direction so the DB can always act as a kill switch.
 """
 
 from __future__ import annotations
@@ -24,6 +23,7 @@ FLAG_KEYS = (
     "REFERRAL_ENABLED",
     "PARTNER_ENABLED",
     "CONTENT_ENGINE_ENABLED",
+    "INSTAGRAM_AUTOMATION_ENABLED",
     "COMPETITOR_WATCH_ENABLED",
     "EXPERIMENTS_ENABLED",
 )
@@ -64,9 +64,6 @@ class FlagService:
     def enabled(self, key: str) -> bool:
         if key not in FLAG_KEYS:
             raise KeyError(f"unknown feature flag: {key}")
-        # explicit env "on" always wins; env default otherwise when no DB row
-        if bool(getattr(self._settings, self._env_name(key), False)):
-            return True
         self._refresh()
         return self._cache[key]
 

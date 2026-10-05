@@ -17,16 +17,35 @@ Keep the last 3 image tags on the host (`pv-growth-app:<sha>`); DEPLOYMENT.md ta
 ```bash
 PVG_DATABASE_URL=... python -m alembic -c alembic.ini downgrade -1
 ```
-Every migration ships a tested downgrade. GrowthOS data is non-critical
-regeneration-able analytics state: worst case, `drop database pv_growth` +
-re-migrate loses only GrowthOS events, never Mirza data.
+Every migration ships a tested downgrade. Do not drop the GrowthOS database as
+a routine rollback; restore the verified `/opt/pv-growth/backups` dump if data
+recovery is needed. Mirza data is outside this database and must never be altered.
 
 ## Feature rollback (no redeploy)
 Every module has a flag; admin API or DB row flips it OFF instantly:
 ```sql
 UPDATE feature_flag SET enabled = false WHERE key = 'LIFECYCLE_AUTOMATION_ENABLED';
+UPDATE feature_flag SET enabled = false WHERE key IN
+  ('CONTENT_ENGINE_ENABLED', 'INSTAGRAM_AUTOMATION_ENABLED');
 ```
 (flags cache TTL is 15 s)
+
+For an Instagram incident, flip `INSTAGRAM_AUTOMATION_ENABLED` OFF first. This
+stops new planning/publishing after the cache TTL without touching Telegram,
+Mirza sync, provisioning, VPN tunnels, firewall or protected services.
+
+## Instagram migration rollback (0008 → 0007)
+
+Only after the Instagram/content flags are OFF and the previous application
+image is selected:
+
+```bash
+docker run --rm --network host --env-file /opt/pv-growth/config/.env \
+  <image-containing-0008> python -m alembic -c /app/alembic.ini downgrade 0007
+```
+
+This drops only GrowthOS `content_publications`/`content_insights` plus the new
+`content_items.format`/`creative` fields. Take/verify the GrowthOS backup first.
 
 ## Phase-level rollback
 Each phase's acceptance report lists the exact commit range; `git revert` the
