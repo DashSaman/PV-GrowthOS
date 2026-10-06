@@ -23,6 +23,7 @@ import secrets
 import ssl
 import time
 from typing import Protocol
+from uuid import UUID
 
 import httpx
 
@@ -33,6 +34,34 @@ from pv_growth.core.logging import get_logger
 log = get_logger("provisioning")
 
 EMAIL_PREFIX = "growth-"
+
+
+def _client_uuid(client: dict) -> str | None:
+    # Current panel: numeric database `id`, connection credential in `uuid`.
+    # Legacy X-UI: connection UUID in `id`. An explicit invalid uuid cannot
+    # silently fall back to another identity.
+    value = client.get("uuid", client.get("id"))
+    if not isinstance(value, str):
+        return None
+    try:
+        UUID(value)
+    except ValueError:
+        return None
+    return value
+
+
+def _used_bytes(obj: dict, client: dict) -> int:
+    # The existing production API exposes aggregated byte usage at obj level.
+    if "usedTraffic" in obj:
+        value = obj["usedTraffic"]
+        if type(value) is int and value >= 0:
+            return value
+        raise ProvisioningError("panel traffic usage unavailable")
+    up = obj.get("up", client.get("up"))
+    down = obj.get("down", client.get("down"))
+    if type(up) is int and type(down) is int and min(up, down) >= 0:
+        return up + down
+    raise ProvisioningError("panel traffic usage unavailable")
 
 
 class ProvisioningError(ExternalServiceError):
@@ -185,7 +214,7 @@ class XUIProvisioningAdapter:
         config_uri = f"{sublink}/{sub_id}" if sub_id and sublink else None
         return {
             "service_ref": email,
-            "client_id": client.get("id"),
+            "client_id": _client_uuid(client),
             "sub_id": sub_id,
             "config_uri": config_uri,
             "subscription_url": config_uri,
@@ -204,18 +233,17 @@ class XUIProvisioningAdapter:
             return {"exists": False}
         client = obj.get("client") if isinstance(obj.get("client"), dict) else obj
         total = client.get("totalGB") or 0
-        up = obj.get("up") or client.get("up") or 0
-        down = obj.get("down") or client.get("down") or 0
+        used = _used_bytes(obj, client)
         return {
             "exists": True,
-            "client_id": client.get("id"),
+            "client_id": _client_uuid(client),
             "sub_id": client.get("subId") or obj.get("subId"),
             "enabled": client.get("enable", True),
             "traffic_limit_gb": total // (1024**3),
-            "traffic_used_gb": round((up + down) / (1024**3), 3),
+            "traffic_used_gb": round(used / (1024**3), 3),
             "traffic_limit_bytes": total,
-            "traffic_used_bytes": up + down,
-            "quota_exhausted": bool(total > 0 and up + down >= total),
+            "traffic_used_bytes": used,
+            "quota_exhausted": bool(total > 0 and used >= total),
             "expiry_ts_ms": client.get("expiryTime") or 0,
             "expired": bool(
                 client.get("expiryTime")
