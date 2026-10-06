@@ -28,6 +28,10 @@ def retry_pending_claim(session: Session, settings: Settings, payload: dict) -> 
     claim = session.get(ExclusiveClaim, claim_id) if isinstance(claim_id, int) else None
     if claim is None or claim.status != "pending_provision":
         return
+    from pv_growth.free_config.audience import guard_reserved_claim
+
+    if not guard_reserved_claim(session, settings, claim):
+        return
     job = session.execute(
         select(Job).where(Job.idempotency_key == f"provision:{claim.claim_key}")
     ).scalar_one_or_none()

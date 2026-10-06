@@ -43,6 +43,11 @@ def scan(session: Session, settings: Settings, flags: FlagService) -> int:
         ):
             # optional condition filters
             cond = rule.conditions or {}
+            if cond.get("free_audience"):
+                from pv_growth.free_config.audience import decision_for_user
+
+                if not decision_for_user(session, settings, user.id).eligible:
+                    continue
             if cond.get("segment") and user.segment != cond["segment"]:
                 continue
             if cond.get("min_lead_score", 0) > user.lead_score:
@@ -93,6 +98,12 @@ def send_followup(session: Session, settings: Settings, flags: FlagService, tele
         return "blocked"
 
     purpose = rule.code
+
+    if (rule.conditions or {}).get("free_audience"):
+        from pv_growth.free_config.audience import decision_for_user
+
+        if not decision_for_user(session, settings, user.id).eligible:
+            return "stopped"
 
     # STOP: purchase (or any listed event) kills the reminder
     if _stop_condition_met(session, user.id, rule.stop_conditions):
