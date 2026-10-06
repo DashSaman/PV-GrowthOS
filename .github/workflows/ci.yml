@@ -110,7 +110,7 @@ jobs:
         run: |
           mkdir -p dist
           docker save pv-growth-app:${{ github.sha }} -o dist/pv-growth-app-${{ github.sha }}.tar
-          sha256sum dist/pv-growth-app-${{ github.sha }}.tar > dist/pv-growth-app-${{ github.sha }}.tar.sha256
+          (cd dist && sha256sum pv-growth-app-${{ github.sha }}.tar > pv-growth-app-${{ github.sha }}.tar.sha256)
       - name: Upload production image artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
