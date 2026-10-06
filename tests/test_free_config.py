@@ -22,6 +22,7 @@ from pv_growth.database.models import (
     ExclusiveClaim,
     Job,
     PublishedPost,
+    RawConfig,
 )
 from pv_growth.events.service import get_or_create_user
 from pv_growth.free_config.exclusive import (
@@ -32,6 +33,7 @@ from pv_growth.free_config.exclusive import (
 from pv_growth.free_config.pipeline import (
     collect_and_stage,
     publish_public_slot,
+    render_public_post,
 )
 from pv_growth.telegram.client import FakeTelegramTransport, TelegramClient
 
@@ -121,12 +123,27 @@ def test_publish_is_idempotent_double_run(session, env, monkeypatch):
     assert "کامانیوتی" in sent[0] or "PV Network" in sent[0]  # public label present
     # The channel promise is an actually usable free config, not just a label.
     published = session.query(PublishedPost).filter_by(kind="free_public").one()
-    config = session.get(
-        __import__("pv_growth.database.models", fromlist=["RawConfig"]).RawConfig, published.config_id
-    )
+    config = session.get(RawConfig, published.config_id)
     assert config.raw_uri in sent[0]
     payload = [p for m, p in env["telegram"]._t.calls if m == "sendMessage"][0]
     assert payload["reply_markup"]["inline_keyboard"][0][0]["url"] == "https://t.me/pvnetwork_bot"
+
+
+def test_public_post_escapes_untrusted_remark():
+    config = RawConfig(
+        source_id=1,
+        uri_hash="safe-render",
+        protocol="vless",
+        host="example.test",
+        port=443,
+        raw_uri="vless://id@example.test:443?x=1&y=2",
+        remark="<b>not markup</b>",
+    )
+
+    rendered = render_public_post(config)
+
+    assert "&lt;b&gt;not markup&lt;/b&gt;" in rendered
+    assert "x=1&amp;y=2" in rendered
 
 
 def test_unhealthy_configs_never_publish(session, env, monkeypatch):
