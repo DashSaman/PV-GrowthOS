@@ -175,6 +175,17 @@ def test_free_config_scheduler_enqueues_bounded_slots(settings, session, monkeyp
     assert len(collect) == 1
 
 
+def test_free_config_scheduler_hard_caps_publication_hours(settings, session, monkeypatch):
+    from pv_growth.jobs.scheduler import Scheduler
+
+    monkeypatch.setattr("pv_growth.jobs.scheduler.time.time", lambda: 1791314100.0)  # 19:15 UTC
+    configured = settings.model_copy(update={"free_publish_hours_utc": "8,17,19", "publish_top_n": 99})
+
+    Scheduler(configured)._enqueue_periodic()
+
+    assert session.query(Job).filter_by(job_type="free_config.publish").count() == 0
+
+
 def test_runner_uses_configured_batch_size(settings, session):
     from pv_growth.jobs import runner
 
