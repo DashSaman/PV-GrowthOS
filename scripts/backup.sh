@@ -16,9 +16,13 @@ DB_PART="${PVG_DATABASE_URL#*//}"          # user:pass@host/db
 CRED="${DB_PART%%@*}"
 HOST_DB="${DB_PART#*@}"
 PGUSER="${CRED%%:*}"; PGPASSWORD="${CRED#*:}"
-PGHOST="${HOST_DB%%/*}"; PGDATABASE="${HOST_DB#*/}"
-PGHOST="${PGHOST%%:*}"; PGPORT="${HOST_DB#*:}"
-[ "$PGPORT" = "$PGHOST" ] && PGPORT=5432
+HOSTPORT="${HOST_DB%%/*}"; PGDATABASE="${HOST_DB#*/}"
+PGHOST="${HOSTPORT%%:*}"
+if [ "$HOSTPORT" = "$PGHOST" ]; then
+  PGPORT=5432
+else
+  PGPORT="${HOSTPORT##*:}"
+fi
 
 export PGPASSWORD
 pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$PGDATABASE" | gzip > "$OUT"
