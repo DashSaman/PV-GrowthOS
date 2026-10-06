@@ -111,6 +111,9 @@ def test_admin_requires_token(client):
 
 def test_admin_dashboard_and_flags(client, session):
     ingest(session, "BOT_STARTED", user_id=_mk_users(session, 1, 40)[0], idempotency_key="dash:1")
+    # The API serves through its own DB session/connection (especially on PG),
+    # so make the event durable before asserting the HTTP view sees it.
+    session.commit()
     resp = client.get("/admin/api/dashboard", headers=ADMIN)
     assert resp.status_code == 200
     body = resp.json()
@@ -144,7 +147,12 @@ def test_admin_flag_toggle_and_campaign_crud(client):
 
 
 def test_telegram_webhook_secret_and_flows(client, monkeypatch, settings):
-    monkeypatch.setattr(settings, "telegram_webhook_secret", "configured-secret", raising=False)
+    from pv_growth.api import webhooks
+
+    configured = settings.model_copy(
+        update={"telegram_webhook_secret": "configured-secret", "telegram_bot_token": "T"}
+    )
+    monkeypatch.setattr(webhooks, "get_settings", lambda: configured)
     # webhook refuses wrong secret
     resp = client.post(
         "/webhooks/telegram/wrong-secret",
@@ -156,14 +164,13 @@ def test_telegram_webhook_secret_and_flows(client, monkeypatch, settings):
     assert resp.status_code == 404
 
     # configured token + fake transport
-    monkeypatch.setattr(settings, "telegram_bot_token", "T", raising=False)
     from pv_growth.telegram.client import FakeTelegramTransport
 
     fake = FakeTelegramTransport()
     monkeypatch.setattr(
         "pv_growth.api.webhooks._telegram",
         lambda: __import__("pv_growth.telegram.client", fromlist=["TelegramClient"]).TelegramClient(
-            fake, settings
+            fake, configured
         ),
     )
 
