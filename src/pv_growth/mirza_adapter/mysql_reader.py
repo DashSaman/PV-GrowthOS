@@ -73,6 +73,25 @@ class MirzaMySQLReader:
             cur.execute("SELECT id_invoice FROM invoice")
             return [str(r["id_invoice"]) for r in cur.fetchall()]
 
+    def fetch_free_audience_history(self, telegram_user_id: int) -> tuple[list, list, list]:
+        """Read business history, including renewals, without granting privileges.
+
+        Existing read credentials must already permit each SELECT. The caller
+        excludes the user if any table is unavailable; partial data is unsafe.
+        No panel mutation or customer credentials are requested.
+        """
+        queries = (
+            "SELECT Status, price_product, time_sell FROM invoice WHERE id_user=%s",
+            "SELECT type, status, price, time FROM service_other WHERE id_user=%s",
+            "SELECT payment_Status, price, time, at_updated FROM Payment_report WHERE id_user=%s",
+        )
+        results = []
+        with self.connect() as conn, conn.cursor() as cur:
+            for query in queries:
+                cur.execute(query, (telegram_user_id,))
+                results.append(list(cur.fetchall()))
+        return tuple(results)
+
     def fetch_statuses(self) -> dict[str, str]:
         """id -> Status for every invoice (light: two varchar columns)."""
         with self.connect() as conn, conn.cursor() as cur:

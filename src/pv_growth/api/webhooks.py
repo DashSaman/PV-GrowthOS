@@ -101,15 +101,13 @@ def _safe_answer(client, callback_id: str, text: str) -> None:
         log.warning("callback answer failed (isolated)", error=str(exc)[:100])
 
 
-def _purchase_keyboard():
+def _purchase_keyboard(*, include_free: bool = True):
     from pv_growth.telegram.client import InlineKeyboard
 
-    return InlineKeyboard(
-        [
-            [{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}],
-            [{"text": "🎁 کانفیگ رایگان", "url": "https://t.me/pvnetwork_freeconfig"}],
-        ]
-    )
+    rows = [[{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}]]
+    if include_free:
+        rows.append([{"text": "🎁 کانفیگ رایگان", "url": "https://t.me/pvnetwork_freeconfig"}])
+    return InlineKeyboard(rows)
 
 
 def _handle_message(client, message: TgMessage) -> None:
@@ -132,6 +130,9 @@ def _handle_message(client, message: TgMessage) -> None:
             telegram_chat_id=message.chat.get("id"),
         )
         if text.startswith("/start"):
+            from pv_growth.free_config.audience import decision_for_user
+
+            free_allowed = decision_for_user(session, settings, user.id).eligible
             start_param = text.split(" ", 1)[1].strip() if " " in text else None
             ingest(
                 session,
@@ -142,7 +143,7 @@ def _handle_message(client, message: TgMessage) -> None:
             attribute(session, user.id, start_param)
             referrals.handle_bot_start(session, user.id, start_param)
             partners.handle_bot_start(session, user.id, start_param)
-            if start_param and start_param.startswith("freecfg_"):
+            if free_allowed and start_param and start_param.startswith("freecfg_"):
                 from pv_growth.telegram.client import InlineKeyboard
 
                 _safe_send(
@@ -154,7 +155,7 @@ def _handle_message(client, message: TgMessage) -> None:
                             [
                                 {
                                     "text": "🚀 دریافت کانفیگ",
-                                    "callback_data": f"claim:{start_param[len('freecfg_')]}",
+                                    "callback_data": f"claim:{start_param[len('freecfg_') :]}",
                                 },
                             ]
                         ]
@@ -165,15 +166,17 @@ def _handle_message(client, message: TgMessage) -> None:
                     client,
                     message.chat.get("id"),
                     "سلام! به PV Network خوش آمدید.\n"
-                    "برای خرید سرویس یا دریافت کانفیگ رایگان یکی از گزینه‌های زیر را انتخاب کنید.",
-                    _purchase_keyboard(),
+                    "برای خرید سرویس و مشاهدهٔ تعرفه‌ها از گزینهٔ زیر استفاده کنید.",
+                    _purchase_keyboard(include_free=free_allowed),
                 )
         elif text.startswith("/help"):
+            from pv_growth.free_config.audience import decision_for_user
+
             _safe_send(
                 client,
                 message.chat.get("id"),
-                "برای خرید و تعرفه‌ها وارد ربات اصلی شوید؛ برای تست اتصال هم کانال رایگان در دسترس است.",
-                _purchase_keyboard(),
+                "برای خرید و تعرفه‌ها وارد ربات اصلی شوید.",
+                _purchase_keyboard(include_free=decision_for_user(session, settings, user.id).eligible),
             )
         elif text.startswith("/claim"):
             parts = text.split()
@@ -229,7 +232,7 @@ def _handle_callback(client, callback: TgCallback) -> None:
                     f"کانفیگ اختصاصی شما آماده است:\n{claim.config_payload['config_uri']}\n"
                     f"حجم: {claim.traffic_gb} گیگ · اعتبار: {claim.validity_hours} ساعت\n\n"
                     "اگر اتصال مناسب بود، سرویس اصلی را از دکمه زیر بگیرید.",
-                    _purchase_keyboard(),
+                    _purchase_keyboard(include_free=False),
                 )
             else:
                 _safe_answer(client, callback.id, "در حال آماده‌سازی، چند لحظه صبر کنید")

@@ -161,7 +161,11 @@ def provision_reserved_claim(
     provisioning: ProvisioningClient,
 ) -> bool:
     """Try one idempotent remote provision; emit TRIAL_CREATED only on proof."""
+    from pv_growth.free_config.audience import guard_reserved_claim
     from pv_growth.provisioning.guard import check_backend
+
+    if not guard_reserved_claim(session, settings, claim):
+        return False
 
     claim.provision_attempts += 1
     try:
@@ -229,6 +233,10 @@ def claim_exclusive(
     campaign = get_by_code(session, campaign_code)
     if campaign is None or campaign.kind != "free_config_exclusive":
         raise ValidationError("unknown exclusive campaign")
+
+    from pv_growth.free_config.audience import require_free_audience
+
+    require_free_audience(session, settings, user_id)
 
     # idempotent re-claim FIRST: an existing claim for today returns as-is,
     # even if the user has since hit their limit
