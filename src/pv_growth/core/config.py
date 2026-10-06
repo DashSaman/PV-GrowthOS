@@ -90,6 +90,8 @@ class Settings(BaseSettings):
     health_check_concurrency: int = 3
     health_check_timeout_seconds: float = 4.0
     publish_top_n: int = 2
+    free_collect_interval_hours: int = 6
+    free_publish_hours_utc: str = "8,17"
 
     # --- feature flags (all default OFF; see core/flags.py) ---
     flag_attribution_enabled: bool = False

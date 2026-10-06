@@ -101,6 +101,17 @@ def _safe_answer(client, callback_id: str, text: str) -> None:
         log.warning("callback answer failed (isolated)", error=str(exc)[:100])
 
 
+def _purchase_keyboard():
+    from pv_growth.telegram.client import InlineKeyboard
+
+    return InlineKeyboard(
+        [
+            [{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}],
+            [{"text": "🎁 کانفیگ رایگان", "url": "https://t.me/pvnetwork_freeconfig"}],
+        ]
+    )
+
+
 def _handle_message(client, message: TgMessage) -> None:
     settings = get_settings()
     text = (message.text or "").strip()
@@ -154,8 +165,16 @@ def _handle_message(client, message: TgMessage) -> None:
                     client,
                     message.chat.get("id"),
                     "سلام! به PV Network خوش آمدید.\n"
-                    "برای دریافت کانفیگ رایگان از کانال ما سر بزنید یا /help را بزنید.",
+                    "برای خرید سرویس یا دریافت کانفیگ رایگان یکی از گزینه‌های زیر را انتخاب کنید.",
+                    _purchase_keyboard(),
                 )
+        elif text.startswith("/help"):
+            _safe_send(
+                client,
+                message.chat.get("id"),
+                "برای خرید و تعرفه‌ها وارد ربات اصلی شوید؛ برای تست اتصال هم کانال رایگان در دسترس است.",
+                _purchase_keyboard(),
+            )
         elif text.startswith("/claim"):
             parts = text.split()
             if len(parts) == 2:
@@ -208,7 +227,9 @@ def _handle_callback(client, callback: TgCallback) -> None:
                     client,
                     callback.from_.id,
                     f"کانفیگ اختصاصی شما آماده است:\n{claim.config_payload['config_uri']}\n"
-                    f"حجم: {claim.traffic_gb} گیگ · اعتبار: {claim.validity_hours} ساعت",
+                    f"حجم: {claim.traffic_gb} گیگ · اعتبار: {claim.validity_hours} ساعت\n\n"
+                    "اگر اتصال مناسب بود، سرویس اصلی را از دکمه زیر بگیرید.",
+                    _purchase_keyboard(),
                 )
             else:
                 _safe_answer(client, callback.id, "در حال آماده‌سازی، چند لحظه صبر کنید")

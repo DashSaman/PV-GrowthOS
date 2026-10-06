@@ -136,6 +136,15 @@ def test_content_publish_job_is_registered():
     assert "content.publish_due" in runner._HANDLERS
 
 
+def test_free_config_jobs_are_registered():
+    from pv_growth.jobs import runner
+
+    runner.register_builtin_handlers()
+
+    assert "free_config.collect" in runner._HANDLERS
+    assert "free_config.publish" in runner._HANDLERS
+
+
 def test_content_scheduler_enqueue_is_deduplicated(settings, session):
     from pv_growth.jobs.scheduler import Scheduler
 
@@ -146,6 +155,35 @@ def test_content_scheduler_enqueue_is_deduplicated(settings, session):
     rows = session.query(Job).filter_by(job_type="content.publish_due").all()
     assert len(rows) == 1
     assert rows[0].idempotency_key.startswith("content_publish:")
+
+
+def test_free_config_scheduler_enqueues_bounded_slots(settings, session, monkeypatch):
+    from pv_growth.jobs.scheduler import Scheduler
+
+    # 17:15 UTC falls in the 17h publication window. Repeated scheduler ticks
+    # in that hour must still create only one effect-level publication job.
+    monkeypatch.setattr("pv_growth.jobs.scheduler.time.time", lambda: 1791306900.0)
+    configured = settings.model_copy(update={"free_publish_hours_utc": "8,17"})
+    scheduler = Scheduler(configured)
+    scheduler._enqueue_periodic()
+    scheduler._enqueue_periodic()
+
+    publish = session.query(Job).filter_by(job_type="free_config.publish").all()
+    collect = session.query(Job).filter_by(job_type="free_config.collect").all()
+    assert len(publish) == 1
+    assert publish[0].payload["slot"] == 2
+    assert len(collect) == 1
+
+
+def test_free_config_scheduler_hard_caps_publication_hours(settings, session, monkeypatch):
+    from pv_growth.jobs.scheduler import Scheduler
+
+    monkeypatch.setattr("pv_growth.jobs.scheduler.time.time", lambda: 1791314100.0)  # 19:15 UTC
+    configured = settings.model_copy(update={"free_publish_hours_utc": "8,17,19", "publish_top_n": 99})
+
+    Scheduler(configured)._enqueue_periodic()
+
+    assert session.query(Job).filter_by(job_type="free_config.publish").count() == 0
 
 
 def test_runner_uses_configured_batch_size(settings, session):

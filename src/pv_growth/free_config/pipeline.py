@@ -8,6 +8,7 @@ PublishedPost.dedupe_key so double scheduler runs cannot double-post.
 
 from __future__ import annotations
 
+import html
 from datetime import date
 
 import httpx
@@ -24,7 +25,7 @@ from pv_growth.core.logging import get_logger
 from pv_growth.database.models import ConfigSource, PublishedPost, RawConfig
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import ingest
-from pv_growth.telegram.client import TelegramClient
+from pv_growth.telegram.client import InlineKeyboard, TelegramClient
 
 log = get_logger("pipeline")
 
@@ -127,9 +128,10 @@ def render_public_post(config: RawConfig) -> str:
     remark = config.remark or f"{config.protocol} · {config.host}"
     return (
         f"🔓 <b>کانفیگ رایگان روز</b>\n"
-        f"<code>{remark}</code>\n\n"
+        f"<code>{html.escape(remark)}</code>\n\n"
         f"پروتکل: <b>{config.protocol.upper()}</b>\n"
-        f"{PUBLIC_LABEL_FA}\n{PUBLIC_LABEL_EN}"
+        f"{PUBLIC_LABEL_FA}\n{PUBLIC_LABEL_EN}\n\n"
+        f"<code>{html.escape(config.raw_uri)}</code>"
     )
 
 
@@ -172,7 +174,11 @@ def publish_public_slot(
     except IntegrityError:
         return None  # concurrent scheduler won the race
 
-    result = telegram.send_channel_post(settings.free_channel_id, render_public_post(ranked[0]))
+    result = telegram.send_channel_post(
+        settings.free_channel_id,
+        render_public_post(ranked[0]),
+        InlineKeyboard([[{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}]]),
+    )
     post.message_id = result.get("message_id")
     ranked[0].status = "published"
     ranked[0].published_at = utcnow()

@@ -87,6 +87,36 @@ class Scheduler:
             if self._settings.provisioning_base_url and self._settings.provisioning_token:
                 sbucket = int(time.time() // 300)
                 jobs.enqueue(session, "provisioning.sweep", {}, idempotency_key=f"prov_sweep:{sbucket}")
+            # Public free-config acquisition loop: refresh approved sources at
+            # a bounded cadence, and publish at most one post per configured
+            # UTC hour. Effect-level post dedupe is a second guard.
+            collect_seconds = max(1, self._settings.free_collect_interval_hours) * 3600
+            cbucket = int(time.time() // collect_seconds)
+            jobs.enqueue(
+                session,
+                "free_config.collect",
+                {},
+                idempotency_key=f"free_collect:{cbucket}",
+            )
+            publish_hours: list[int] = []
+            for raw_hour in str(self._settings.free_publish_hours_utc).split(","):
+                try:
+                    hour = int(raw_hour.strip())
+                except ValueError:
+                    continue
+                if 0 <= hour <= 23 and hour not in publish_hours:
+                    publish_hours.append(hour)
+            publish_hours = publish_hours[:2]  # hard safety cap: never more than two channel slots/day
+            now_utc = time.gmtime(time.time())
+            if now_utc.tm_hour in publish_hours:
+                slot = publish_hours.index(now_utc.tm_hour) + 1
+                day_key = time.strftime("%Y-%m-%d", now_utc)
+                jobs.enqueue(
+                    session,
+                    "free_config.publish",
+                    {"slot": slot},
+                    idempotency_key=f"free_publish:{day_key}:{slot}",
+                )
 
     def start(self) -> None:
         if self._thread is not None:

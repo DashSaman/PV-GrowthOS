@@ -206,6 +206,36 @@ def test_telegram_webhook_secret_and_flows(client, monkeypatch, settings):
     assert any("کانفیگ رایگان" in t for t in texts)
 
 
+def test_plain_start_and_help_offer_purchase_cta(monkeypatch, settings):
+    from pv_growth.api import webhooks
+    from pv_growth.telegram.client import FakeTelegramTransport, TelegramClient
+
+    configured = settings.model_copy(update={"telegram_bot_token": "T"})
+    monkeypatch.setattr(webhooks, "get_settings", lambda: configured)
+    fake = FakeTelegramTransport()
+    client = TelegramClient(fake, configured)
+    tg_id = int(f"98{uuid.uuid4().int % 10000}")
+
+    webhooks._handle_message(
+        client,
+        webhooks.TgMessage.model_validate(
+            {"chat": {"id": tg_id}, "from": {"id": tg_id, "first_name": "Sara"}, "text": "/start"}
+        ),
+    )
+    webhooks._handle_message(
+        client,
+        webhooks.TgMessage.model_validate(
+            {"chat": {"id": tg_id}, "from": {"id": tg_id, "first_name": "Sara"}, "text": "/help"}
+        ),
+    )
+
+    messages = [payload for method, payload in fake.calls if method == "sendMessage"]
+    assert len(messages) == 2
+    for payload in messages:
+        buttons = payload["reply_markup"]["inline_keyboard"]
+        assert any(button.get("url") == "https://t.me/pvnetwork_bot" for row in buttons for button in row)
+
+
 def test_telegram_webhook_unset_secret_fails_closed_without_processing(settings, monkeypatch):
     from fastapi import HTTPException
 
