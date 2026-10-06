@@ -39,6 +39,9 @@ These are prerequisites, not routine rollout commands:
 - existing PostgreSQL and GrowthOS-owned `pv_growth` DB/role;
 - existing `pv_growth_net`, collision-checked by preflight;
 - `/opt/pv-growth/config/.env` with GrowthOS-only credentials;
+- direct-container smoke targets in that env point at the host gateway/public
+  service rather than container-local loopback (`PVG_SMOKE_APACHE_URL=http://172.23.77.1:80`,
+  `PVG_SMOKE_PG_HOST=172.23.77.1`, and `PVG_SMOKE_XUI_URL` is the live X-UI URL);
 - Mirza MySQL credentials are the `pv_growth_ro` SELECT-only account;
 - no production secret exists in Git or in the image.
 
@@ -56,10 +59,25 @@ sha256sum -c pv-growth-app-<sha>.tar.sha256
 docker load --input pv-growth-app-<sha>.tar
 docker image inspect pv-growth-app:<sha> --format '{{.Id}}'
 
-# Candidate is readable before touching the live container.
+# Host-only gate. These checks deliberately run on the host, not in the image.
+for p in /var/www/html/mirzaprobotconfig /var/www/mirza_pro /opt/pv-reseller /opt/akhbot/app; do
+  test -e "$p"
+done
+for c in pv-reseller-dashboard akhbot-app; do
+  test "$(docker inspect -f '{{.State.Running}}' "$c")" = true
+done
+for n in bridge pv_reseller_net akhbot_internal pv_growth_net; do
+  docker network inspect "$n" >/dev/null
+done
+test "$(docker network inspect pv_growth_net --format '{{(index .IPAM.Config 0).Subnet}}')" = "172.23.77.0/24"
+test "$(docker inspect pv-growth-app --format '{{.State.Running}}')" = true
+test "$(docker inspect pv-growth-app --format '{{(index (index .NetworkSettings.Ports "8350/tcp") 0).HostIp}}:{{(index (index .NetworkSettings.Ports "8350/tcp") 0).HostPort}}')" = "127.0.0.1:8350"
+
+# Candidate-only gate: host Docker/path checks are reported SKIP because an
+# image cannot see them. DB/resource checks must pass.
 docker run --rm --network host \
   --env-file /opt/pv-growth/config/.env \
-  pv-growth-app:<sha> python -m pv_growth preflight
+  pv-growth-app:<sha> python -m pv_growth preflight --container
 
 # BEFORE evidence: current GrowthOS + protected neighbors.
 docker inspect pv-growth-app --format '{{.Config.Image}}' > previous-image.txt

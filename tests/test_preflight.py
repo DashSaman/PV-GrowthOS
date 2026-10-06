@@ -1,6 +1,9 @@
 """Unit tests for preflight logic: port parsing, subnet overlap, route parsing."""
 
+import pv_growth.preflight as preflight
 from pv_growth.preflight import (
+    PASS,
+    CheckResult,
     collect_route_networks,
     parse_listening_ports,
     subnet_overlaps,
@@ -38,3 +41,25 @@ def test_collect_route_networks():
     assert "172.17.0.0/16" in routes
     assert "10.0.0.0/24" in routes
     assert all("default" not in r for r in routes)
+
+
+def test_container_mode_is_honest_about_host_only_checks(monkeypatch, capsys):
+    """An image candidate cannot see host Docker/path state; report that as SKIP."""
+
+    monkeypatch.setattr(preflight, "check_disk", lambda _minimum: CheckResult("disk_space", PASS, "ok"))
+    monkeypatch.setattr(preflight, "check_memory", lambda _minimum: CheckResult("memory", PASS, "ok"))
+    monkeypatch.setattr(
+        preflight,
+        "check_postgresql_reachable",
+        lambda: CheckResult("postgresql_reachable", PASS, "select 1 ok"),
+    )
+    monkeypatch.setattr(
+        preflight,
+        "check_docker_networks",
+        lambda _protected: (_ for _ in ()).throw(AssertionError("host Docker check ran in container mode")),
+    )
+
+    assert preflight.run(["--container"]) == 0
+    output = capsys.readouterr().out
+    assert "[SKIP] host_checks: container mode; run host gate first" in output
+    assert "[PASS] postgresql_reachable: select 1 ok" in output
