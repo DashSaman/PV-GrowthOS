@@ -128,7 +128,7 @@ def render_public_post(config: RawConfig) -> str:
     remark = config.remark or f"{config.protocol} · {config.host}"
     return (
         f"🔓 <b>کانفیگ رایگان روز</b>\n"
-        f"<code>{remark}</code>\n\n"
+        f"<code>{html.escape(remark)}</code>\n\n"
         f"پروتکل: <b>{config.protocol.upper()}</b>\n"
         f"{PUBLIC_LABEL_FA}\n{PUBLIC_LABEL_EN}\n\n"
         f"<code>{html.escape(config.raw_uri)}</code>"
