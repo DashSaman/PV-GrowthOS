@@ -202,33 +202,49 @@ def check_postgresql_reachable() -> CheckResult:
 
 def run(args: list[str] | None = None) -> int:
     strict = "--strict" in (args or [])
+    container_mode = "--container" in (args or [])
     settings = get_settings()
-    ss_out = _run(["ss", "-lntup"]) if is_linux() else None
-    net_result, network_names = check_docker_networks(["bridge", "pv_reseller_net", "akhbot_internal"])
+    if container_mode:
+        results = [
+            CheckResult("host_checks", SKIP, "container mode; run host gate first"),
+            check_disk(settings.min_free_disk_mb),
+            check_memory(settings.min_free_mem_mb),
+            check_postgresql_reachable(),
+        ]
+    else:
+        ss_out = _run(["ss", "-lntup"]) if is_linux() else None
+        net_result, network_names = check_docker_networks(["bridge", "pv_reseller_net", "akhbot_internal"])
 
-    docker_subnets: list[str] = []
-    if network_names and "pv_growth_net" in network_names:
-        inspect = _run(
-            ["docker", "network", "inspect", "pv_growth_net", "--format", "{{(index .IPAM.Config 0).Subnet}}"]
-        )
-        if inspect:
-            docker_subnets.append(inspect.strip())
-    routes_out = _run(["ip", "route"]) or ""
-    route_nets = collect_route_networks(routes_out) if is_linux() else []
+        docker_subnets: list[str] = []
+        if network_names and "pv_growth_net" in network_names:
+            inspect = _run(
+                [
+                    "docker",
+                    "network",
+                    "inspect",
+                    "pv_growth_net",
+                    "--format",
+                    "{{(index .IPAM.Config 0).Subnet}}",
+                ]
+            )
+            if inspect:
+                docker_subnets.append(inspect.strip())
+        routes_out = _run(["ip", "route"]) or ""
+        route_nets = collect_route_networks(routes_out) if is_linux() else []
 
-    results = [
-        check_protected_paths([p.strip() for p in settings.protected_paths.split(",") if p.strip()]),
-        check_protected_containers(
-            [c.strip() for c in settings.protected_containers.split(",") if c.strip()]
-        ),
-        net_result,
-        check_port_free(settings.growth_port, ss_out),
-        check_subnet_free(settings.growth_subnet, docker_subnets, route_nets),
-        check_duplicate_instance(settings.growth_container_name, settings.growth_port, ss_out),
-        check_disk(settings.min_free_disk_mb),
-        check_memory(settings.min_free_mem_mb),
-        check_postgresql_reachable(),
-    ]
+        results = [
+            check_protected_paths([p.strip() for p in settings.protected_paths.split(",") if p.strip()]),
+            check_protected_containers(
+                [c.strip() for c in settings.protected_containers.split(",") if c.strip()]
+            ),
+            net_result,
+            check_port_free(settings.growth_port, ss_out),
+            check_subnet_free(settings.growth_subnet, docker_subnets, route_nets),
+            check_duplicate_instance(settings.growth_container_name, settings.growth_port, ss_out),
+            check_disk(settings.min_free_disk_mb),
+            check_memory(settings.min_free_mem_mb),
+            check_postgresql_reachable(),
+        ]
 
     print("== PV GrowthOS production preflight (read-only) ==")
     failed = skipped = 0
