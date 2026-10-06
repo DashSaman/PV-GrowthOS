@@ -70,6 +70,10 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
                 select(RawConfig).where(RawConfig.uri_hash == parsed.uri_hash)
             ).scalar_one_or_none()
             if existing is not None:
+                if existing.status == "probe_failed":
+                    existing.raw_uri = parsed.raw_uri
+                    existing.status = "validated"
+                    existing.fetched_at = utcnow()
                 seen_this_run.add(parsed.uri_hash)
                 stats["duplicates"] += 1
                 continue
@@ -109,7 +113,11 @@ def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
             select(RawConfig)
             .where(RawConfig.valid.is_(True), RawConfig.status == "validated")
             .order_by(RawConfig.quality_score.desc())
-            .limit(settings.health_check_max)
+            .limit(
+                min(settings.health_check_max, 3)
+                if settings.env == "production" or settings.proxy_probe_required
+                else settings.health_check_max
+            )
         )
         .scalars()
         .all()
@@ -118,6 +126,12 @@ def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
     for candidate in candidates:
         candidate.health_checked = True
         candidate.health_ok = results.get(candidate.id)
+        if candidate.health_ok and (settings.env == "production" or settings.proxy_probe_required):
+            from pv_growth.config_quality.probe import probe_uri
+
+            candidate.health_ok = probe_uri(candidate.raw_uri, settings).ok
+        if not candidate.health_ok:
+            candidate.status = "probe_failed"
     session.flush()
     ranked = [c for c in candidates if c.health_ok]
     ranked.sort(key=lambda c: c.quality_score, reverse=True)
@@ -125,13 +139,16 @@ def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
 
 
 def render_public_post(config: RawConfig) -> str:
+    from pv_growth.free_config.sales_copy import config_footer
+
     remark = config.remark or f"{config.protocol} · {config.host}"
     return (
         f"🔓 <b>کانفیگ رایگان روز</b>\n"
         f"<code>{html.escape(remark)}</code>\n\n"
         f"پروتکل: <b>{config.protocol.upper()}</b>\n"
         f"{PUBLIC_LABEL_FA}\n{PUBLIC_LABEL_EN}\n\n"
-        f"<code>{html.escape(config.raw_uri)}</code>"
+        f"<code>{html.escape(config.raw_uri)}</code>\n\n"
+        f"{config_footer()}"
     )
 
 
@@ -145,8 +162,18 @@ def publish_public_slot(
 ) -> PublishedPost | None:
     """Publish top configs for one day/slot. Idempotent on dedupe_key:
     a second call (crashed scheduler, double run) is a no-op."""
+    if settings.env == "production":
+        return None  # owner requires every new free config from the paid tunnel plan
     if not flags.enabled("FREE_CONFIG_ENABLED") or not flags.enabled("PUBLIC_CONFIG_ENABLED"):
         log.info("public config disabled by flag")
+        return None
+    from pv_growth.free_config.shared_public import FORBIDDEN_MAIN
+
+    if (
+        not settings.free_channel_id
+        or str(settings.free_channel_id).lower() in FORBIDDEN_MAIN
+        or not 1 <= slot <= 2
+    ):
         return None
     day = day or date.today()
     dedupe_key = f"free_public:{day.isoformat()}:{slot}"
@@ -161,6 +188,14 @@ def publish_public_slot(
         log.info("no healthy candidates to publish", day=day.isoformat(), slot=slot)
         return None
 
+    if settings.env == "production" or settings.proxy_probe_required:
+        from pv_growth.config_quality.probe import probe_uri
+
+        if not probe_uri(ranked[0].raw_uri, settings).ok:
+            ranked[0].health_ok = False
+            ranked[0].status = "probe_failed"
+            return None
+
     post = PublishedPost(
         dedupe_key=dedupe_key,
         channel_id=settings.free_channel_id,
@@ -173,6 +208,8 @@ def publish_public_slot(
             session.flush()
     except IntegrityError:
         return None  # concurrent scheduler won the race
+
+    session.commit()  # a remote result may be unknown; never roll back the effect reservation
 
     result = telegram.send_channel_post(
         settings.free_channel_id,
@@ -188,7 +225,16 @@ def publish_public_slot(
         campaign_id=None,
         source_id=None,
         idempotency_key=f"freepost:{dedupe_key}",
-        metadata={"dedupe_key": dedupe_key, "protocol": ranked[0].protocol, "slot": slot, "kind": "public"},
+        metadata={
+            "dedupe_key": dedupe_key,
+            "protocol": ranked[0].protocol,
+            "slot": slot,
+            "kind": "public",
+            "health_method": "https_via_proxy"
+            if settings.env == "production" or settings.proxy_probe_required
+            else "tcp_dev_only",
+            "checked_at_utc": utcnow().isoformat(),
+        },
     )
     log.info("public config published", dedupe_key=dedupe_key, message_id=post.message_id)
     return post

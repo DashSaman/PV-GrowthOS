@@ -2,6 +2,11 @@
 # Built in CI (GitHub Actions), never on the production VPN server.
 FROM python:3.12-slim AS base
 
+# Isolated probe CLIENT, pinned to an official release and verified checksum.
+# It never reads or modifies the host's Xray binary/configuration.
+RUN python -c "import urllib.request,hashlib,zipfile,io; d=urllib.request.urlopen('https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip',timeout=60).read(); assert hashlib.sha256(d).hexdigest()=='23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae'; z=zipfile.ZipFile(io.BytesIO(d)); open('/usr/local/bin/growth-xray','wb').write(z.read('xray'))" \
+    && chmod 755 /usr/local/bin/growth-xray
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1

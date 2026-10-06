@@ -150,7 +150,11 @@ def test_telegram_webhook_secret_and_flows(client, monkeypatch, settings):
     from pv_growth.api import webhooks
 
     configured = settings.model_copy(
-        update={"telegram_webhook_secret": "configured-secret", "telegram_bot_token": "T"}
+        update={
+            "telegram_webhook_secret": "configured-secret",
+            "telegram_bot_token": "T",
+            "free_channel_id": "@pvnetwork_freeconfig",
+        }
     )
     monkeypatch.setattr(webhooks, "get_settings", lambda: configured)
     # webhook refuses wrong secret
@@ -167,6 +171,13 @@ def test_telegram_webhook_secret_and_flows(client, monkeypatch, settings):
     from pv_growth.telegram.client import FakeTelegramTransport
 
     fake = FakeTelegramTransport()
+    fake.canned["getChatMember"] = {"status": "member"}
+    from pv_growth.free_config.audience import AudienceDecision
+
+    monkeypatch.setattr(
+        "pv_growth.free_config.audience.decision_for_user",
+        lambda *a: AudienceDecision(True, "never_purchased"),
+    )
     monkeypatch.setattr(
         "pv_growth.api.webhooks._telegram",
         lambda: __import__("pv_growth.telegram.client", fromlist=["TelegramClient"]).TelegramClient(

@@ -14,6 +14,7 @@ import httpx
 from pv_growth.core.config import Settings
 from pv_growth.core.errors import ExternalServiceError, NotConfigured
 from pv_growth.core.logging import get_logger
+from pv_growth.core.publication_policy import refuse_main_channel
 
 log = get_logger("telegram")
 
@@ -92,7 +93,11 @@ class TelegramClient:
     def get_me(self) -> dict:
         return self._t.call("getMe", {})
 
+    def get_chat_member(self, chat_id: int | str, user_id: int) -> dict:
+        return self._t.call("getChatMember", {"chat_id": chat_id, "user_id": user_id})
+
     def send_message(self, chat_id: int | str, text: str, keyboard: InlineKeyboard | None = None) -> dict:
+        refuse_main_channel(chat_id)
         payload: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
         if keyboard:
             payload["reply_markup"] = {"inline_keyboard": keyboard.to_api()}
@@ -121,6 +126,7 @@ class TelegramClient:
     def send_channel_post(
         self, channel_id: int | str, text: str, keyboard: InlineKeyboard | None = None
     ) -> dict:
+        refuse_main_channel(channel_id)
         payload: dict[str, Any] = {"chat_id": channel_id, "text": text, "parse_mode": "HTML"}
         if keyboard:
             payload["reply_markup"] = {"inline_keyboard": keyboard.to_api()}

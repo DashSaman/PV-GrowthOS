@@ -21,6 +21,10 @@ def collect_job(session: Session, settings: Settings, payload: dict) -> None:
     flags = FlagService(settings)
     if not (flags.enabled("FREE_CONFIG_ENABLED") and flags.enabled("PUBLIC_CONFIG_ENABLED")):
         return
+    from pv_growth.free_config.shared_public import growth_policy
+
+    if settings.env == "production" and not growth_policy(session).get("community_enabled", False):
+        return
     timeout = max(5.0, settings.health_check_timeout_seconds * 2)
     with httpx.Client(timeout=timeout, follow_redirects=True) as client:
         collect_and_stage(session, client, settings)
@@ -30,6 +34,10 @@ def collect_job(session: Session, settings: Settings, payload: dict) -> None:
 def publish_job(session: Session, settings: Settings, payload: dict) -> None:
     flags = FlagService(settings)
     if not (flags.enabled("FREE_CONFIG_ENABLED") and flags.enabled("PUBLIC_CONFIG_ENABLED")):
+        return
+    from pv_growth.free_config.shared_public import growth_policy
+
+    if settings.env == "production" and not growth_policy(session).get("community_enabled", False):
         return
     if not settings.telegram_bot_token or not settings.free_channel_id:
         log.warning("free config publish skipped: Telegram channel not configured")

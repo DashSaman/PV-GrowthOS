@@ -364,18 +364,26 @@ def test_14_service_state_and_disable(adapter, fake_panel):
     assert fake_panel.panel_client(out["service_ref"]) is None  # removed upstream
 
 
-def test_15_replayed_telegram_update(settings, fake_panel, campaign):
+def test_15_replayed_telegram_update(settings, fake_panel, campaign, monkeypatch):
     """A replayed Telegram callback update must not provision twice."""
     adapter = make_adapter(fake_panel, settings)
     import pv_growth.api.webhooks as wh
     import pv_growth.provisioning.xui as xui_mod
     from pv_growth.api.webhooks import process_update
+    from pv_growth.free_config.audience import AudienceDecision
     from pv_growth.telegram.client import FakeTelegramTransport, TelegramClient
+
+    monkeypatch.setattr(
+        "pv_growth.free_config.audience.decision_for_user",
+        lambda *a: AudienceDecision(True, "never_purchased"),
+    )
 
     _orig_get = xui_mod.get_provisioning
     _orig_settings = wh.get_settings
     _orig_tel = wh._telegram
-    fake_tg = TelegramClient(FakeTelegramTransport(), settings)
+    transport = FakeTelegramTransport()
+    transport.canned["getChatMember"] = {"status": "member"}
+    fake_tg = TelegramClient(transport, settings)
     wh._telegram = lambda: fake_tg
     xui_mod.get_provisioning = lambda s: adapter
     wh.get_settings = lambda: settings.model_copy(
@@ -385,6 +393,7 @@ def test_15_replayed_telegram_update(settings, fake_panel, campaign):
             "provisioning_base_url": "https://panel.test",
             "provisioning_token": "tok",
             "provisioning_sublink": "https://sub.test/link",
+            "free_channel_id": "@pvnetwork_freeconfig",
         }
     )
     try:
@@ -394,6 +403,7 @@ def test_15_replayed_telegram_update(settings, fake_panel, campaign):
                 "id": "cb1",
                 "from": {"id": 88011, "username": "prov_user"},
                 "data": f"claim:{campaign.code}",
+                "message": {"chat": {"id": 88011}},
             },
         }
         process_update(upd)

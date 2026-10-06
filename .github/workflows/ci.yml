@@ -77,7 +77,7 @@ jobs:
           python -m alembic -c alembic.ini upgrade head
           python -m alembic -c alembic.ini downgrade 0008
           python -m alembic -c alembic.ini upgrade head
-          python -m alembic -c alembic.ini current | grep '0011 (head)'
+          python -m alembic -c alembic.ini current | grep '0012 (head)'
 
   security:
     runs-on: ubuntu-latest

@@ -5,6 +5,7 @@ traffic when the bot token is not configured."""
 from __future__ import annotations
 
 import hmac
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -39,6 +40,7 @@ class TgCallback(BaseModel):
     id: str = ""
     from_: TgUser | None = Field(default=None, alias="from")
     data: str | None = None
+    message: TgMessage | None = None
 
 
 class TgUpdate(BaseModel):
@@ -110,10 +112,139 @@ def _purchase_keyboard(*, include_free: bool = True):
     return InlineKeyboard(rows)
 
 
+def _free_context(start_param: str | None) -> str | None:
+    from pv_growth.free_config.membership import valid_context
+
+    if not start_param or not start_param.startswith("freecfg_"):
+        return None
+    param = start_param[len("freecfg_") :]
+    if param == "pv_daily_lottery":
+        context = "lottery:pv_daily_lottery"
+    elif param == "welcome_100":
+        context = "gift:pv_welcome_100"
+    elif match := re.fullmatch(r"shared_(\d{4}-\d{2}-\d{2})_(\d+)", param):
+        context = f"shared:{match[1]}:{match[2]}"
+    elif match := re.fullmatch(r"community_([1-9]\d*)", param):
+        context = f"community:{match[1]}"
+    else:
+        context = f"claim:{param}"
+    return context if valid_context(context) else None
+
+
+def _free_audience_verified(session, settings, user_id: int) -> bool:
+    from pv_growth.database.models import AppConfig
+    from pv_growth.free_config.audience import decision_for_user
+
+    policy = session.get(AppConfig, "free_audience_policy", populate_existing=True)
+    if policy is not None:
+        if not isinstance(policy.value, dict):
+            return False
+        days = policy.value.get("dormant_days", 45)
+        if type(days) is not int or days < 45:
+            return False
+    try:
+        decision = decision_for_user(session, settings, user_id)
+        return decision.eligible and decision.reason in {"never_purchased", "dormant"}
+    except Exception:
+        return False
+
+
+def _membership_ready(client, settings, user, context: str) -> bool:
+    from pv_growth.free_config.membership import join_prompt, membership_for_user
+
+    decision = membership_for_user(client, settings, user.telegram_user_id)
+    if not decision.eligible:
+        text, keyboard = join_prompt(context, reason=decision.reason)
+        _safe_send(client, user.telegram_user_id, text, keyboard)
+    return decision.eligible
+
+
+def _free_dialogue(client, session, settings, user, context: str) -> None:
+    from pv_growth.core.flags import FlagService
+    from pv_growth.free_config.lottery import _enabled
+    from pv_growth.telegram.client import InlineKeyboard
+
+    if context.startswith("community:"):
+        _safe_send(
+            client,
+            user.telegram_user_id,
+            "این پیشنهاد دیگر در دسترس نیست.",
+            _purchase_keyboard(include_free=False),
+        )
+        return
+    if not _free_audience_verified(session, settings, user.id):
+        from pv_growth.free_config.sales_copy import main_service_pitch
+
+        _safe_send(
+            client,
+            user.telegram_user_id,
+            main_service_pitch(include_trial=False),
+            _purchase_keyboard(include_free=False),
+        )
+        return
+    if not _membership_ready(client, settings, user, context):
+        return
+    if context == "gift:pv_welcome_100":
+        from pv_growth.free_config.welcome_gift import gift_enabled
+
+        if not gift_enabled(session, settings, FlagService(settings)):
+            _safe_send(
+                client,
+                user.telegram_user_id,
+                "پیشنهاد اشانتیون امروز فعلاً قابل دریافت نیست.",
+                _purchase_keyboard(include_free=False),
+            )
+            return
+        text = (
+            "🎁 اشانتیون امروز: ۱۰۰ مگابایت از پلن تانل اصلی PV Network\n"
+            "⏳ اعتبار حداکثر ۲۴ ساعت یا پایان حجم؛ یک بار برای هر نفر.\n"
+            "فقط برای کاربران ربات اصلی بدون هیچ سابقهٔ خرید و بدون سرویس فعال، با عضویت در هر دو کانال.\n"
+            "برای دریافت روی دکمه بزنید."
+        )
+        label = "🎁 دریافت اشانتیون ۱۰۰ مگی"
+    elif context == "lottery:pv_daily_lottery":
+        if not _enabled(session, FlagService(settings)):
+            _safe_send(
+                client,
+                user.telegram_user_id,
+                "قرعه‌کشی فعلاً فعال نیست.",
+                _purchase_keyboard(include_free=False),
+            )
+            return
+        text = (
+            "🎲 قرعه‌کشی روزانهٔ تست اختصاصی PV Network\n"
+            "برای شرکت روی دکمه بزنید؛ ثبت‌نام به معنی دریافت فوری نیست.\n"
+            "قرعه‌کشی ساعت ۲۳ تهران؛ ثبت‌نام بعد از آن برای روز بعد است.\n"
+            "حجم هر برنده ۵۰ تا ۱۰۲۴ مگابایت، معتبر حداکثر ۲۴ ساعت یا پایان حجم.\n"
+            "عضویت در هر دو کانال الزامی است؛ فقط افراد بدون خرید در ۴۵ روز اخیر "
+            "و بدون سرویس فعال واجد شرایط‌اند."
+        )
+        label = "🎲 شرکت در قرعه‌کشی"
+    else:
+        text = (
+            "🎁 برای دریافت کانفیگ رایگان، دکمهٔ زیر را بزنید.\n"
+            "عضویت در هر دو کانال الزامی است؛ فقط افراد بدون خرید در ۴۵ روز اخیر "
+            "و بدون سرویس فعال واجد شرایط‌اند."
+        )
+        label = "🚀 دریافت کانفیگ"
+    _safe_send(
+        client, user.telegram_user_id, text, InlineKeyboard([[{"text": label, "callback_data": context}]])
+    )
+
+
 def _handle_message(client, message: TgMessage) -> None:
     settings = get_settings()
     text = (message.text or "").strip()
     tg_user = message.from_
+    chat_id = message.chat.get("id")
+    if (
+        tg_user is None
+        or tg_user.id <= 0
+        or type(chat_id) is not int
+        or chat_id != tg_user.id
+        or message.chat.get("type", "private") != "private"
+    ):
+        return
 
     from pv_growth.attribution.service import attribute
     from pv_growth.events.service import get_or_create_user, ingest
@@ -143,46 +274,42 @@ def _handle_message(client, message: TgMessage) -> None:
             attribute(session, user.id, start_param)
             referrals.handle_bot_start(session, user.id, start_param)
             partners.handle_bot_start(session, user.id, start_param)
-            if free_allowed and start_param and start_param.startswith("freecfg_"):
-                from pv_growth.telegram.client import InlineKeyboard
-
+            context = _free_context(start_param)
+            if context is not None:
+                _free_dialogue(client, session, settings, user, context)
+                return
+            if start_param and start_param.startswith("freecfg_"):
                 _safe_send(
-                    client,
-                    message.chat.get("id"),
-                    "🎁 کانفیگ رایگان PV Network آماده است!\nروی دکمه بزن تا دریافت کنی:",
-                    InlineKeyboard(
-                        [
-                            [
-                                {
-                                    "text": "🚀 دریافت کانفیگ",
-                                    "callback_data": f"claim:{start_param[len('freecfg_') :]}",
-                                },
-                            ]
-                        ]
-                    ),
+                    client, chat_id, "این پیشنهاد دیگر در دسترس نیست.", _purchase_keyboard(include_free=False)
                 )
-            else:
-                _safe_send(
-                    client,
-                    message.chat.get("id"),
-                    "سلام! به PV Network خوش آمدید.\n"
-                    "برای خرید سرویس و مشاهدهٔ تعرفه‌ها از گزینهٔ زیر استفاده کنید.",
-                    _purchase_keyboard(include_free=free_allowed),
-                )
-        elif text.startswith("/help"):
-            from pv_growth.free_config.audience import decision_for_user
+                return
+            from pv_growth.free_config.sales_copy import main_service_pitch
 
             _safe_send(
                 client,
                 message.chat.get("id"),
-                "برای خرید و تعرفه‌ها وارد ربات اصلی شوید.",
-                _purchase_keyboard(include_free=decision_for_user(session, settings, user.id).eligible),
+                main_service_pitch(include_trial=free_allowed),
+                _purchase_keyboard(include_free=free_allowed),
+            )
+        elif text.startswith("/help"):
+            from pv_growth.free_config.audience import decision_for_user
+            from pv_growth.free_config.sales_copy import main_service_pitch
+
+            free_allowed = decision_for_user(session, settings, user.id).eligible
+            _safe_send(
+                client,
+                message.chat.get("id"),
+                main_service_pitch(include_trial=free_allowed),
+                _purchase_keyboard(include_free=free_allowed),
             )
         elif text.startswith("/claim"):
             parts = text.split()
             if len(parts) == 2:
                 _handle_callback(
-                    client, TgCallback(id=str(message.message_id), from_=tg_user, data=f"claim:{parts[1]}")
+                    client,
+                    TgCallback(
+                        id=str(message.message_id), from_=tg_user, message=message, data=f"claim:{parts[1]}"
+                    ),
                 )
             else:
                 _safe_send(client, message.chat.get("id"), "استفاده: /claim <کد کمپین>")
@@ -191,6 +318,16 @@ def _handle_message(client, message: TgMessage) -> None:
 def _handle_callback(client, callback: TgCallback) -> None:
     settings = get_settings()
     data = callback.data or ""
+    chat = callback.message.chat if callback.message is not None else {}
+    if (
+        callback.from_ is None
+        or callback.from_.id <= 0
+        or type(chat.get("id")) is not int
+        or chat.get("id") != callback.from_.id
+        or chat.get("type", "private") != "private"
+    ):
+        _safe_answer(client, callback.id, "این دکمه را در گفت‌وگوی خصوصی ربات استفاده کنید.")
+        return
     from pv_growth.core.flags import FlagService
     from pv_growth.events.service import get_or_create_user
 
@@ -199,7 +336,86 @@ def _handle_callback(client, callback: TgCallback) -> None:
         user, _ = get_or_create_user(
             session, telegram_user_id=callback.from_.id, telegram_chat_id=callback.from_.id
         )
-        if data.startswith("claim:"):
+        from pv_growth.free_config.membership import valid_context
+
+        if data.startswith("memberships:"):
+            context = data[len("memberships:") :]
+            if valid_context(context):
+                _free_dialogue(client, session, settings, user, context)
+            _safe_answer(client, callback.id, "عضویت و شرایط دریافت دوباره بررسی شد.")
+            return
+        if data == "gift:pv_welcome_100":
+            from pv_growth.free_config.welcome_gift import request_gift
+
+            try:
+                outcome = request_gift(session, settings, flags, client, user_id=user.id)
+            except ValidationError as exc:
+                _safe_answer(client, callback.id, str(exc))
+                return
+            label = {
+                "delivered": "اشانتیون در گفت‌وگوی خصوصی ارسال شد.",
+                "already_reserved": "درخواست اشانتیون شما قبلاً ثبت شده است.",
+                "unavailable": "اشانتیون امروز فعلاً قابل دریافت نیست.",
+            }.get(outcome, "اشانتیون امروز فعلاً قابل دریافت نیست.")
+            _safe_answer(client, callback.id, label)
+            return
+        if data.startswith(("shared:", "community:")):
+            if not valid_context(data):
+                _safe_answer(client, callback.id, "این پیشنهاد دیگر در دسترس نیست.")
+                return
+            if data.startswith("community:"):
+                _safe_answer(client, callback.id, "این پیشنهاد دیگر در دسترس نیست.")
+                return
+            if not _free_audience_verified(session, settings, user.id):
+                _safe_answer(client, callback.id, "شرایط خرید ۴۵ روز اخیر و سرویس فعال شما تأیید نشد.")
+                return
+            if not _membership_ready(client, settings, user, data):
+                _safe_answer(client, callback.id, "عضویت در هر دو کانال باید تأیید شود.")
+                return
+            from pv_growth.free_config.gated_delivery import deliver_config
+
+            try:
+                outcome = deliver_config(session, settings, flags, client, user_id=user.id, context=data)
+            except ValidationError as exc:
+                _safe_answer(client, callback.id, str(exc))
+                return
+            label = {
+                "delivered": "کانفیگ در گفت‌وگوی خصوصی ارسال شد.",
+                "already_delivered": "درخواست این کانفیگ قبلاً ثبت شده؛ دوباره ارسال نمی‌شود.",
+                "unavailable": "این کانفیگ فعلاً قابل دریافت نیست؛ کانفیگ‌های تازه را بررسی کنید.",
+            }[outcome]
+            _safe_answer(client, callback.id, label)
+            return
+        if data.startswith(("lottery:", "claim:")):
+            if not valid_context(data):
+                _safe_answer(client, callback.id, "درخواست نامعتبر است.")
+                return
+            if not _free_audience_verified(session, settings, user.id):
+                _safe_answer(client, callback.id, "شرایط خرید ۴۵ روز اخیر و سرویس فعال شما تأیید نشد.")
+                return
+            if not _membership_ready(client, settings, user, data):
+                _safe_answer(client, callback.id, "عضویت در هر دو کانال باید تأیید شود.")
+                return
+        if data.startswith("lottery:"):
+            from pv_growth.free_config.lottery import enter_lottery
+
+            try:
+                entry, is_new = enter_lottery(
+                    session,
+                    settings,
+                    flags,
+                    campaign_code=data.split(":", 1)[1],
+                    user_id=user.id,
+                )
+                session.commit()
+            except ValidationError as exc:
+                _safe_answer(client, callback.id, str(exc))
+                return
+            label = "ثبت شد" if is_new else "قبلاً ثبت شده"
+            _safe_answer(
+                client, callback.id, f"{label}؛ قرعه‌کشی {entry.draw_date.isoformat()} ساعت ۲۳ تهران."
+            )
+        elif data.startswith("claim:"):
             campaign_code = data.split(":", 1)[1]
             from pv_growth.free_config.exclusive import claim_exclusive
             from pv_growth.provisioning import xui as _xui
