@@ -223,6 +223,34 @@ def test_lifecycle_job_persists_failed_delivery_and_retries(settings, session, m
     assert row.attempts == 1
 
 
+def test_blocked_lifecycle_job_is_terminal_noop(settings, session, msg_env, monkeypatch):
+    from pv_growth.lifecycle import service as lifecycle
+
+    user = _user_with_trial(session, 8117)
+    user.is_blocked = True
+    session.flush()
+    monkeypatch.setattr(
+        "pv_growth.lifecycle.service.FlagService",
+        lambda _settings: _flags_on(settings),
+    )
+    monkeypatch.setattr(
+        "pv_growth.lifecycle.service._telegram_or_fail",
+        lambda _settings: msg_env["tg"],
+    )
+
+    lifecycle._followup_job(
+        session,
+        settings,
+        {
+            "rule_code": msg_env["rule"],
+            "user_id": user.id,
+            "send_ordinal": 1,
+        },
+    )
+
+    assert not msg_env["tg"]._t.sent_texts()
+
+
 def test_ambiguous_delivery_is_unknown_and_never_blindly_resent(settings, session, msg_env):
     user = _user_with_trial(session, 8115)
     transport = _FailingTransport(TelegramDeliveryUnknownError("read timed out"))

@@ -152,8 +152,8 @@ def _followup_job(session: Session, settings: Settings, payload: dict) -> None:
         status = send_followup(session, settings, flags, telegram, payload)
     except TelegramRetryableError as exc:
         raise RetryableJobError(str(exc)) from exc
-    if status in {"blocked"}:
-        raise RuntimeError("lifecycle disabled or user blocked")  # retried later
+    if status == "blocked":
+        log.info("lifecycle followup blocked; treating as terminal no-op")
 
 
 def _telegram_or_fail(settings: Settings):
