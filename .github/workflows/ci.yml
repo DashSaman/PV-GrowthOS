@@ -109,6 +109,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p dist
+          cp scripts/backup.sh dist/backup.sh
           docker save pv-growth-app:${{ github.sha }} -o dist/pv-growth-app-${{ github.sha }}.tar
           (cd dist && sha256sum pv-growth-app-${{ github.sha }}.tar > pv-growth-app-${{ github.sha }}.tar.sha256)
       - name: Upload production image artifact
@@ -119,5 +120,6 @@ jobs:
           path: |
             dist/pv-growth-app-${{ github.sha }}.tar
             dist/pv-growth-app-${{ github.sha }}.tar.sha256
+            dist/backup.sh
           if-no-files-found: error
           retention-days: 14
