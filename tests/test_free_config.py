@@ -119,6 +119,14 @@ def test_publish_is_idempotent_double_run(session, env, monkeypatch):
     sent = [p.get("text", "") for m, p in env["telegram"]._t.calls if m == "sendMessage"]
     assert len(sent) == 1  # acceptance: two scheduled posts cannot duplicate
     assert "کامانیوتی" in sent[0] or "PV Network" in sent[0]  # public label present
+    # The channel promise is an actually usable free config, not just a label.
+    published = session.query(PublishedPost).filter_by(kind="free_public").one()
+    config = session.get(
+        __import__("pv_growth.database.models", fromlist=["RawConfig"]).RawConfig, published.config_id
+    )
+    assert config.raw_uri in sent[0]
+    payload = [p for m, p in env["telegram"]._t.calls if m == "sendMessage"][0]
+    assert payload["reply_markup"]["inline_keyboard"][0][0]["url"] == "https://t.me/pvnetwork_bot"
 
 
 def test_unhealthy_configs_never_publish(session, env, monkeypatch):
