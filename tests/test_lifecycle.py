@@ -418,3 +418,25 @@ def test_segment_recompute_prefetches_population_in_batches(session):
     for offset in range(25):
         user, _ = get_or_create_user(session, telegram_user_id=8400 + offset)
         ingest(
+            session,
+            "BOT_STARTED",
+            user_id=user.id,
+            idempotency_key=f"bounded-segment:{offset}",
+        )
+    session.flush()
+    statements = 0
+
+    def _count_select(conn, cursor, statement, parameters, context, executemany):
+        nonlocal statements
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements += 1
+
+    bind = session.get_bind()
+    event.listen(bind, "before_cursor_execute", _count_select)
+    try:
+        counts = recompute_all(session, batch_size=100)
+    finally:
+        event.remove(bind, "before_cursor_execute", _count_select)
+
+    assert sum(counts.values()) >= 25
+    assert statements <= 5
