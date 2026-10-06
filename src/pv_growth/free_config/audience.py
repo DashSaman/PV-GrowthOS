@@ -117,9 +117,11 @@ def decision_for_user(session: Session, settings: Settings, user_id: int) -> Aud
     if not isinstance(enabled, bool):
         return AudienceDecision(False, "invalid_policy")
     if not enabled:
-        return AudienceDecision(True, "policy_disabled")
+        return AudienceDecision(settings.env != "production", "policy_disabled")
     days = config.get("dormant_days", DEFAULT_DORMANT_DAYS)
     if type(days) is not int or not 1 <= days <= 365:
+        return AudienceDecision(False, "invalid_policy")
+    if settings.env == "production" and days < DEFAULT_DORMANT_DAYS:
         return AudienceDecision(False, "invalid_policy")
     user = session.get(User, user_id)
     if user is None or user.is_blocked or not user.telegram_user_id:

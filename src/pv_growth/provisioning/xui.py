@@ -49,7 +49,14 @@ def client_email_for(idempotency_key: str) -> str:
 
 class PVProvisioningAdapter(Protocol):
     def create_temp_service(
-        self, *, location: str, traffic_gb: int, validity_hours: int, protocol: str, idempotency_key: str
+        self,
+        *,
+        location: str,
+        traffic_gb: int,
+        validity_hours: int,
+        protocol: str,
+        idempotency_key: str,
+        traffic_bytes: int | None = None,
     ) -> dict: ...
     def service_state(self, service_ref: str) -> dict: ...
     def disable_service(self, service_ref: str) -> bool: ...
@@ -102,14 +109,26 @@ class XUIProvisioningAdapter:
             return False
 
     def create_temp_service(
-        self, *, location: str, traffic_gb: int, validity_hours: int, protocol: str, idempotency_key: str
+        self,
+        *,
+        location: str,
+        traffic_gb: int,
+        validity_hours: int,
+        protocol: str,
+        idempotency_key: str,
+        traffic_bytes: int | None = None,
     ) -> dict:
+        quota = int(traffic_gb) * 1024**3 if traffic_bytes is None else traffic_bytes
+        if type(quota) is not int or quota <= 0 or quota > 1024**4:
+            raise ValidationError("invalid exact traffic quota")
+        if type(validity_hours) is not int or not 1 <= validity_hours <= 168 or not idempotency_key:
+            raise ValidationError("invalid temporary service policy")
         email = client_email_for(idempotency_key)
         payload = {
             "inboundIds": [int(x) for x in str(self._s.provisioning_inbound_ids).split(",") if x.strip()],
             "client": {
                 "email": email,
-                "totalGB": int(traffic_gb) * 1024 * 1024 * 1024,
+                "totalGB": quota,
                 "expiryTime": int((time.time() + validity_hours * 3600) * 1000),
                 "enable": True,
                 "tgId": 0,
@@ -123,6 +142,9 @@ class XUIProvisioningAdapter:
             # fetch it instead of creating a second account
             existing = self._get_or_none(email)
             if existing is not None:
+                found = existing.get("client") if isinstance(existing.get("client"), dict) else existing
+                if found.get("totalGB") != quota:
+                    raise ProvisioningError("idempotent client quota mismatch")
                 log.info("provision idempotent hit", service_ref=email)
                 return self._service_payload(email, existing, replayed=True)
             raise ProvisioningError(f"xui add failed: {str(result.get('msg'))[:120]}")
@@ -140,7 +162,13 @@ class XUIProvisioningAdapter:
     def _get_or_none(self, email: str) -> dict | None:
         result = self._call("GET", f"/panel/api/clients/get/{email}")
         if result.get("success") is not True:
-            return None
+            if result.get("_status") == 404 or str(result.get("msg", "")).lower().strip() in {
+                "not found",
+                "client not found",
+                "client not found.",
+            }:
+                return None
+            raise ProvisioningError("panel client lookup unavailable")
         obj = result.get("obj")
         if not isinstance(obj, dict) or not obj:
             return None
@@ -157,15 +185,20 @@ class XUIProvisioningAdapter:
         config_uri = f"{sublink}/{sub_id}" if sub_id and sublink else None
         return {
             "service_ref": email,
+            "client_id": client.get("id"),
+            "sub_id": sub_id,
             "config_uri": config_uri,
             "subscription_url": config_uri,
             "traffic_gb": (client.get("totalGB") or 0) // (1024**3),
+            "traffic_bytes": client.get("totalGB") or 0,
             "expiry_ts_ms": client.get("expiryTime") or 0,
             "enabled": client.get("enable", True),
             "replayed": replayed,
         }
 
     def service_state(self, service_ref: str) -> dict:
+        if not service_ref.startswith(EMAIL_PREFIX):
+            raise ValidationError("refusing non GrowthOS-owned service lookup")
         obj = self._get_or_none(service_ref)
         if obj is None:
             return {"exists": False}
@@ -175,9 +208,14 @@ class XUIProvisioningAdapter:
         down = obj.get("down") or client.get("down") or 0
         return {
             "exists": True,
+            "client_id": client.get("id"),
+            "sub_id": client.get("subId") or obj.get("subId"),
             "enabled": client.get("enable", True),
             "traffic_limit_gb": total // (1024**3),
             "traffic_used_gb": round((up + down) / (1024**3), 3),
+            "traffic_limit_bytes": total,
+            "traffic_used_bytes": up + down,
+            "quota_exhausted": bool(total > 0 and up + down >= total),
             "expiry_ts_ms": client.get("expiryTime") or 0,
             "expired": bool(
                 client.get("expiryTime")

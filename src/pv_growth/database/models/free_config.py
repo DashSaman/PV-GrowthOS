@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from pv_growth.database.types import Base, Json, utcnow
@@ -91,6 +91,7 @@ class ExclusiveClaim(Base):
     claim_date: Mapped[date] = mapped_column(Date, nullable=False)
 
     traffic_gb: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    traffic_bytes: Mapped[int | None] = mapped_column(BigInteger)
     validity_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     location: Mapped[str | None] = mapped_column(String(64))
     service_ref: Mapped[str | None] = mapped_column(String(128))

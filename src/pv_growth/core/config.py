@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     health_check_max: int = 5
     health_check_concurrency: int = 3
     health_check_timeout_seconds: float = 4.0
+    proxy_probe_binary: str = "/usr/local/bin/growth-xray"
+    proxy_probe_timeout_seconds: float = 12.0
+    proxy_probe_required: bool = False  # production always requires protocol proof
     publish_top_n: int = 2
     free_collect_interval_hours: int = 6
     free_publish_hours_utc: str = "8,17"

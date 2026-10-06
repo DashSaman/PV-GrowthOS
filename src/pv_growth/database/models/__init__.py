@@ -21,6 +21,7 @@ from pv_growth.database.models.free_config import (  # noqa: F401
     PublishedPost,
     RawConfig,
 )
+from pv_growth.database.models.free_growth import FreeAllocation, LotteryDraw, LotteryEntry  # noqa: F401
 from pv_growth.database.models.growth import (  # noqa: F401
     CommissionEntry,
     Milestone,

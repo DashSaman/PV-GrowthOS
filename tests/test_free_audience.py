@@ -155,6 +155,18 @@ def test_production_enforces_policy_without_config_row(session, settings, monkey
     assert not decision_for_user(session, settings.model_copy(update={"env": "production"}), user.id).eligible
 
 
+@pytest.mark.parametrize("policy", [{"enabled": False}, {"enabled": True, "dormant_days": 44}])
+def test_production_policy_cannot_relax_owner_45_day_rule(session, settings, policy, monkeypatch):
+    from pv_growth.free_config.audience import decision_for_user
+    from pv_growth.mirza_adapter.mysql_reader import MirzaMySQLReader
+
+    monkeypatch.setattr(MirzaMySQLReader, "fetch_free_audience_history", lambda *a: ([], [], []))
+    user, _ = get_or_create_user(session, telegram_user_id=85008)
+    session.add(AppConfig(key="free_audience_policy", value=policy))
+    session.flush()
+    assert not decision_for_user(session, settings.model_copy(update={"env": "production"}), user.id).eligible
+
+
 def test_read_queries_are_select_only_and_parameterized(settings):
     from pv_growth.mirza_adapter.mysql_reader import MirzaMySQLReader
 
@@ -226,10 +238,13 @@ def test_start_offer_checks_audience_and_keeps_complete_campaign_code(
 
     enable_policy(session)
     session.commit()
-    monkeypatch.setattr(webhooks, "get_settings", lambda: settings)
+    configured = settings.model_copy(update={"free_channel_id": "@pvnetwork_freeconfig"})
+    monkeypatch.setattr(webhooks, "get_settings", lambda: configured)
     history = ([], [], []) if eligible else ([invoice(1)], [], [])
     monkeypatch.setattr(MirzaMySQLReader, "fetch_free_audience_history", lambda self, tg: history)
-    telegram = TelegramClient(FakeTelegramTransport(), settings)
+    fake = FakeTelegramTransport()
+    fake.canned["getChatMember"] = {"status": "member"}
+    telegram = TelegramClient(fake, configured)
     message = webhooks.TgMessage.model_validate(
         {
             "message_id": 1,
@@ -245,3 +260,4 @@ def test_start_offer_checks_audience_and_keeps_complete_campaign_code(
         assert buttons[0]["callback_data"] == "claim:complete_campaign"
     else:
         assert buttons == [{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}]
+        assert "تست رایگان" not in payload["text"]

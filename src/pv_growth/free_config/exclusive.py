@@ -69,7 +69,14 @@ class FakeProvisioningClient:
         return True  # guard-compatible
 
     def create_temp_service(
-        self, *, location: str, traffic_gb: int, validity_hours: int, protocol: str, idempotency_key: str = ""
+        self,
+        *,
+        location: str,
+        traffic_gb: int,
+        validity_hours: int,
+        protocol: str,
+        idempotency_key: str = "",
+        traffic_bytes: int | None = None,
     ) -> dict:
         from pv_growth.provisioning.xui import client_email_for
 
@@ -78,6 +85,7 @@ class FakeProvisioningClient:
             "config_uri": f"{protocol}://fake@{location}.pv.test:443",
             "expiry_ts_ms": 0,
             "replayed": False,
+            "traffic_bytes": traffic_bytes if traffic_bytes is not None else traffic_gb * 1024**3,
         }
         self.created.append({**payload, "location": location})
         return payload
@@ -164,18 +172,25 @@ def provision_reserved_claim(
     from pv_growth.free_config.audience import guard_reserved_claim
     from pv_growth.provisioning.guard import check_backend
 
+    if settings.env == "production":
+        claim.status = "audience_blocked"
+        claim.last_provision_error = "production grants require the budgeted lottery delivery path"
+        return False
+
     if not guard_reserved_claim(session, settings, claim):
         return False
 
     claim.provision_attempts += 1
     try:
         check_backend(session, provisioning)
+        extra = {"traffic_bytes": claim.traffic_bytes} if claim.traffic_bytes is not None else {}
         service = provisioning.create_temp_service(
             location=claim.location or "auto",
             traffic_gb=claim.traffic_gb,
             validity_hours=claim.validity_hours,
             protocol=str((claim.config_payload or {}).get("protocol") or "vless"),
             idempotency_key=claim.claim_key,
+            **extra,
         )
         service_ref = service.get("service_ref")
         config_uri = service.get("config_uri")
@@ -187,6 +202,7 @@ def provision_reserved_claim(
             "config_uri": config_uri,
             "expiry_ts_ms": service.get("expiry_ts_ms"),
             "replayed": bool(service.get("replayed")),
+            "traffic_bytes": service.get("traffic_bytes"),
         }
         claim.status = "active"
         claim.last_provision_error = None
@@ -233,6 +249,10 @@ def claim_exclusive(
     campaign = get_by_code(session, campaign_code)
     if campaign is None or campaign.kind != "free_config_exclusive":
         raise ValidationError("unknown exclusive campaign")
+    if settings.env == "production":
+        raise ValidationError("دریافت تست شخصی فقط از مسیر قرعه‌کشی روزانه انجام می‌شود.")
+    if (campaign.config or {}).get("lottery") or campaign.code == "pv_daily_lottery":
+        raise ValidationError("lottery campaigns require an opt-in draw")
 
     from pv_growth.free_config.audience import require_free_audience
 

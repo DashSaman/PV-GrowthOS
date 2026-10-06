@@ -8,11 +8,39 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime
 
 from pv_growth.core.config import Settings
 from pv_growth.core.logging import get_logger
 
 log = get_logger("scheduler")
+
+
+def enqueue_free_growth(session, settings: Settings, now: datetime | None = None) -> None:
+    from pv_growth.database.types import utcnow
+    from pv_growth.free_config.shared_public import SHARED_HOURS_UTC, growth_policy, local_day
+    from pv_growth.jobs import service as jobs
+
+    now = now or utcnow()
+    day = local_day(now).isoformat()
+    policy = growth_policy(session)
+    if policy.get("public_shared_enabled") and now.hour in SHARED_HOURS_UTC:
+        slot = SHARED_HOURS_UTC.index(now.hour) + 1
+        jobs.enqueue(
+            session,
+            "free_config.shared_publish",
+            {"day": day, "slot": slot},
+            idempotency_key=f"shared_publish:{day}:{slot}",
+            max_attempts=3,
+        )
+    if policy.get("lottery_enabled") and now.hour == 19 and now.minute >= 30:
+        jobs.enqueue(
+            session,
+            "free_config.lottery_draw",
+            {"day": day, "campaign_code": "pv_daily_lottery"},
+            idempotency_key=f"lottery_draw:{day}",
+            max_attempts=3,
+        )
 
 
 class Scheduler:
@@ -58,6 +86,7 @@ class Scheduler:
         from pv_growth.jobs import service as jobs
 
         with session_scope(self._settings) as session:
+            enqueue_free_growth(session, self._settings)
             # lifecycle scan every interval; dedupe key collapses overlapping ticks
             bucket = int(time.time() // self._settings.scheduler_interval_seconds)
             jobs.enqueue(session, "lifecycle.scan", {}, idempotency_key=f"lifecycle_scan:{bucket}")

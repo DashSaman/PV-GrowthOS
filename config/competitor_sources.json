@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "purpose": "manual_competitor_research_only",
+  "verified_at": "2026-10-06",
+  "runtime_imported": false,
+  "watcher_enabled": false,
+  "coverage": "bounded_sample_of_10_persian_language_VPN_sales_rivals_not_exhaustive",
+  "import_warning": "Do not POST this file to the existing admin competitor-sources endpoint: it defaults is_active=true and does not accept this field. This file has no importer. Keep monitoring disabled.",
+  "sources": [
+    {
+      "id": "vaslino",
+      "name": "وصلینو / Vaslino",
+      "url": "https://t.me/s/VaslinoVPN",
+      "sales_funnel": "محتوای عمومی و گزارش اتصال ← تست در ربات ← خرید",
+      "cta_urls": [
+        "https://t.me/vaslinobot",
+        "https://t.me/Vaslino_sup"
+      ],
+      "evidence_urls": [
+        "https://t.me/s/VaslinoVPN",
+        "https://t.me/VaslinoVPN/321"
+      ],
+      "observed_evidence": "دعوت تکراری به تست رایگان و خرید در ربات؛ پست آزمایش با ذکر اپراتور و مسیرهای جدا برای آموزش و رضایت مشتری.",
+      "proof_presentation": "ویدیو/گزارش اتصال و کانال رضایت؛ صحت نتایج مستقل سنجیده نشده.",
+      "access_limitations": "صفحه عمومی قابل خواندن؛ ویدیو و جریان داخلی ربات آزمایش نشده.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    },
+    {
+      "id": "account-net",
+      "name": "Account Net VPN",
+      "url": "https://telegram.me/s/account_network",
+      "sales_funnel": "گزارش اتصال به تفکیک اپراتور ← خرید و پشتیبانی در پیام",
+      "cta_urls": [
+        "https://t.me/account_net_support"
+      ],
+      "evidence_urls": [
+        "https://telegram.me/s/account_network",
+        "https://t.me/account_network/1659"
+      ],
+      "observed_evidence": "گزارش‌های اتصال با نام شبکه و پروتکل؛ فروش کانفیگ و اکانت برندهای دیگر؛ لینک کانال اعتماد. تست رایگان در صفحه بررسی‌شده احراز نشد.",
+      "proof_presentation": "گزارش اتصال و کانال اعتماد، بدون تایید مستقل کیفیت.",
+      "access_limitations": "صفحه عمومی قابل خواندن؛ خرید، اصالت اکانت‌ها و پاسخ پشتیبانی آزمایش نشده.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    },
+    {
+      "id": "amn-net",
+      "name": "امن‌نت / Amn Net",
+      "url": "https://telegram.me/s/amn_net",
+      "sales_funnel": "دعوت به تست ← خرید ربات ← پشتیبانی و رسیدگی به اختلال در ربات",
+      "cta_urls": [
+        "https://t.me/Amnnet_admin_bot",
+        "https://t.me/AmnNetSupport"
+      ],
+      "evidence_urls": [
+        "https://telegram.me/s/amn_net",
+        "https://t.me/amn_net/1225"
+      ],
+      "observed_evidence": "تست پیش از خرید؛ اطلاعیه اختلال و رفع آن؛ درخواست Refresh اشتراک؛ شرح اعتبار کیف پول برای مرجوعی و جبران مدت سرویس.",
+      "proof_presentation": "اطلاع‌رسانی عملیاتی روشن؛ اجرای مرجوعی و جبران اعتبار مستقلاً تایید نشده.",
+      "access_limitations": "صفحه عمومی قابل خواندن؛ آخرین اعلان فروشنده تضمین اتصال فعلی نیست.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    },
+    {
+      "id": "bunjee",
+      "name": "Bunjee VPN",
+      "url": "https://bunjeevpn.com/%D8%AE%D8%B1%DB%8C%D8%AF-vpn-%D8%A2%DB%8C%D9%81%D9%88%D9%86/",
+      "sales_funnel": "صفحه مخصوص آیفون ← تست اعلام‌شده ۲۴ ساعته در تلگرام یا انتخاب پلن سایت",
+      "cta_urls": [
+        "https://t.me/vpn_admin"
+      ],
+      "evidence_urls": [
+        "https://bunjeevpn.com/%D8%AE%D8%B1%DB%8C%D8%AF-vpn-%D8%A2%DB%8C%D9%81%D9%88%D9%86/"
+      ],
+      "observed_evidence": "پلن‌ها و راهنمای نصب آیفون کنار CTA تست و خرید؛ آیپی ثابت، اپل‌آیدی، اینستاگرام و ترید در پیام فروش مطرح شده‌اند.",
+      "proof_presentation": "آموزش مرحله‌ای و ویژگی‌های ادعایی؛ ادعاهای مسدودنشدن حساب/باتری به عنوان حقیقت پذیرفته نشده.",
+      "access_limitations": "صفحه سایت قابل خواندن؛ لینک تست به @vpn_admin رسید، حساب تست و خرید اجرا نشده.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    },
+    {
+      "id": "openinc",
+      "name": "OPEN INC. VPN",
+      "url": "https://t.me/s/openinc",
+      "sales_funnel": "محتوای چندکاربردی و پراکسی رایگان ← تست/خرید/تمدید با ربات یا پشتیبانی",
+      "cta_urls": [
+        "https://t.me/openincvpnbot",
+        "https://t.me/openinc1"
+      ],
+      "evidence_urls": [
+        "https://t.me/s/openinc"
+      ],
+      "observed_evidence": "فروش فارسی با جایگاه آیپی ثابت و اختصاصی؛ کاربرد گیم، ترید و آپلود؛ تست، پراکسی رایگان، معرفی دوستان و سیاست‌های بازگشت وجه در پست‌ها.",
+      "proof_presentation": "تنوع خدمات و پنل/آموزش؛ عبارات اعتماد و عملکرد تایید مستقل ندارند.",
+      "access_limitations": "صفحه عمومی قابل خواندن؛ پست‌ها شرایط متفاوت دارند، سیاست فعلی داخل خرید بررسی نشده.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    },
+    {
+      "id": "neptun",
+      "name": "نپتون / Neptun VPN",
+      "url": "https://t.me/s/neptun_vpn",
+      "sales_funnel": "پست قیمت/کاربرد ← تست اعلام‌شده یک‌روزه ← خرید از ربات یا پشتیبانی",
+      "cta_urls": [
+        "https://t.me/NeptunSupportBot",
+        "https://t.me/NeptunVPN_bot"
+      ],
+      "evidence_urls": [
+        "https://t.me/s/neptun_vpn"
+      ],
+      "observed_evidence": "تست پیش از خرید؛ نسخه‌های متعدد قیمت و شناسه پشتیبانی؛ هدیه دعوت دوستان در بعضی پست‌ها؛ اشاره به آیپی ثابت و ترید.",
+      "proof_presentation": "پیشنهاد تست و فهرست کاربردها؛ اثربخشی، فروش و اجرای هدیه تایید نشده.",
+      "access_limitations": "صفحه عمومی قابل خواندن؛ اختلاف پست‌ها مانع فرض یک قیمت یا مسیر قطعی فعلی می‌شود.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    },
+    {
+      "id": "blastpath",
+      "name": "BlastPathVPN",
+      "url": "https://t.me/s/blastpath",
+      "sales_funnel": "کانفیگ/ساب عمومی و آموزش ← تست ربات ← خرید؛ مسیر پشتیبانی هنگام اختلال ربات",
+      "cta_urls": [
+        "https://t.me/BlastPath_bot",
+        "https://t.me/BlastPath_sup"
+      ],
+      "evidence_urls": [
+        "https://t.me/s/blastpath"
+      ],
+      "observed_evidence": "ساب رایگان با آموزش و لینک فروشگاه؛ CTA اکانت تست؛ شرایط رسید کارت‌به‌کارت و تغییر شناسه/مسیر پشتیبانی علنی شده.",
+      "proof_presentation": "شفافیت فرایند خرید و ساعات رسیدگی؛ ضمانت فروشنده مستقلاً آزموده نشده.",
+      "access_limitations": "صفحه عمومی قابل خواندن؛ ربات، ساب و پرداخت آزمایش نشده؛ اعلان قدیمی مسیر خرید ممکن است تغییر کرده باشد.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    },
+    {
+      "id": "irvi",
+      "name": "IRVI VPN",
+      "url": "https://t.me/s/IRVIVPN",
+      "sales_funnel": "معرفی VIP با کاربردهای جدا ← اکانت تست و خرید ربات ← آموزش آپدیت اشتراک",
+      "cta_urls": [
+        "https://t.me/IRVIVPN_Bot",
+        "https://t.me/IRVI_VPN",
+        "https://t.me/IRVI_Tutorial"
+      ],
+      "evidence_urls": [
+        "https://t.me/s/IRVIVPN",
+        "https://t.me/IRVIVPN/1591"
+      ],
+      "observed_evidence": "پلن VIP با کاربرد گیم/ترید/آیپی ثابت؛ دکمه تست؛ آموزش آیفون و اندروید و ویدیو پینگ؛ تخفیف موقت در برخی پست‌ها.",
+      "proof_presentation": "ویدیو و آموزش؛ زمان تحویل و جلوگیری از بن‌شدن ادعاهای فروشنده‌اند.",
+      "access_limitations": "صفحه عمومی قابل خواندن؛ تست مستقل، قیمت فعلی و ویدیوی کامل ارزیابی نشده.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    },
+    {
+      "id": "v2shop",
+      "name": "V2Shop",
+      "url": "https://t.me/s/v2shop_com",
+      "sales_funnel": "کانفیگ قابل کپی/فایل رایگان ← تست پیش از خرید ← سفارش در دایرکت کانال",
+      "cta_urls": [
+        "https://t.me/V2Shop_Com?direct"
+      ],
+      "evidence_urls": [
+        "https://t.me/s/v2shop_com",
+        "https://t.me/V2Shop_Com/2644"
+      ],
+      "observed_evidence": "کانفیگ رایگان، فایل OpenVPN و پست فروش مولتی‌لوکیشن؛ تغییر تعرفه و خرید از دایرکت کانال. ربات درج‌شده در بیو با CTA فروش اخیر یکسان نیست.",
+      "proof_presentation": "خروجی قابل کپی و اطلاعیه تغییرات؛ ادعای فقدان قطعی تایید نشده.",
+      "access_limitations": "صفحه عمومی قابل خواندن؛ کانفیگ‌ها آزمایش و به PV کپی نشده؛ دایرکت/ربات آزمایش نشده.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    },
+    {
+      "id": "vpnsal",
+      "name": "VPNsal / فیلتر شکن رایگان",
+      "url": "https://t.me/s/vpnsal",
+      "sales_funnel": "کانفیگ رایگان زمان‌دار ← CTA زیر کانفیگ برای سرویس اختصاصی ← ربات خرید",
+      "cta_urls": [
+        "https://t.me/vpnsalbot"
+      ],
+      "evidence_urls": [
+        "https://t.me/s/vpnsal/11083"
+      ],
+      "observed_evidence": "کانفیگ قابل کپی با زمان اعتبار اعلامی، راهنمای کوتاه رفع خطا و لینک خرید زیر همان خروجی؛ پست تخفیف جدا.",
+      "proof_presentation": "خروجی عمومی و واکنش‌های نمایشی؛ فروش/تبدیل/کیفیت مستقل تایید نشده.",
+      "access_limitations": "نمونه تاریخی مشخص بررسی شده؛ تاریخ آخرین فعالیت و پیشنهاد جاری احراز نشده. تست کانفیگ و ربات اجرا نشده.",
+      "kind": "http_text",
+      "fields": {},
+      "is_active": false,
+      "verified_at": "2026-10-06",
+      "verification_scope": "public_sales_presentation_only",
+      "published_at": null,
+      "performance_verified": false
+    }
+  ],
+  "comparators": [
+    {
+      "name": "کانفیگ رایگان / free_config_456",
+      "url": "https://t.me/s/free_config_456",
+      "verified_at": "2026-10-06",
+      "is_active": false,
+      "evidence": "ربات کانفیگ روزانه، امتیاز دعوت و تمدید؛ فروش در یک پست دیده شد ولی برنامه پنل بعداً متوقف اعلام شد.",
+      "classification": "community_funnel_comparator_not_counted_in_10",
+      "performance_verified": false,
+      "access_limitations": "صفحه عمومی؛ جریان ربات و فعالیت فروش کنونی احراز نشده."
+    }
+  ],
+  "unverified_candidates": [
+    {
+      "url": "https://t.me/NPVIRANIAN",
+      "is_active": false,
+      "status": "public_preview_unavailable",
+      "notes": "بازکردن t.me و telegram.me ناموفق؛ غیرفعال‌بودن کسب‌وکار نتیجه‌گیری نمی‌شود."
+    },
+    {
+      "url": "https://t.me/v2ray_accountss",
+      "is_active": false,
+      "status": "landing_only",
+      "notes": "صفحه تماس باز شد اما شواهد کافی از متن فروش/قیف به دست نیامد."
+    }
+  ],
+  "memory_search": {
+    "thread_id": "01a10ded-d799-754e-91f2-ba24d4f37066",
+    "pages_read": 3,
+    "scope": "User and assistant message text in the relevant durable predecessor; public competitor links and competitor terms only.",
+    "prior_competitor_names_recovered": [],
+    "limitations": "No available memory connector; prior records outside this thread not exhaustively searched. No other threads messaged."
+  }
+}

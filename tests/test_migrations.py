@@ -140,3 +140,23 @@ def test_0011_lifecycle_delivery_schema_round_trips(tmp_path):
     assert "provisioning_quota_locks" not in tables
 
     _alembic(repo, database_url, "upgrade", "0010")
+
+
+def test_0012_free_growth_round_trips(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    db_path = tmp_path / "free-growth-migration.db"
+    url = f"sqlite+pysqlite:///{db_path}"
+    _alembic(repo, url, "upgrade", "0011")
+    _alembic(repo, url, "upgrade", "0012")
+    with sqlite3.connect(db_path) as conn:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(exclusive_claims)")}
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "traffic_bytes" in cols
+    assert {"free_allocations", "lottery_entries", "lottery_draws"} <= tables
+    _alembic(repo, url, "downgrade", "0011")
+    with sqlite3.connect(db_path) as conn:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(exclusive_claims)")}
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "traffic_bytes" not in cols
+    assert not {"free_allocations", "lottery_entries", "lottery_draws"} & tables
+    _alembic(repo, url, "upgrade", "head")
