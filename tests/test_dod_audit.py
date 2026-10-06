@@ -38,8 +38,11 @@ def test_required_command_failure_is_a_real_audit_failure():
 
 def test_ci_required_gates_are_not_soft_failed_and_main_exports_sha_image():
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    dev_requirements = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
 
     assert "ruff format --check src tests || true" not in workflow
+    assert "pip install --require-hashes -r requirements.lock" in workflow
+    assert "-r requirements.lock" not in dev_requirements
     assert "pip-audit -r requirements" in workflow
     assert "pip-audit -r requirements.lock --strict || true" not in workflow
     assert "docker save" in workflow
