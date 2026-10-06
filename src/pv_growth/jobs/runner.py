@@ -43,6 +43,7 @@ def register_builtin_handlers() -> None:
     Without this the registry is empty at runtime and every job errors."""
     import pv_growth.content.jobs  # noqa: F401
     import pv_growth.conversions.service  # noqa: F401
+    import pv_growth.free_config.jobs  # noqa: F401
     import pv_growth.lifecycle.service  # noqa: F401
     import pv_growth.mirza_adapter.sync_job  # noqa: F401
     import pv_growth.provisioning.lifecycle_job  # noqa: F401
