@@ -19,6 +19,7 @@ artifact `pv-growth-app-<sha>` containing:
 ```text
 pv-growth-app-<sha>.tar
 pv-growth-app-<sha>.tar.sha256
+backup.sh
 ```
 
 Download that exact artifact; never rebuild the release on production. Before
@@ -28,7 +29,7 @@ transfer/loading, verify the included checksum:
 sha256sum -c pv-growth-app-<sha>.tar.sha256
 ```
 
-Copy only those two release files to `/opt/pv-growth/releases/<sha>/` on the
+Copy only those three release files to `/opt/pv-growth/releases/<sha>/` on the
 server. Re-run `sha256sum -c` there before `docker load`.
 
 ## One-time host prerequisites
@@ -71,7 +72,7 @@ verifies gzip before returning success:
 ```bash
 export PVG_DATABASE_URL="$(docker exec pv-growth-app python -c \
   'from pv_growth.core.config import get_settings; print(get_settings().database_url)')"
-/opt/pv-growth/repo/scripts/backup.sh
+bash /opt/pv-growth/releases/<sha>/backup.sh
 unset PVG_DATABASE_URL
 ```
 
