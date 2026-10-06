@@ -4,6 +4,8 @@ traffic when the bot token is not configured."""
 
 from __future__ import annotations
 
+import hmac
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -58,15 +60,14 @@ def _telegram():
 @router.post("/telegram/{secret}")
 def telegram_webhook(secret: str, update: TgUpdate):
     settings = get_settings()
-    expected = settings.telegram_webhook_secret or "dev"
-    if secret != expected:
+    expected = settings.telegram_webhook_secret
+    if not expected or not hmac.compare_digest(secret, expected):
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
     client = _telegram()
     if client is None:
         # token is a documented blocker; webhook stays inert until configured
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
-                            "telegram not configured")
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "telegram not configured")
 
     process_update(update.model_dump(by_alias=True))
     return {"ok": True}
@@ -89,8 +90,7 @@ def _safe_send(client, chat_id, text, keyboard=None):
     try:
         client.send_message(chat_id, text, keyboard)
     except Exception as exc:  # noqa: BLE001
-        log.warning("telegram reply failed (isolated)", chat_id=chat_id,
-                    error=str(exc)[:120])
+        log.warning("telegram reply failed (isolated)", chat_id=chat_id, error=str(exc)[:120])
 
 
 def _safe_answer(client, callback_id: str, text: str) -> None:
@@ -113,14 +113,21 @@ def _handle_message(client, message: TgMessage) -> None:
 
     with session_scope(settings) as session:
         user, created = get_or_create_user(
-            session, telegram_user_id=tg_user.id, username=tg_user.username,
-            first_name=tg_user.first_name, language_code=tg_user.language_code,
+            session,
+            telegram_user_id=tg_user.id,
+            username=tg_user.username,
+            first_name=tg_user.first_name,
+            language_code=tg_user.language_code,
             telegram_chat_id=message.chat.get("id"),
         )
         if text.startswith("/start"):
             start_param = text.split(" ", 1)[1].strip() if " " in text else None
-            ingest(session, "BOT_STARTED", user_id=user.id,
-                   idempotency_key=f"botstart:{tg_user.id}:{user.created_at:%Y%m%d%H}")
+            ingest(
+                session,
+                "BOT_STARTED",
+                user_id=user.id,
+                idempotency_key=f"botstart:{tg_user.id}:{user.created_at:%Y%m%d%H}",
+            )
             attribute(session, user.id, start_param)
             referrals.handle_bot_start(session, user.id, start_param)
             partners.handle_bot_start(session, user.id, start_param)
@@ -128,25 +135,33 @@ def _handle_message(client, message: TgMessage) -> None:
                 from pv_growth.telegram.client import InlineKeyboard
 
                 _safe_send(
-                    client, message.chat.get("id"),
+                    client,
+                    message.chat.get("id"),
                     "🎁 کانفیگ رایگان PV Network آماده است!\nروی دکمه بزن تا دریافت کنی:",
-                    InlineKeyboard([[
-                        {"text": "🚀 دریافت کانفیگ",
-                         "callback_data": f"claim:{start_param[len('freecfg_')]}"},
-                    ]]),
+                    InlineKeyboard(
+                        [
+                            [
+                                {
+                                    "text": "🚀 دریافت کانفیگ",
+                                    "callback_data": f"claim:{start_param[len('freecfg_')]}",
+                                },
+                            ]
+                        ]
+                    ),
                 )
             else:
                 _safe_send(
-                    client, message.chat.get("id"),
+                    client,
+                    message.chat.get("id"),
                     "سلام! به PV Network خوش آمدید.\n"
                     "برای دریافت کانفیگ رایگان از کانال ما سر بزنید یا /help را بزنید.",
                 )
         elif text.startswith("/claim"):
             parts = text.split()
             if len(parts) == 2:
-                _handle_callback(client, TgCallback(
-                    id=str(message.message_id), from_=tg_user,
-                    data=f"claim:{parts[1]}"))
+                _handle_callback(
+                    client, TgCallback(id=str(message.message_id), from_=tg_user, data=f"claim:{parts[1]}")
+                )
             else:
                 _safe_send(client, message.chat.get("id"), "استفاده: /claim <کد کمپین>")
 
@@ -159,31 +174,39 @@ def _handle_callback(client, callback: TgCallback) -> None:
 
     flags = FlagService(settings)
     with session_scope(settings) as session:
-        user, _ = get_or_create_user(session, telegram_user_id=callback.from_.id,
-                                     telegram_chat_id=callback.from_.id)
+        user, _ = get_or_create_user(
+            session, telegram_user_id=callback.from_.id, telegram_chat_id=callback.from_.id
+        )
         if data.startswith("claim:"):
             campaign_code = data.split(":", 1)[1]
             from pv_growth.free_config.exclusive import claim_exclusive
             from pv_growth.provisioning import xui as _xui
+
             # single provisioning boundary: the existing X-UI panel API
             provisioning = _xui.get_provisioning(settings)
             try:
                 if provisioning is None:
+
                     class _QueuedProvisioning:
                         def create_temp_service(self, **kwargs):
                             raise RuntimeError("provisioning endpoint not configured")
 
                     provisioning = _QueuedProvisioning()
                 claim, is_new = claim_exclusive(
-                    session, settings, flags, provisioning,
-                    campaign_code=campaign_code, user_id=user.id,
+                    session,
+                    settings,
+                    flags,
+                    provisioning,
+                    campaign_code=campaign_code,
+                    user_id=user.id,
                 )
             except ValidationError as exc:
                 _safe_answer(client, callback.id, str(exc))
                 return
             if claim.status == "active" and claim.config_payload.get("config_uri"):
                 _safe_send(
-                    client, callback.from_.id,
+                    client,
+                    callback.from_.id,
                     f"کانفیگ اختصاصی شما آماده است:\n{claim.config_payload['config_uri']}\n"
                     f"حجم: {claim.traffic_gb} گیگ · اعتبار: {claim.validity_hours} ساعت",
                 )
@@ -193,13 +216,16 @@ def _handle_callback(client, callback: TgCallback) -> None:
             parts = data.split(":")  # rate:<window>:<n>
             if len(parts) == 3 and parts[2].isdigit():
                 from pv_growth.feedback import service as feedback
+
                 rating = feedback.submit_rating(
-                    session, user_id=user.id, rating=int(parts[2]), window_key=parts[1])
+                    session, user_id=user.id, rating=int(parts[2]), window_key=parts[1]
+                )
                 route = feedback.route(session, rating)
                 _safe_answer(client, callback.id, "ثبت شد، سپاسگزاریم!")
                 if route == "testimonial_invite":
                     _safe_send(
-                        client, callback.from_.id,
+                        client,
+                        callback.from_.id,
                         "خوشحالیم که راضی بودید! اجازه می‌دهید نظر شما را (ناشناس) منتشر کنیم؟ "
                         "با ثبت رضایت در پیام بعدی اعلام کنید.",
                     )

@@ -7,8 +7,17 @@ from pv_growth.config_quality.parsers import is_private_host, parse_any, score, 
 
 
 def _vmess_uri(host="1.2.3.4", port=443, uid="aaaa-bbbb-cccc", remark="Test", tls="tls"):
-    payload = {"v": "2", "ps": remark, "add": host, "port": str(port), "id": uid,
-               "aid": "0", "net": "ws", "path": "/ws", "tls": tls}
+    payload = {
+        "v": "2",
+        "ps": remark,
+        "add": host,
+        "port": str(port),
+        "id": uid,
+        "aid": "0",
+        "net": "ws",
+        "path": "/ws",
+        "tls": tls,
+    }
     return "vmess://" + base64.b64encode(json.dumps(payload).encode()).decode()
 
 
@@ -51,10 +60,10 @@ def test_invalid_configs_rejected():
 
 def test_dedup_hash_ignores_remark_not_credentials():
     a = parse_any(_vmess_uri(remark="Server A"))
-    b = parse_any(_vmess_uri(remark="Server B"))     # same endpoint, other remark
-    c = parse_any(_vmess_uri(uid="different-uid"))   # same endpoint, other credential
-    assert a.uri_hash == b.uri_hash          # cosmetic differences deduped
-    assert a.uri_hash != c.uri_hash          # different credential = different config
+    b = parse_any(_vmess_uri(remark="Server B"))  # same endpoint, other remark
+    c = parse_any(_vmess_uri(uid="different-uid"))  # same endpoint, other credential
+    assert a.uri_hash == b.uri_hash  # cosmetic differences deduped
+    assert a.uri_hash != c.uri_hash  # different credential = different config
 
 
 def test_scoring_bounds_and_reliability():

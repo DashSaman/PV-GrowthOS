@@ -68,8 +68,11 @@ def ingest_event(payload: EventIn) -> EventOut:
 
         try:
             event, created = ingest(
-                session, payload.event_type,
-                user_id=user_id, campaign_id=campaign_id, source_id=source_id,
+                session,
+                payload.event_type,
+                user_id=user_id,
+                campaign_id=campaign_id,
+                source_id=source_id,
                 occurred_at=payload.occurred_at,
                 idempotency_key=payload.idempotency_key,
                 metadata=payload.metadata,
@@ -77,6 +80,26 @@ def ingest_event(payload: EventIn) -> EventOut:
             )
         except ValidationError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+        if created and event.event_type == "PAYMENT_SUCCESS":
+            from pv_growth.conversions.service import enqueue_settled_conversion
+
+            raw_order_ref = payload.metadata.get("order_ref") or payload.metadata.get("mirza_invoice_id")
+            order_ref = (
+                raw_order_ref if isinstance(raw_order_ref, str) and raw_order_ref else event.idempotency_key
+            )
+            raw_amount = payload.metadata.get("amount_cents")
+            amount_cents = (
+                raw_amount
+                if isinstance(raw_amount, int) and not isinstance(raw_amount, bool) and raw_amount >= 0
+                else None
+            )
+            enqueue_settled_conversion(
+                session,
+                payment_event=event,
+                order_ref=order_ref,
+                amount_cents=amount_cents,
+            )
 
         # duplicate must not be reported as 201 (effects already ran on first)
         return EventOut(

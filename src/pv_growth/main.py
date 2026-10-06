@@ -36,8 +36,12 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
-    app = FastAPI(title="PV GrowthOS", version=__version__, lifespan=lifespan,
-                  docs_url=None if settings.env == "production" else "/docs")
+    app = FastAPI(
+        title="PV GrowthOS",
+        version=__version__,
+        lifespan=lifespan,
+        docs_url=None if settings.env == "production" else "/docs",
+    )
 
     from pv_growth.api import admin, events, health, webhooks
 

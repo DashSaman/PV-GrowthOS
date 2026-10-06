@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from pv_growth.core.logging import get_logger
@@ -48,16 +48,41 @@ def normalize_metrics(payload: dict) -> dict:
     return normalized
 
 
-def sync_insights(session: Session, client: InstagramClient, *,
-                  now: datetime | None = None) -> int:
+def sync_insights(
+    session: Session,
+    client: InstagramClient,
+    *,
+    now: datetime | None = None,
+    lookback_days: int = 30,
+    limit: int = 100,
+) -> int:
     captured_at = now or utcnow()
-    publications = session.execute(
-        select(ContentPublication).where(
-            ContentPublication.provider == "instagram",
-            ContentPublication.status == "published",
-            ContentPublication.media_id.isnot(None),
+    cutoff = captured_at - timedelta(days=max(1, lookback_days))
+    publications = (
+        session.execute(
+            select(ContentPublication)
+            .where(
+                ContentPublication.provider == "instagram",
+                ContentPublication.status == "published",
+                ContentPublication.media_id.isnot(None),
+                func.coalesce(
+                    ContentPublication.published_at,
+                    ContentPublication.created_at,
+                )
+                >= cutoff,
+            )
+            .order_by(
+                func.coalesce(
+                    ContentPublication.published_at,
+                    ContentPublication.created_at,
+                ).desc(),
+                ContentPublication.id.desc(),
+            )
+            .limit(max(1, limit))
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     synced = 0
     for publication in publications:
         try:
@@ -88,3 +113,8 @@ def sync_insights(session: Session, client: InstagramClient, *,
         session.flush()
         synced += 1
     return synced
+
+
+def prune_insights(session: Session, *, before: datetime) -> int:
+    result = session.execute(delete(ContentInsight).where(ContentInsight.captured_at < before))
+    return int(result.rowcount or 0)

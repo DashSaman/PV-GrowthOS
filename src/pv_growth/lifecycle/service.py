@@ -15,9 +15,10 @@ from pv_growth.core.logging import get_logger
 from pv_growth.database.models import Event, LifecycleRule, User
 from pv_growth.database.types import utcnow
 from pv_growth.jobs import service as jobs
-from pv_growth.jobs.runner import handler
+from pv_growth.jobs.runner import RetryableJobError, handler
 from pv_growth.lifecycle.triggers import candidate_users
 from pv_growth.messaging import service as messaging
+from pv_growth.telegram.client import TelegramRetryableError
 
 log = get_logger("lifecycle")
 
@@ -26,23 +27,40 @@ def scan(session: Session, settings: Settings, flags: FlagService) -> int:
     """Evaluate active rules and enqueue follow-up jobs (idempotent)."""
     if not flags.enabled("LIFECYCLE_AUTOMATION_ENABLED"):
         return 0
-    rules = session.execute(
-        select(LifecycleRule).where(LifecycleRule.is_active == 1)  # noqa: E712
-    ).scalars().all()
+    rules = (
+        session.execute(
+            select(LifecycleRule).where(LifecycleRule.is_active == 1)  # noqa: E712
+        )
+        .scalars()
+        .all()
+    )
     scheduled = 0
     for rule in rules:
-        for user, gate_at in candidate_users(session, rule.trigger):
+        for user, gate_at in candidate_users(
+            session,
+            rule.trigger,
+            limit=settings.lifecycle_scan_limit,
+        ):
             # optional condition filters
             cond = rule.conditions or {}
             if cond.get("segment") and user.segment != cond["segment"]:
                 continue
             if cond.get("min_lead_score", 0) > user.lead_score:
                 continue
+            ordinal = messaging.next_send_ordinal(session, rule.code, user.id)
+            if ordinal > rule.max_sends:
+                continue
+            template = messaging.get_template(session, rule.template_code)
             jobs.enqueue(
-                session, "lifecycle.send_followup",
-                {"rule_code": rule.code, "user_id": user.id},
+                session,
+                "lifecycle.send_followup",
+                {
+                    "rule_code": rule.code,
+                    "user_id": user.id,
+                    "send_ordinal": ordinal,
+                },
                 scheduled_at=(gate_at or utcnow()) + timedelta(minutes=rule.delay_minutes),
-                idempotency_key=f"lc:{rule.code}:{user.id}",
+                idempotency_key=(f"lc:{rule.code}:{user.id}:{ordinal}:v{template.version}"),
             )
             scheduled += 1
     if scheduled:
@@ -53,17 +71,14 @@ def scan(session: Session, settings: Settings, flags: FlagService) -> int:
 def _stop_condition_met(session: Session, user_id: int, stop_events: list) -> bool:
     for event_type in stop_events or []:
         hit = session.execute(
-            select(Event.id).where(
-                Event.user_id == user_id, Event.event_type == event_type
-            ).limit(1)
+            select(Event.id).where(Event.user_id == user_id, Event.event_type == event_type).limit(1)
         ).scalar_one_or_none()
         if hit is not None:
             return True
     return False
 
 
-def send_followup(session: Session, settings: Settings, flags: FlagService,
-                  telegram, payload: dict) -> str:
+def send_followup(session: Session, settings: Settings, flags: FlagService, telegram, payload: dict) -> str:
     """Execute one follow-up with every guard rail. Returns a status string
     for observability: sent | duplicate | stopped | cooldown | max_sends | blocked."""
     if not flags.enabled("LIFECYCLE_AUTOMATION_ENABLED"):
@@ -90,21 +105,34 @@ def send_followup(session: Session, settings: Settings, flags: FlagService,
         return "cooldown"
 
     # MAX SENDS per purpose
-    if len(messaging.sends_for_purpose(session, purpose, user.id)) >= rule.max_sends:
+    delivered = messaging.delivered_for_purpose(session, purpose, user.id)
+    if len(delivered) >= rule.max_sends:
         return "max_sends"
 
     facts = payload.get("facts") or {}
+    ordinal = int(payload.get("send_ordinal") or messaging.next_send_ordinal(session, purpose, user.id))
+    if ordinal > rule.max_sends:
+        return "max_sends"
+    template = messaging.get_template(session, rule.template_code)
     row, created = messaging.send_user_message(
-        session, telegram,
-        user_id=user.id, template_code=rule.template_code, purpose=purpose,
-        facts=facts, dedupe_key=f"lc:{purpose}:{user.id}:v{rule.template_code}",
+        session,
+        telegram,
+        user_id=user.id,
+        template_code=rule.template_code,
+        purpose=purpose,
+        facts=facts,
+        dedupe_key=f"lc:{purpose}:{user.id}:{ordinal}:v{template.version}",
+        send_ordinal=ordinal,
     )
     if row is None:
         return "blocked"
-    return "sent" if created else "duplicate"
+    if not created:
+        return "duplicate"
+    return row.status
 
 
 # ---- job handlers wired into the runner ----
+
 
 @handler("lifecycle.scan")
 def _scan_job(session: Session, settings: Settings, payload: dict) -> None:
@@ -112,14 +140,18 @@ def _scan_job(session: Session, settings: Settings, payload: dict) -> None:
     scan(session, settings, flags)
     # keep segments fresh on every scan (cheap, recalculable)
     from pv_growth.segments.service import recompute_all
-    recompute_all(session)
+
+    recompute_all(session, batch_size=settings.segment_batch_size)
 
 
 @handler("lifecycle.send_followup")
 def _followup_job(session: Session, settings: Settings, payload: dict) -> None:
     flags = FlagService(settings)
     telegram = _telegram_or_fail(settings)
-    status = send_followup(session, settings, flags, telegram, payload)
+    try:
+        status = send_followup(session, settings, flags, telegram, payload)
+    except TelegramRetryableError as exc:
+        raise RetryableJobError(str(exc)) from exc
     if status in {"blocked"}:
         raise RuntimeError("lifecycle disabled or user blocked")  # retried later
 

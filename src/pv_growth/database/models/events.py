@@ -8,30 +8,32 @@ from sqlalchemy.orm import Mapped, mapped_column
 from pv_growth.database.types import Base, Json, utcnow
 
 # The 23 normalized event types (spec §10). Ingestion rejects anything else.
-EVENT_TYPES = frozenset({
-    "BOT_STARTED",
-    "SOURCE_ATTRIBUTED",
-    "FREE_CONFIG_POSTED",
-    "FREE_CONFIG_CLICKED",
-    "FREE_CONFIG_CLAIMED",
-    "TRIAL_CREATED",
-    "TRIAL_CONNECTED",
-    "PRICING_VIEWED",
-    "CHECKOUT_STARTED",
-    "PAYMENT_SUCCESS",
-    "SERVICE_CREATED",
-    "SERVICE_RENEWED",
-    "SERVICE_EXPIRING",
-    "SERVICE_EXPIRED",
-    "MESSAGE_SENT",
-    "MESSAGE_CLICKED",
-    "REFERRAL_CREATED",
-    "REFERRAL_VALIDATED",
-    "REFERRAL_REWARDED",
-    "PARTNER_CONVERSION",
-    "FEEDBACK_RECEIVED",
-    "WINBACK_SUCCESS",
-})
+EVENT_TYPES = frozenset(
+    {
+        "BOT_STARTED",
+        "SOURCE_ATTRIBUTED",
+        "FREE_CONFIG_POSTED",
+        "FREE_CONFIG_CLICKED",
+        "FREE_CONFIG_CLAIMED",
+        "TRIAL_CREATED",
+        "TRIAL_CONNECTED",
+        "PRICING_VIEWED",
+        "CHECKOUT_STARTED",
+        "PAYMENT_SUCCESS",
+        "SERVICE_CREATED",
+        "SERVICE_RENEWED",
+        "SERVICE_EXPIRING",
+        "SERVICE_EXPIRED",
+        "MESSAGE_SENT",
+        "MESSAGE_CLICKED",
+        "REFERRAL_CREATED",
+        "REFERRAL_VALIDATED",
+        "REFERRAL_REWARDED",
+        "PARTNER_CONVERSION",
+        "FEEDBACK_RECEIVED",
+        "WINBACK_SUCCESS",
+    }
+)
 
 
 class Event(Base):

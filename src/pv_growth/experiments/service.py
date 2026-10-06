@@ -18,21 +18,30 @@ from pv_growth.database.models import Event, Experiment, ExperimentAssignment
 MIN_SAMPLE_PER_VARIANT = 30  # below this, results are "insufficient_sample"
 
 
-def create_experiment(session: Session, *, key: str, name: str, variants: list[str],
-                      split_percent: int = 50, metric_event: str = "PAYMENT_SUCCESS"
-                      ) -> Experiment:
-    if len(variants) < 2:
-        raise ValidationError("an experiment needs at least two variants")
+def create_experiment(
+    session: Session,
+    *,
+    key: str,
+    name: str,
+    variants: list[str],
+    split_percent: int = 50,
+    metric_event: str = "PAYMENT_SUCCESS",
+) -> Experiment:
+    if len(variants) != 2:
+        raise ValidationError("an experiment needs exactly two variants")
     if not 1 <= split_percent <= 99:
         raise ValidationError("split_percent must be 1..99")
-    existing = session.execute(
-        select(Experiment).where(Experiment.key == key)
-    ).scalar_one_or_none()
+    existing = session.execute(select(Experiment).where(Experiment.key == key)).scalar_one_or_none()
     if existing is not None:
         raise ValidationError(f"experiment '{key}' already exists")
-    exp = Experiment(key=key, name=name, variants=variants,
-                     split_percent=split_percent, seed=secrets.token_hex(8),
-                     metric_event=metric_event)
+    exp = Experiment(
+        key=key,
+        name=name,
+        variants=variants,
+        split_percent=split_percent,
+        seed=secrets.token_hex(8),
+        metric_event=metric_event,
+    )
     session.add(exp)
     session.flush()
     return exp
@@ -49,9 +58,7 @@ def deterministic_variant(exp: Experiment, user_id: int) -> str:
 def assign(session: Session, user_id: int, experiment_key: str) -> str:
     """Idempotent: first call persists; later calls return the SAME variant,
     even if split_percent changes mid-run."""
-    exp = session.execute(
-        select(Experiment).where(Experiment.key == experiment_key)
-    ).scalar_one_or_none()
+    exp = session.execute(select(Experiment).where(Experiment.key == experiment_key)).scalar_one_or_none()
     if exp is None:
         raise ValidationError(f"unknown experiment: {experiment_key}")
     if exp.status != "running":
@@ -67,8 +74,7 @@ def assign(session: Session, user_id: int, experiment_key: str) -> str:
         return existing.variant  # never re-assign while running
 
     variant = deterministic_variant(exp, user_id)
-    assignment = ExperimentAssignment(experiment_id=exp.id, user_id=user_id,
-                                      variant=variant)
+    assignment = ExperimentAssignment(experiment_id=exp.id, user_id=user_id, variant=variant)
     session.add(assignment)
     session.flush()
     return variant
@@ -76,31 +82,32 @@ def assign(session: Session, user_id: int, experiment_key: str) -> str:
 
 def results(session: Session, experiment_key: str) -> dict:
     """Per-variant: users, conversions, rate. No winner declared on weak samples."""
-    exp = session.execute(
-        select(Experiment).where(Experiment.key == experiment_key)
-    ).scalar_one_or_none()
+    exp = session.execute(select(Experiment).where(Experiment.key == experiment_key)).scalar_one_or_none()
     if exp is None:
         raise ValidationError(f"unknown experiment: {experiment_key}")
 
-    assignments = session.execute(
-        select(ExperimentAssignment).where(
-            ExperimentAssignment.experiment_id == exp.id)
-    ).scalars().all()
-    per_variant: dict[str, dict] = {
-        v: {"users": 0, "conversions": 0} for v in exp.variants
-    }
+    assignments = (
+        session.execute(select(ExperimentAssignment).where(ExperimentAssignment.experiment_id == exp.id))
+        .scalars()
+        .all()
+    )
+    per_variant: dict[str, dict] = {v: {"users": 0, "conversions": 0} for v in exp.variants}
     for a in assignments:
         per_variant[a.variant]["users"] += 1
         hit = session.execute(
-            select(func.count()).select_from(Event).where(
-                Event.user_id == a.user_id, Event.event_type == exp.metric_event)
+            select(func.count())
+            .select_from(Event)
+            .where(Event.user_id == a.user_id, Event.event_type == exp.metric_event)
         ).scalar_one()
         per_variant[a.variant]["conversions"] += 1 if hit else 0
 
     report = {
-        "key": exp.key, "metric": exp.metric_event, "status": exp.status,
+        "key": exp.key,
+        "metric": exp.metric_event,
+        "status": exp.status,
         "variants": {},
-        "sufficient_sample": True, "declared_winner": None,
+        "sufficient_sample": True,
+        "declared_winner": None,
     }
     for variant, stats in per_variant.items():
         users = stats["users"]
@@ -114,12 +121,11 @@ def results(session: Session, experiment_key: str) -> dict:
 
 
 def end_experiment(session: Session, experiment_key: str) -> Experiment:
-    exp = session.execute(
-        select(Experiment).where(Experiment.key == experiment_key)
-    ).scalar_one_or_none()
+    exp = session.execute(select(Experiment).where(Experiment.key == experiment_key)).scalar_one_or_none()
     if exp is None:
         raise ValidationError(f"unknown experiment: {experiment_key}")
     from pv_growth.database.types import utcnow
+
     exp.status = "ended"
     exp.ended_at = utcnow()
     return exp

@@ -25,8 +25,16 @@ from pv_growth.messaging import service as messaging
 log = get_logger("content")
 
 # fields that carry commercial meaning and must come from campaign data
-COMMERCIAL_FACT_KEYS = {"price", "traffic_gb", "validity_hours", "discount_percent",
-                        "max_claims", "locations", "uptime_percent", "user_count"}
+COMMERCIAL_FACT_KEYS = {
+    "price",
+    "traffic_gb",
+    "validity_hours",
+    "discount_percent",
+    "max_claims",
+    "locations",
+    "uptime_percent",
+    "user_count",
+}
 
 _VALID_TRANSITIONS = {
     "draft": {"validated", "failed"},
@@ -52,8 +60,7 @@ def validate_facts(session: Session, item: ContentItem) -> list[str]:
             plan = dict(campaign.config or {})
             for key in COMMERCIAL_FACT_KEYS & set(facts):
                 if key in plan and str(facts[key]) != str(plan[key]):
-                    problems.append(f"fact '{key}'={facts[key]} contradicts campaign "
-                                    f"({plan[key]})")
+                    problems.append(f"fact '{key}'={facts[key]} contradicts campaign ({plan[key]})")
     # sanity: rating-like numbers must be positive
     for key in ("price", "traffic_gb", "validity_hours"):
         if key in facts:
@@ -90,22 +97,26 @@ def schedule(session: Session, item: ContentItem, when) -> ContentItem:
     return transition(session, item, "scheduled")
 
 
-def publish_due(session: Session, settings: Settings, flags: FlagService,
-                publishers: Mapping[str, Publisher], *, now=None) -> int:
+def publish_due(
+    session: Session, settings: Settings, flags: FlagService, publishers: Mapping[str, Publisher], *, now=None
+) -> int:
     """Publish all due scheduled items (idempotent). Returns published count."""
     if not flags.enabled("CONTENT_ENGINE_ENABLED"):
         return 0
     now = now or utcnow()
-    due = session.execute(
-        select(ContentItem).where(
-            ContentItem.status == "scheduled", ContentItem.scheduled_at <= now
+    due = (
+        session.execute(
+            select(ContentItem).where(ContentItem.status == "scheduled", ContentItem.scheduled_at <= now)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     published = 0
     for item in due:
         try:
-            body = messaging.render(item.body, {**(item.facts or {}),
-                                                "bot_link": "https://t.me/pvnetwork_bot"})
+            body = messaging.render(
+                item.body, {**(item.facts or {}), "bot_link": "https://t.me/pvnetwork_bot"}
+            )
         except ValidationError as exc:
             item.status = "failed"
             log.warning("content render failed", item_id=item.id, error=str(exc))
@@ -134,10 +145,13 @@ def publish_due(session: Session, settings: Settings, flags: FlagService,
         item.status = "published"
         item.published_at = utcnow()
         item.message_id = int(result.remote_id) if result.remote_id.isdigit() else None
-        ingest(session, "MESSAGE_SENT", user_id=None,
-               idempotency_key=f"content:{item.id}",
-               metadata={"kind": "channel_post", "content_id": item.id,
-                         "channel": item.channel})
+        ingest(
+            session,
+            "MESSAGE_SENT",
+            user_id=None,
+            idempotency_key=f"content:{item.id}",
+            metadata={"kind": "channel_post", "content_id": item.id, "channel": item.channel},
+        )
         published += 1
     if published:
         log.info("content published", count=published)

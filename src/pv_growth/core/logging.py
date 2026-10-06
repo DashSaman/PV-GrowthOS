@@ -12,10 +12,29 @@ import sys
 from datetime import UTC, datetime
 
 _RESERVED = {
-    "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-    "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
-    "created", "msecs", "relativeCreated", "thread", "threadName",
-    "processName", "process", "taskName", "message", "fields",
+    "name",
+    "msg",
+    "args",
+    "levelname",
+    "levelno",
+    "pathname",
+    "filename",
+    "module",
+    "exc_info",
+    "exc_text",
+    "stack_info",
+    "lineno",
+    "funcName",
+    "created",
+    "msecs",
+    "relativeCreated",
+    "thread",
+    "threadName",
+    "processName",
+    "process",
+    "taskName",
+    "message",
+    "fields",
 }
 
 
@@ -45,8 +64,7 @@ class StructLogger:
         self._logger = logger
 
     def _log(self, level: int, msg: str, exc: BaseException | None = None, **fields) -> None:
-        self._logger.log(level, msg, extra={"fields": fields},
-                         exc_info=exc if exc is not None else None)
+        self._logger.log(level, msg, extra={"fields": fields}, exc_info=exc if exc is not None else None)
 
     def debug(self, msg: str, **fields) -> None:
         self._log(logging.DEBUG, msg, **fields)

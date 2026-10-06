@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy.orm import Session
 
 from pv_growth.content import service as content_service
@@ -13,9 +15,11 @@ from pv_growth.content.publishers import TelegramPublisher
 from pv_growth.core.config import Settings
 from pv_growth.core.errors import NotConfigured
 from pv_growth.core.flags import FlagService
+from pv_growth.database.types import utcnow
 from pv_growth.instagram.client import InstagramClient
-from pv_growth.instagram.insights import sync_insights
+from pv_growth.instagram.insights import prune_insights, sync_insights
 from pv_growth.instagram.publisher import InstagramPublisher
+from pv_growth.jobs import service as job_service
 from pv_growth.jobs.runner import handler
 from pv_growth.telegram.client import get_telegram
 
@@ -52,8 +56,7 @@ def run_publish_job(session: Session, settings: Settings, payload: dict) -> None
 def run_plan_job(session: Session, settings: Settings, payload: dict) -> int:
     """Plan only while the content and Instagram kill switches are both on."""
     flags = FlagService(settings)
-    if not (flags.enabled("CONTENT_ENGINE_ENABLED")
-            and flags.enabled("INSTAGRAM_AUTOMATION_ENABLED")):
+    if not (flags.enabled("CONTENT_ENGINE_ENABLED") and flags.enabled("INSTAGRAM_AUTOMATION_ENABLED")):
         return 0
     return len(plan_cycle(session, settings))
 
@@ -66,7 +69,12 @@ def run_insights_job(session: Session, settings: Settings, payload: dict) -> int
         client = InstagramClient(settings)
     except NotConfigured:
         return 0
-    synced = sync_insights(session, client)
+    synced = sync_insights(
+        session,
+        client,
+        lookback_days=settings.instagram_insights_lookback_days,
+        limit=settings.instagram_insights_limit,
+    )
     persist_performance_metadata(session)
     return synced
 
@@ -84,3 +92,24 @@ def _plan_job(session: Session, settings: Settings, payload: dict) -> None:
 @handler("instagram.insights_sync")
 def _insights_job(session: Session, settings: Settings, payload: dict) -> None:
     run_insights_job(session, settings, payload)
+
+
+@handler("maintenance.retention")
+def _retention_job(session: Session, settings: Settings, payload: dict) -> None:
+    now = utcnow()
+    job_service.prune_terminal(
+        session,
+        done_before=now - timedelta(days=max(1, settings.job_retention_days)),
+        failed_before=now
+        - timedelta(
+            days=max(
+                1,
+                settings.job_retention_days,
+                settings.job_failed_retention_days,
+            )
+        ),
+    )
+    prune_insights(
+        session,
+        before=now - timedelta(days=max(1, settings.instagram_insight_retention_days)),
+    )

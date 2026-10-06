@@ -161,8 +161,7 @@ class FakeMirza:
         result = [_order_from_json(o) for o in self.orders.values()]
         if since:
             result = [
-                o for o in result
-                if (o.paid_at or o.created_at) and (o.paid_at or o.created_at) >= since
+                o for o in result if (o.paid_at or o.created_at) and (o.paid_at or o.created_at) >= since
             ]
         return result[:limit]
 

@@ -30,8 +30,12 @@ from pv_growth.telegram.client import FakeTelegramTransport, TelegramClient
 
 
 def _content(session, **kw):
-    defaults = dict(title="t", body="قیمت {{price}} تومان — حجم {{traffic_gb}} گیگ",
-                    facts={"price": 99000, "traffic_gb": 10}, channel="free")
+    defaults = dict(
+        title="t",
+        body="قیمت {{price}} تومان — حجم {{traffic_gb}} گیگ",
+        facts={"price": 99000, "traffic_gb": 10},
+        channel="free",
+    )
     defaults.update(kw)
     item = ContentItem(**defaults)
     session.add(item)
@@ -40,12 +44,17 @@ def _content(session, **kw):
 
 
 def test_content_cannot_fabricate_facts(session):
-    campaign = Campaign(code=f"c_{uuid.uuid4().hex[:6]}", name="C",
-                        kind="purchase", status="active",
-                        config={"price": 99000, "traffic_gb": 5})
+    campaign = Campaign(
+        code=f"c_{uuid.uuid4().hex[:6]}",
+        name="C",
+        kind="purchase",
+        status="active",
+        config={"price": 99000, "traffic_gb": 5},
+    )
     session.add(campaign)
-    item = _content(session, campaign_code=campaign.code,
-                    facts={"price": 49000, "traffic_gb": 5})  # price contradicts!
+    item = _content(
+        session, campaign_code=campaign.code, facts={"price": 49000, "traffic_gb": 5}
+    )  # price contradicts!
     with pytest.raises(ValidationError):  # acceptance: facts cannot be fabricated
         content.transition(session, item, "validated")
 
@@ -73,8 +82,9 @@ def test_content_state_machine(session):
 def _telegram_publisher(settings):
     from pv_growth.content.publishers import TelegramPublisher
 
-    configured = settings.model_copy(update={"free_channel_id": "@freech",
-                                             "official_channel_id": "@official"})
+    configured = settings.model_copy(
+        update={"free_channel_id": "@freech", "official_channel_id": "@official"}
+    )
     transport = FakeTelegramTransport()
     return TelegramPublisher(TelegramClient(transport, configured), configured), transport
 
@@ -92,8 +102,7 @@ def test_telegram_publisher_returns_remote_id(settings, session):
 
 
 def test_publish_due_idempotent(settings, session, monkeypatch):
-    flags = FlagService(settings.model_copy(update={
-        "flag_content_engine_enabled": True}))
+    flags = FlagService(settings.model_copy(update={"flag_content_engine_enabled": True}))
     publisher, transport = _telegram_publisher(settings)
     item = _content(session, facts={"price": 99001, "traffic_gb": 5})  # unique marker
     content.transition(session, item, "validated")
@@ -103,8 +112,7 @@ def test_publish_due_idempotent(settings, session, monkeypatch):
     content.publish_due(session, settings, flags, {"free": publisher})  # double run
     # this item published exactly once and never twice (idempotent scheduler)
     assert item.status == "published" and item.message_id is not None
-    my_sends = [p for m, p in transport.calls
-                if m == "sendMessage" and "99001" in p.get("text", "")]
+    my_sends = [p for m, p in transport.calls if m == "sendMessage" and "99001" in p.get("text", "")]
     assert len(my_sends) == 1
 
 
@@ -164,9 +172,7 @@ def test_publish_due_reschedules_retryable_failure_without_human(settings, sessi
     now = utcnow()
     content.schedule(session, item, now - timedelta(minutes=1))
 
-    published = content.publish_due(
-        session, settings, flags, {"retry": _RetryablePublisher()}, now=now
-    )
+    published = content.publish_due(session, settings, flags, {"retry": _RetryablePublisher()}, now=now)
 
     assert published == 0
     assert item.status == "scheduled"
@@ -175,13 +181,14 @@ def test_publish_due_reschedules_retryable_failure_without_human(settings, sessi
 
 # ---------- feedback ----------
 
+
 def test_feedback_rating_and_consent(session):
     user, _ = get_or_create_user(session, telegram_user_id=9500)
-    rating = feedback.submit_rating(session, user_id=user.id, rating=5,
-                                    comment="عالی بود", window_key="svc1")
+    rating = feedback.submit_rating(session, user_id=user.id, rating=5, comment="عالی بود", window_key="svc1")
     assert rating.rating == 5
-    dup = feedback.submit_rating(session, user_id=user.id, rating=4,
-                                 window_key="svc1")  # idempotent per window
+    dup = feedback.submit_rating(
+        session, user_id=user.id, rating=4, window_key="svc1"
+    )  # idempotent per window
     assert dup.id == rating.id and dup.rating == 5
 
     with pytest.raises(ValidationError):
@@ -208,9 +215,10 @@ PAGE_V2 = "<html>Price: <b>$7/mo</b> Trial: 10GB</html>"
 
 def _comp_source(session, page_holder):
     src = CompetitorSource(
-        name=f"rival_{uuid.uuid4().hex[:6]}", url="https://rival.example/pricing",
-        fields={"price": {"regex": r"Price:\s*<b>\$?(\d+)/mo"},
-                "trial_gb": {"regex": r"Trial:\s*(\d+)GB"}})
+        name=f"rival_{uuid.uuid4().hex[:6]}",
+        url="https://rival.example/pricing",
+        fields={"price": {"regex": r"Price:\s*<b>\$?(\d+)/mo"}, "trial_gb": {"regex": r"Trial:\s*(\d+)GB"}},
+    )
     session.add(src)
     session.flush()
     page_holder["source"] = src
@@ -218,8 +226,9 @@ def _comp_source(session, page_holder):
 
 
 def test_competitor_extraction_and_diff():
-    snap = extract_fields(PAGE_V1, {"price": {"regex": r"\$(\d+)/mo"},
-                                    "trial_gb": {"regex": r"Trial:\s*(\d+)GB"}})
+    snap = extract_fields(
+        PAGE_V1, {"price": {"regex": r"\$(\d+)/mo"}, "trial_gb": {"regex": r"Trial:\s*(\d+)GB"}}
+    )
     assert snap == {"price": "5", "trial_gb": "3"}
     changes = diff_snapshots(snap, {"price": "7", "trial_gb": "10"})
     assert set(changes) == {("price", "5", "7"), ("trial_gb", "3", "10")}
@@ -229,8 +238,9 @@ def test_competitor_watch_records_changes_once(session):
     holder = {}
     src = _comp_source(session, holder)
     page = {"text": PAGE_V1}
-    client = httpx.Client(transport=httpx.MockTransport(
-        lambda request: httpx.Response(200, text=page["text"])))
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text=page["text"]))
+    )
 
     first = check_source(session, src, client)
     assert first == 2  # price + trial first seen
@@ -242,21 +252,21 @@ def test_competitor_watch_records_changes_once(session):
     page["text"] = PAGE_V2  # both fields change
     second = check_source(session, src, client)
     assert second == 2
-    rows = {(r.field, r.old_value, r.new_value)
-            for r in session.query(CompetitorChange).filter_by(source_id=src.id)}
+    rows = {
+        (r.field, r.old_value, r.new_value)
+        for r in session.query(CompetitorChange).filter_by(source_id=src.id)
+    }
     assert ("price", "5", "7") in rows and ("trial_gb", "3", "10") in rows
 
 
 def test_competitor_failure_isolated(settings, session):
     holder = {}
     src = _comp_source(session, holder)
-    client = httpx.Client(transport=httpx.MockTransport(
-        lambda request: httpx.Response(500)))  # rival down
+    client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(500)))  # rival down
     result = check_source(session, src, client)
     assert result == -1  # failure swallowed, isolated
 
-    flags = FlagService(settings.model_copy(update={
-        "flag_competitor_watch_enabled": True}))
+    flags = FlagService(settings.model_copy(update={"flag_competitor_watch_enabled": True}))
     summary = run_watch(session, settings, flags, client)
     assert summary["failures"] >= 1 and summary["changes"] == 0  # acceptance: never affects core
 

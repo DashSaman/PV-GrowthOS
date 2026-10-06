@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -12,9 +15,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      - uses: astral-sh/setup-uv@v6
       - run: pip install -r requirements-dev.txt
-      - run: ruff check src tests
-      - run: ruff format --check src tests || true
+      - name: Verify production lock is in sync
+        run: |
+          uv pip compile requirements.txt --generate-hashes -o requirements.lock
+          git diff --exit-code -- requirements.lock
+      - run: ruff check src tests scripts
+      - run: ruff format --check src tests
 
   test:
     runs-on: ubuntu-latest
@@ -43,13 +51,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
       - run: pip install -r requirements-dev.txt
-      - run: pip install -e .
+      - run: pip install --no-deps -e .
       - name: Run tests (${{ matrix.db }})
         env:
           TEST_DB: ${{ matrix.db }}
         run: pytest
-
-      - name: Migration up/down test (${{ matrix.db }})
+      - name: Run machine-verifiable DoD audit (SQLite)
+        if: matrix.db == 'sqlite'
+        env:
+          TEST_DB: sqlite
+        run: python scripts/dod_audit.py
+      - name: Migration 0008/head round-trip (${{ matrix.db }})
         env:
           TEST_DB: ${{ matrix.db }}
         run: |
@@ -58,9 +70,12 @@ jobs:
           else
             export PVG_DATABASE_URL="sqlite+pysqlite:///./mig_test.db"
           fi
-          python -m pv_growth migrate
-          python -m alembic -c alembic.ini downgrade base
-          python -m pv_growth migrate
+          python -m alembic -c alembic.ini upgrade head
+          python -m alembic -c alembic.ini downgrade 0008
+          python -m alembic -c alembic.ini upgrade head
+          python -m alembic -c alembic.ini downgrade 0008
+          python -m alembic -c alembic.ini upgrade head
+          python -m alembic -c alembic.ini current | grep '0011 (head)'
 
   security:
     runs-on: ubuntu-latest
@@ -68,20 +83,39 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install -r requirements-dev.txt pip-audit
-      - run: pip-audit -r requirements.txt --strict || true
+      - run: pip install -r requirements-dev.txt
+      - run: pip-audit -r requirements.lock --strict
 
   docker:
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, security]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Build image (no push without registry secret)
+      - name: Build commit-addressed image
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.ref == 'refs/heads/main' && secrets.DOCKER_REGISTRY != '' }}
-          tags: ${{ secrets.DOCKER_REGISTRY && format('{0}/pv-growth-app:{1}', secrets.DOCKER_REGISTRY, github.sha) || 'pv-growth-app:ci' }}
+          load: true
+          push: false
+          tags: pv-growth-app:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Smoke image import
+        run: docker run --rm pv-growth-app:${{ github.sha }} python -c "import pv_growth"
+      - name: Export immutable image and checksum
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p dist
+          docker save pv-growth-app:${{ github.sha }} -o dist/pv-growth-app-${{ github.sha }}.tar
+          sha256sum dist/pv-growth-app-${{ github.sha }}.tar > dist/pv-growth-app-${{ github.sha }}.tar.sha256
+      - name: Upload production image artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pv-growth-app-${{ github.sha }}
+          path: |
+            dist/pv-growth-app-${{ github.sha }}.tar
+            dist/pv-growth-app-${{ github.sha }}.tar.sha256
+          if-no-files-found: error
+          retention-days: 14

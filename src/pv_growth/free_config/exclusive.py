@@ -20,7 +20,7 @@ from pv_growth.core.config import Settings
 from pv_growth.core.errors import ValidationError
 from pv_growth.core.flags import FlagService
 from pv_growth.core.logging import get_logger
-from pv_growth.database.models import Campaign, ExclusiveClaim
+from pv_growth.database.models import Campaign, ExclusiveClaim, ProvisioningQuotaLock
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import ingest
 
@@ -49,8 +49,9 @@ class DayPlan:
 
 
 class ProvisioningClient(Protocol):
-    def create_temp_service(self, *, location: str, traffic_gb: int,
-                            validity_hours: int, protocol: str) -> dict: ...
+    def create_temp_service(
+        self, *, location: str, traffic_gb: int, validity_hours: int, protocol: str
+    ) -> dict: ...
 
 
 # The old placeholder HttpProvisioningClient was removed: the single
@@ -67,10 +68,11 @@ class FakeProvisioningClient:
     def health(self) -> bool:
         return True  # guard-compatible
 
-    def create_temp_service(self, *, location: str, traffic_gb: int,
-                            validity_hours: int, protocol: str,
-                            idempotency_key: str = "") -> dict:
+    def create_temp_service(
+        self, *, location: str, traffic_gb: int, validity_hours: int, protocol: str, idempotency_key: str = ""
+    ) -> dict:
         from pv_growth.provisioning.xui import client_email_for
+
         payload = {
             "service_ref": client_email_for(idempotency_key or f"{location}:{traffic_gb}"),
             "config_uri": f"{protocol}://fake@{location}.pv.test:443",
@@ -104,8 +106,7 @@ def _campaign_window_ok(campaign: Campaign, now: datetime) -> bool:
     return True
 
 
-def check_eligibility(session: Session, campaign: Campaign, user_id: int,
-                      day: date) -> None:
+def check_eligibility(session: Session, campaign: Campaign, user_id: int, day: date) -> None:
     """Raise ValidationError with a reason when the user may not claim."""
     now = utcnow()
     if not _campaign_window_ok(campaign, now):
@@ -115,7 +116,9 @@ def check_eligibility(session: Session, campaign: Campaign, user_id: int,
 
     # per-user-per-day idempotency + per_user_limit over campaign window
     user_claims = session.execute(
-        select(func.count()).select_from(ExclusiveClaim).where(
+        select(func.count())
+        .select_from(ExclusiveClaim)
+        .where(
             ExclusiveClaim.campaign_id == campaign.id,
             ExclusiveClaim.user_id == user_id,
         )
@@ -125,13 +128,83 @@ def check_eligibility(session: Session, campaign: Campaign, user_id: int,
 
     # global quota
     total_claims = session.execute(
-        select(func.count()).select_from(ExclusiveClaim).where(
-            ExclusiveClaim.campaign_id == campaign.id
-        )
+        select(func.count()).select_from(ExclusiveClaim).where(ExclusiveClaim.campaign_id == campaign.id)
     ).scalar_one()
     if total_claims >= int(cfg["max_claims"]):
         raise ValidationError("campaign quota exhausted")
     return None  # claim_key computed for caller below
+
+
+def _acquire_quota_locks(session: Session, campaign_id: int, day: date) -> None:
+    keys = sorted((f"campaign:{campaign_id}", f"day:{day.isoformat()}"))
+    for key in keys:
+        if session.get(ProvisioningQuotaLock, key) is not None:
+            continue
+        try:
+            with session.begin_nested():
+                session.add(ProvisioningQuotaLock(quota_key=key))
+                session.flush()
+        except IntegrityError:
+            pass
+    session.execute(
+        select(ProvisioningQuotaLock)
+        .where(ProvisioningQuotaLock.quota_key.in_(keys))
+        .order_by(ProvisioningQuotaLock.quota_key)
+        .with_for_update()
+    ).scalars().all()
+
+
+def provision_reserved_claim(
+    session: Session,
+    settings: Settings,
+    claim: ExclusiveClaim,
+    provisioning: ProvisioningClient,
+) -> bool:
+    """Try one idempotent remote provision; emit TRIAL_CREATED only on proof."""
+    from pv_growth.provisioning.guard import check_backend
+
+    claim.provision_attempts += 1
+    try:
+        check_backend(session, provisioning)
+        service = provisioning.create_temp_service(
+            location=claim.location or "auto",
+            traffic_gb=claim.traffic_gb,
+            validity_hours=claim.validity_hours,
+            protocol=str((claim.config_payload or {}).get("protocol") or "vless"),
+            idempotency_key=claim.claim_key,
+        )
+        service_ref = service.get("service_ref")
+        config_uri = service.get("config_uri")
+        if not service_ref or not config_uri:
+            raise ValidationError("provisioning response missing service evidence")
+        claim.service_ref = service_ref
+        claim.config_payload = {
+            **(claim.config_payload or {}),
+            "config_uri": config_uri,
+            "expiry_ts_ms": service.get("expiry_ts_ms"),
+            "replayed": bool(service.get("replayed")),
+        }
+        claim.status = "active"
+        claim.last_provision_error = None
+        ingest(
+            session,
+            "TRIAL_CREATED",
+            user_id=claim.user_id,
+            campaign_id=claim.campaign_id,
+            idempotency_key=f"trial:{claim.claim_key}",
+            metadata={"service_ref": claim.service_ref},
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 — failure is durable retry evidence
+        claim.status = "pending_provision"
+        claim.last_provision_error = f"{type(exc).__name__}: {exc}"[:1000]
+        log.error(
+            "provisioning attempt failed",
+            claim_key=claim.claim_key,
+            attempt=claim.provision_attempts,
+            error=claim.last_provision_error,
+        )
+        return False
 
 
 def claim_exclusive(
@@ -166,13 +239,25 @@ def claim_exclusive(
     if existing is not None:
         return existing, False
 
+    _acquire_quota_locks(session, campaign.id, day)
+    from pv_growth.provisioning.guard import claims_today
+
+    used_today = claims_today(session, day)
+    if used_today >= settings.free_daily_budget:
+        raise ValidationError(f"daily free budget exhausted ({used_today}/{settings.free_daily_budget})")
     check_eligibility(session, campaign, user_id, day)
 
     plan = resolve_day_plan(campaign, day)
     claim = ExclusiveClaim(
-        claim_key=claim_key, campaign_id=campaign.id, user_id=user_id,
-        claim_date=day, traffic_gb=plan.traffic_gb, validity_hours=plan.validity_hours,
-        location=plan.location, status="pending_provision",
+        claim_key=claim_key,
+        campaign_id=campaign.id,
+        user_id=user_id,
+        claim_date=day,
+        traffic_gb=plan.traffic_gb,
+        validity_hours=plan.validity_hours,
+        location=plan.location,
+        status="pending_provision",
+        config_payload={"protocol": plan.protocol},
         expires_at=utcnow() + timedelta(hours=plan.validity_hours),
     )
     try:
@@ -185,35 +270,26 @@ def claim_exclusive(
         ).scalar_one()
         return existing, False
 
-    # provision via the single authorized boundary; guard first, fail closed
-    try:
-        from pv_growth.provisioning.guard import check as guard_check
-        guard_check(session, settings, provisioning)
-        service = provisioning.create_temp_service(
-            location=plan.location, traffic_gb=plan.traffic_gb,
-            validity_hours=plan.validity_hours, protocol=plan.protocol,
-            idempotency_key=claim_key,
-        )
-        claim.service_ref = service.get("service_ref")
-        claim.config_payload = {
-            "config_uri": service.get("config_uri"),
-            "expiry_ts_ms": service.get("expiry_ts_ms"),
-            "replayed": bool(service.get("replayed")),
-        }
-        claim.status = "active"
-    except Exception as exc:  # noqa: BLE001 — provisioning outage must not kill the claim
-        log.error("provisioning failed; claim queued", claim_key=claim_key,
-                  error=f"{type(exc).__name__}: {exc}")
-        claim.status = "pending_provision"
+    provision_reserved_claim(session, settings, claim, provisioning)
+    if claim.status == "pending_provision":
+        from pv_growth.jobs.service import enqueue
 
-    ingest(session, "FREE_CONFIG_CLAIMED",
-           user_id=user_id, campaign_id=campaign.id,
-           idempotency_key=f"claim:{claim_key}",
-           metadata={"traffic_gb": claim.traffic_gb, "location": claim.location,
-                     "status": claim.status})
-    ingest(session, "TRIAL_CREATED",
-           user_id=user_id, campaign_id=campaign.id,
-           idempotency_key=f"trial:{claim_key}",
-           metadata={"service_ref": claim.service_ref})
+        enqueue(
+            session,
+            "provisioning.claim",
+            {"claim_id": claim.id},
+            idempotency_key=f"provision:{claim.claim_key}",
+            max_attempts=settings.job_max_attempts_default,
+            priority=60,
+        )
+
+    ingest(
+        session,
+        "FREE_CONFIG_CLAIMED",
+        user_id=user_id,
+        campaign_id=campaign.id,
+        idempotency_key=f"claim:{claim_key}",
+        metadata={"traffic_gb": claim.traffic_gb, "location": claim.location, "status": claim.status},
+    )
     log.info("exclusive claimed", claim_key=claim_key, status=claim.status)
     return claim, True

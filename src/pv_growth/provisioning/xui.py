@@ -20,13 +20,14 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import ssl
 import time
 from typing import Protocol
 
 import httpx
 
 from pv_growth.core.config import Settings
-from pv_growth.core.errors import ExternalServiceError, NotConfigured
+from pv_growth.core.errors import ExternalServiceError, NotConfigured, ValidationError
 from pv_growth.core.logging import get_logger
 
 log = get_logger("provisioning")
@@ -47,9 +48,9 @@ def client_email_for(idempotency_key: str) -> str:
 
 
 class PVProvisioningAdapter(Protocol):
-    def create_temp_service(self, *, location: str, traffic_gb: int,
-                            validity_hours: int, protocol: str,
-                            idempotency_key: str) -> dict: ...
+    def create_temp_service(
+        self, *, location: str, traffic_gb: int, validity_hours: int, protocol: str, idempotency_key: str
+    ) -> dict: ...
     def service_state(self, service_ref: str) -> dict: ...
     def disable_service(self, service_ref: str) -> bool: ...
     def health(self) -> bool: ...
@@ -58,17 +59,20 @@ class PVProvisioningAdapter(Protocol):
 class XUIProvisioningAdapter:
     """HTTP adapter against the existing X-UI panel (Bearer-token API)."""
 
-    def __init__(self, settings: Settings,
-                 transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(self, settings: Settings, transport: httpx.BaseTransport | None = None) -> None:
         if not settings.provisioning_base_url or not settings.provisioning_token:
             raise NotConfigured("provisioning endpoint not configured (PVG_PROVISIONING_*)")
         self._s = settings
+        verify: bool | ssl.SSLContext
+        if settings.provisioning_ca_bundle:
+            verify = ssl.create_default_context(cafile=settings.provisioning_ca_bundle)
+        else:
+            verify = settings.provisioning_tls_verify
         self._client = httpx.Client(
             base_url=settings.provisioning_base_url.rstrip("/"),
-            headers={"Authorization": f"Bearer {settings.provisioning_token}",
-                     "Accept": "application/json"},
+            headers={"Authorization": f"Bearer {settings.provisioning_token}", "Accept": "application/json"},
             timeout=settings.provisioning_timeout_seconds,
-            verify=False,  # noqa: S501 - panel self-signed cert (Mirza uses curl -k)
+            verify=verify,
             transport=transport,
         )
 
@@ -97,9 +101,9 @@ class XUIProvisioningAdapter:
         except ProvisioningError:
             return False
 
-    def create_temp_service(self, *, location: str, traffic_gb: int,
-                            validity_hours: int, protocol: str,
-                            idempotency_key: str) -> dict:
+    def create_temp_service(
+        self, *, location: str, traffic_gb: int, validity_hours: int, protocol: str, idempotency_key: str
+    ) -> dict:
         email = client_email_for(idempotency_key)
         payload = {
             "inboundIds": [int(x) for x in str(self._s.provisioning_inbound_ids).split(",") if x.strip()],
@@ -137,8 +141,14 @@ class XUIProvisioningAdapter:
         result = self._call("GET", f"/panel/api/clients/get/{email}")
         if result.get("success") is not True:
             return None
-        obj = result.get("obj") or {}
-        return obj if obj.get("email") == email or obj else obj or None
+        obj = result.get("obj")
+        if not isinstance(obj, dict) or not obj:
+            return None
+        client = obj.get("client") if isinstance(obj.get("client"), dict) else obj
+        if client.get("email") != email:
+            log.warning("xui identity mismatch", requested=email)
+            return None
+        return obj
 
     def _service_payload(self, email: str, obj: dict, replayed: bool = False) -> dict:
         client = obj.get("client") if isinstance(obj.get("client"), dict) else obj
@@ -149,7 +159,7 @@ class XUIProvisioningAdapter:
             "service_ref": email,
             "config_uri": config_uri,
             "subscription_url": config_uri,
-            "traffic_gb": (client.get("totalGB") or 0) // (1024 ** 3),
+            "traffic_gb": (client.get("totalGB") or 0) // (1024**3),
             "expiry_ts_ms": client.get("expiryTime") or 0,
             "enabled": client.get("enable", True),
             "replayed": replayed,
@@ -166,20 +176,23 @@ class XUIProvisioningAdapter:
         return {
             "exists": True,
             "enabled": client.get("enable", True),
-            "traffic_limit_gb": total // (1024 ** 3),
-            "traffic_used_gb": round((up + down) / (1024 ** 3), 3),
+            "traffic_limit_gb": total // (1024**3),
+            "traffic_used_gb": round((up + down) / (1024**3), 3),
             "expiry_ts_ms": client.get("expiryTime") or 0,
-            "expired": bool(client.get("expiryTime")
-                            and client["expiryTime"] > 0
-                            and client["expiryTime"] <= time.time() * 1000),
+            "expired": bool(
+                client.get("expiryTime")
+                and client["expiryTime"] > 0
+                and client["expiryTime"] <= time.time() * 1000
+            ),
         }
 
     def disable_service(self, service_ref: str) -> bool:
+        if not service_ref.startswith(EMAIL_PREFIX):
+            raise ValidationError("refusing to modify a non GrowthOS-owned service")
         result = self._call("POST", f"/panel/api/clients/del/{service_ref}")
         ok = result.get("success") is True
         if not ok:
-            log.warning("disable failed", service_ref=service_ref,
-                        msg=str(result.get("msg"))[:100])
+            log.warning("disable failed", service_ref=service_ref, msg=str(result.get("msg"))[:100])
         return ok
 
 

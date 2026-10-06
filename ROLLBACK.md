@@ -1,58 +1,84 @@
-# ROLLBACK.md
+# PV GrowthOS rollback
 
-Golden rule: if any protected-service smoke check fails AFTER a GrowthOS
-action → roll back GrowthOS immediately. Never "fix" the protected service.
+Golden rule: if a protected-service smoke check regresses after a GrowthOS
+action, roll back **GrowthOS only**. Never restart, reconfigure or repair Mirza,
+reseller/AKH, Apache, Xray/X-UI, tunnels, firewall or unrelated containers as
+part of this rollback.
 
-## Application rollback (deploy-level)
-```bash
-cd /opt/pv-growth
-docker compose down              # stops pv-growth-app only; protected services untouched
-docker run --rm <previous-image> # or: deploy the previously tagged image
-docker compose up -d
-python -m pv_growth smoke        # verify neighbors + GrowthOS
-```
-Keep the last 3 image tags on the host (`pv-growth-app:<sha>`); DEPLOYMENT.md tags each deploy.
+## Immediate feature kill switch
 
-## Database rollback (migration-level)
-```bash
-PVG_DATABASE_URL=... python -m alembic -c alembic.ini downgrade -1
-```
-Every migration ships a tested downgrade. Do not drop the GrowthOS database as
-a routine rollback; restore the verified `/opt/pv-growth/backups` dump if data
-recovery is needed. Mirza data is outside this database and must never be altered.
+For an automation incident, disable the smallest affected GrowthOS surface
+first. DB overrides win over environment defaults; flag cache TTL is 15 seconds.
 
-## Feature rollback (no redeploy)
-Every module has a flag; admin API or DB row flips it OFF instantly:
 ```sql
-UPDATE feature_flag SET enabled = false WHERE key = 'LIFECYCLE_AUTOMATION_ENABLED';
-UPDATE feature_flag SET enabled = false WHERE key IN
-  ('CONTENT_ENGINE_ENABLED', 'INSTAGRAM_AUTOMATION_ENABLED');
+UPDATE feature_flag SET enabled = false
+WHERE key = 'LIFECYCLE_AUTOMATION_ENABLED';
+
+UPDATE feature_flag SET enabled = false
+WHERE key IN ('CONTENT_ENGINE_ENABLED', 'INSTAGRAM_AUTOMATION_ENABLED');
 ```
-(flags cache TTL is 15 s)
 
-For an Instagram incident, flip `INSTAGRAM_AUTOMATION_ENABLED` OFF first. This
-stops new planning/publishing after the cache TTL without touching Telegram,
-Mirza sync, provisioning, VPN tunnels, firewall or protected services.
+Instagram ambiguity is fail-closed: disabling its flag stops new work; do not
+retry a `publish_unknown` item manually unless reconciliation proves no remote
+publication exists.
 
-## Instagram migration rollback (0008 → 0007)
+## Application rollback
 
-Only after the Instagram/content flags are OFF and the previous application
-image is selected:
+`DEPLOYMENT.md` records the previous image in `previous-image.txt` before
+replacement. Use that exact GrowthOS image; do not use `docker compose down`.
 
 ```bash
-docker run --rm --network host --env-file /opt/pv-growth/config/.env \
-  <image-containing-0008> python -m alembic -c /app/alembic.ini downgrade 0007
+docker stop pv-growth-app
+docker rm pv-growth-app
+docker run -d --name pv-growth-app --restart unless-stopped \
+  --network pv_growth_net \
+  --env-file /opt/pv-growth/config/.env \
+  --memory 384m --cpus 0.75 --pids-limit 200 \
+  --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
+  --health-cmd="python -c \"import httpx;httpx.get('http://127.0.0.1:8350/health',timeout=4).raise_for_status()\"" \
+  --health-interval=30s --health-timeout=5s --health-retries=3 --health-start-period=15s \
+  -p 127.0.0.1:8350:8350 \
+  <previous-growthos-image>
+
+curl -fsS http://127.0.0.1:8350/health
+curl -fsS http://127.0.0.1:8350/ready
+docker exec pv-growth-app python -m pv_growth smoke
 ```
 
-This drops only GrowthOS `content_publications`/`content_insights` plus the new
-`content_items.format`/`creative` fields. Take/verify the GrowthOS backup first.
+If the previous application cannot run against the migrated schema, stop it
+and perform the database rollback below before restarting it. For the current
+`0007 → 0011` production rollout, the rollback target is `0007`.
 
-## Phase-level rollback
-Each phase's acceptance report lists the exact commit range; `git revert` the
-phase commits, re-run migrations downgrade for that phase's revisions.
+## Database rollback
 
-## SentinelX (Phase 0) rollback
-Inspect snapshot stored by `scripts/sentinelx-cleanup.sh` under /opt/pv-growth/audit/.
-Restore: `docker run -d --name sentinelx-worker --restart <policy> <image>`
-(summary line captured in sentinelx-worker-summary-*.txt). Files at
-/opt/sentinelx-worker were never deleted.
+Database downgrade is not the first response to an app-only failure. First
+verify the GrowthOS backup created by `DEPLOYMENT.md`. With the application
+stopped and content/Instagram flags off:
+
+```bash
+docker run --rm --network host \
+  --env-file /opt/pv-growth/config/.env \
+  <candidate-image-containing-0011> \
+  python -m alembic -c /app/alembic.ini downgrade 0007
+```
+
+Revisions `0011`, `0010`, `0009`, and `0008` contain tested downgrades. The
+downgrade intentionally removes their GrowthOS-only schema/data, so keep the
+pre-deploy backup. Never drop the GrowthOS database as a routine rollback and
+never restore/write Mirza data.
+
+If data recovery (not schema compatibility) is required, restore only the
+verified GrowthOS dump under `/opt/pv-growth/backups` using the project backup
+procedure.
+
+## Rollback completion criteria
+
+Rollback is complete only when:
+
+- `/health` and `/ready` are healthy on `127.0.0.1:8350`;
+- the protected-service smoke matches the pre-deploy baseline;
+- the active GrowthOS image and Alembic revision are recorded;
+- the dangerous feature flags remain off until the incident is understood.
+
+Do not delete the failed candidate image or audit evidence until the cause is
+recorded.

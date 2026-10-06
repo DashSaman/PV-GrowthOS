@@ -16,8 +16,9 @@ from pv_growth.events.service import ingest
 log = get_logger("feedback")
 
 
-def submit_rating(session: Session, *, user_id: int, rating: int,
-                  comment: str | None = None, window_key: str) -> FeedbackRating:
+def submit_rating(
+    session: Session, *, user_id: int, rating: int, comment: str | None = None, window_key: str
+) -> FeedbackRating:
     """window_key scopes idempotency (e.g. 'svc123:2026-10')."""
     if not 1 <= rating <= 5:
         raise ValidationError("rating must be 1..5")
@@ -28,25 +29,25 @@ def submit_rating(session: Session, *, user_id: int, rating: int,
     if existing is not None:
         return existing
 
-    row = FeedbackRating(user_id=user_id, rating=rating, comment=comment,
-                         dedupe_key=dedupe)
+    row = FeedbackRating(user_id=user_id, rating=rating, comment=comment, dedupe_key=dedupe)
     try:
         with session.begin_nested():
             session.add(row)
             session.flush()
     except IntegrityError:
-        return session.execute(
-            select(FeedbackRating).where(FeedbackRating.dedupe_key == dedupe)
-        ).scalar_one()
+        return session.execute(select(FeedbackRating).where(FeedbackRating.dedupe_key == dedupe)).scalar_one()
 
-    ingest(session, "FEEDBACK_RECEIVED", user_id=user_id,
-           idempotency_key=f"fbev:{dedupe}",
-           metadata={"rating": rating, "has_comment": bool(comment)})
+    ingest(
+        session,
+        "FEEDBACK_RECEIVED",
+        user_id=user_id,
+        idempotency_key=f"fbev:{dedupe}",
+        metadata={"rating": rating, "has_comment": bool(comment)},
+    )
     return row
 
 
-def set_testimonial_consent(session: Session, feedback: FeedbackRating,
-                            consent: bool) -> FeedbackRating:
+def set_testimonial_consent(session: Session, feedback: FeedbackRating, consent: bool) -> FeedbackRating:
     """Explicit consent recorded — the only gate for publishing a testimonial."""
     if feedback.rating < 4 and consent:
         raise ValidationError("consent only relevant for positive ratings")
@@ -66,6 +67,8 @@ def route(session: Session, feedback: FeedbackRating) -> str:
 
 def publishable_testimonials(session: Session) -> list[FeedbackRating]:
     """Only rows with stored consent may ever be shown publicly."""
-    return list(session.execute(
-        select(FeedbackRating).where(FeedbackRating.testimonial_consent.is_(True))
-    ).scalars().all())
+    return list(
+        session.execute(select(FeedbackRating).where(FeedbackRating.testimonial_consent.is_(True)))
+        .scalars()
+        .all()
+    )

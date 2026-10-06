@@ -60,10 +60,12 @@ def test_vertical_video_is_9_by_16_short_and_bounded(tmp_path, format):
 def test_mixed_persian_latin_text_does_not_crash(tmp_path):
     from pv_growth.content.media import MediaRenderer
 
-    asset = MediaRenderer(tmp_path).render(_item(
-        title="خرید VPN — PV Network",
-        body="اتصال ساده | Android / iOS / Windows — تست و خرید",
-    ))
+    asset = MediaRenderer(tmp_path).render(
+        _item(
+            title="خرید VPN — PV Network",
+            body="اتصال ساده | Android / iOS / Windows — تست و خرید",
+        )
+    )
 
     assert asset.path.exists()
     assert asset.path.stat().st_size > 1_000
@@ -117,7 +119,8 @@ def test_local_media_store_cleanup_enforces_retention(tmp_path):
 
     asset = MediaRenderer(tmp_path / "render").render(_item(title="store retention"))
     store = LocalMediaStore(
-        root=tmp_path / "public", public_base_url="https://media.example/pv",
+        root=tmp_path / "public",
+        public_base_url="https://media.example/pv",
         retention_hours=48,
     )
     store.put(asset, "instagram/expired.jpg")

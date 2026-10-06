@@ -36,9 +36,7 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
     """Fetch all active sources, parse, dedup (unique uri_hash), validate, score."""
     stats = {"sources": 0, "fetched": 0, "new": 0, "duplicates": 0, "invalid": 0}
     seen_this_run: set[str] = set()
-    sources = session.execute(
-        select(ConfigSource).where(ConfigSource.is_active.is_(True))
-    ).scalars().all()
+    sources = session.execute(select(ConfigSource).where(ConfigSource.is_active.is_(True))).scalars().all()
 
     for source in sources:
         stats["sources"] += 1
@@ -77,9 +75,16 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
             q = score(parsed, source_reliability=reliability)
             quality_sum += q
             row = RawConfig(
-                source_id=source.id, uri_hash=parsed.uri_hash, protocol=parsed.protocol,
-                host=parsed.host, port=parsed.port, raw_uri=parsed.raw_uri,
-                remark=parsed.remark, valid=True, quality_score=q, status="validated",
+                source_id=source.id,
+                uri_hash=parsed.uri_hash,
+                protocol=parsed.protocol,
+                host=parsed.host,
+                port=parsed.port,
+                raw_uri=parsed.raw_uri,
+                remark=parsed.remark,
+                valid=True,
+                quality_score=q,
+                status="validated",
             )
             try:
                 with session.begin_nested():
@@ -98,15 +103,17 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
 
 def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
     """Top fresh validated configs by score; health-check only these few."""
-    candidates = session.execute(
-        select(RawConfig)
-        .where(RawConfig.valid.is_(True), RawConfig.status == "validated")
-        .order_by(RawConfig.quality_score.desc())
-        .limit(settings.health_check_max)
-    ).scalars().all()
-    results = check_top_candidates(
-        [(c.id, c.host, c.port) for c in candidates], settings
+    candidates = (
+        session.execute(
+            select(RawConfig)
+            .where(RawConfig.valid.is_(True), RawConfig.status == "validated")
+            .order_by(RawConfig.quality_score.desc())
+            .limit(settings.health_check_max)
+        )
+        .scalars()
+        .all()
     )
+    results = check_top_candidates([(c.id, c.host, c.port) for c in candidates], settings)
     for candidate in candidates:
         candidate.health_checked = True
         candidate.health_ok = results.get(candidate.id)
@@ -153,8 +160,10 @@ def publish_public_slot(
         return None
 
     post = PublishedPost(
-        dedupe_key=dedupe_key, channel_id=settings.free_channel_id,
-        kind="free_public", config_id=ranked[0].id,
+        dedupe_key=dedupe_key,
+        channel_id=settings.free_channel_id,
+        kind="free_public",
+        config_id=ranked[0].id,
     )
     try:
         with session.begin_nested():
@@ -163,19 +172,17 @@ def publish_public_slot(
     except IntegrityError:
         return None  # concurrent scheduler won the race
 
-    result = telegram.send_channel_post(
-        settings.free_channel_id, render_public_post(ranked[0])
-    )
+    result = telegram.send_channel_post(settings.free_channel_id, render_public_post(ranked[0]))
     post.message_id = result.get("message_id")
     ranked[0].status = "published"
     ranked[0].published_at = utcnow()
     ingest(
-        session, "FREE_CONFIG_POSTED",
-        campaign_id=None, source_id=None,
+        session,
+        "FREE_CONFIG_POSTED",
+        campaign_id=None,
+        source_id=None,
         idempotency_key=f"freepost:{dedupe_key}",
-        metadata={"dedupe_key": dedupe_key, "protocol": ranked[0].protocol,
-                  "slot": slot, "kind": "public"},
+        metadata={"dedupe_key": dedupe_key, "protocol": ranked[0].protocol, "slot": slot, "kind": "public"},
     )
-    log.info("public config published", dedupe_key=dedupe_key,
-             message_id=post.message_id)
+    log.info("public config published", dedupe_key=dedupe_key, message_id=post.message_id)
     return post

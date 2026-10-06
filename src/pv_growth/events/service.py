@@ -84,8 +84,9 @@ def ingest(
         if user is not None:
             user.last_seen_at = utcnow()
 
-    log.info("event ingested", event_type=event_type, user_id=user_id,
-             campaign_id=campaign_id, source_id=source_id)
+    log.info(
+        "event ingested", event_type=event_type, user_id=user_id, campaign_id=campaign_id, source_id=source_id
+    )
     return event, True
 
 
@@ -106,9 +107,7 @@ def get_or_create_user(
             select(User).where(User.telegram_user_id == telegram_user_id)
         ).scalar_one_or_none()
     if user is None and mirza_user_ref:
-        user = session.execute(
-            select(User).where(User.mirza_user_ref == mirza_user_ref)
-        ).scalar_one_or_none()
+        user = session.execute(select(User).where(User.mirza_user_ref == mirza_user_ref)).scalar_one_or_none()
     if user is not None:
         user.last_seen_at = utcnow()
         if username:

@@ -49,13 +49,17 @@ def test_publication_remote_identity_is_unique(session):
 
     first = _item(session, "unique-a")
     second = _item(session, "unique-b")
-    session.add(ContentPublication(
-        content_id=first.id, provider="instagram", status="published", media_id="ig-media-123"
-    ))
+    session.add(
+        ContentPublication(
+            content_id=first.id, provider="instagram", status="published", media_id="ig-media-123"
+        )
+    )
     session.flush()
-    session.add(ContentPublication(
-        content_id=second.id, provider="instagram", status="published", media_id="ig-media-123"
-    ))
+    session.add(
+        ContentPublication(
+            content_id=second.id, provider="instagram", status="published", media_id="ig-media-123"
+        )
+    )
 
     with pytest.raises(IntegrityError):
         session.flush()

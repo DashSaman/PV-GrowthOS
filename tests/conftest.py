@@ -64,6 +64,24 @@ def _migrate(settings):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _clean_database(settings, _migrate):
+    """Give every test an empty schema while preserving in-test commits.
+
+    Several integration tests intentionally commit so a second session/thread can
+    observe durable state. Clearing tables at the start of the next test keeps
+    those realistic commits without leaking rows across otherwise independent
+    tests.
+    """
+    from pv_growth.database.base import get_engine
+    from pv_growth.database.types import Base
+
+    with get_engine(settings).begin() as connection:
+        for table in reversed(Base.metadata.sorted_tables):
+            connection.execute(table.delete())
+    yield
+
+
 @pytest.fixture
 def session(settings):
     from pv_growth.database.base import session_scope

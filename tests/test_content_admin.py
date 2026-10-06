@@ -42,13 +42,17 @@ def test_content_admin_create_and_list(client):
 
 def test_content_admin_validation_rejects_contradictory_campaign_fact(client):
     campaign = f"price_{uuid.uuid4().hex[:8]}"
-    created_campaign = client.post("/admin/api/campaigns", headers=ADMIN, json={
-        "code": campaign,
-        "name": "Fact source",
-        "kind": "purchase",
-        "status": "active",
-        "config": {"price": 1500},
-    })
+    created_campaign = client.post(
+        "/admin/api/campaigns",
+        headers=ADMIN,
+        json={
+            "code": campaign,
+            "name": "Fact source",
+            "kind": "purchase",
+            "status": "active",
+            "config": {"price": 1500},
+        },
+    )
     assert created_campaign.status_code == 201
     created = _create_content(client, campaign_code=campaign, facts={"price": 999})
     item_id = created.json()["id"]

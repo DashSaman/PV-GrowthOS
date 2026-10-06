@@ -47,9 +47,7 @@ class MediaRenderer:
             "facts": item.facts or {},
             "creative": item.creative or {},
         }
-        encoded = json.dumps(
-            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        ).encode()
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()[:24]
 
     @staticmethod
@@ -105,9 +103,7 @@ class MediaRenderer:
         if item.format == "post":
             path = self.root / f"{digest}.jpg"
             if not path.exists():
-                self._frame(item, POST_SIZE).save(
-                    path, "JPEG", quality=88, optimize=True, progressive=False
-                )
+                self._frame(item, POST_SIZE).save(path, "JPEG", quality=88, optimize=True, progressive=False)
             return RenderedAsset(path, "image/jpeg", *POST_SIZE)
 
         if not self._ffmpeg:
@@ -118,12 +114,31 @@ class MediaRenderer:
             self._frame(item, VERTICAL_SIZE).save(frame_path, "PNG", optimize=True)
             command = [
                 self._ffmpeg,
-                "-hide_banner", "-loglevel", "error", "-y",
-                "-loop", "1", "-i", str(frame_path),
-                "-t", str(VIDEO_SECONDS), "-r", "12",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
-                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                "-map_metadata", "-1", str(path),
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-loop",
+                "1",
+                "-i",
+                str(frame_path),
+                "-t",
+                str(VIDEO_SECONDS),
+                "-r",
+                "12",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "28",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                "-map_metadata",
+                "-1",
+                str(path),
             ]
             try:
                 subprocess.run(command, check=True, timeout=25)  # noqa: S603

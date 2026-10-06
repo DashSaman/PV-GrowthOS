@@ -1,3 +1,5 @@
--r requirements.txt
+-r requirements.lock
 pytest>=8
 ruff>=0.4
+httpx2>=2.13
+pip-audit>=2.7

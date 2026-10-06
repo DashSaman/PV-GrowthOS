@@ -29,9 +29,7 @@ def _has(session: Session, user_id: int, event_type: str) -> bool:
 
 def _latest_event_at(session, user_id: int, event_type: str):
     return session.execute(
-        select(func.max(Event.occurred_at)).where(
-            Event.user_id == user_id, Event.event_type == event_type
-        )
+        select(func.max(Event.occurred_at)).where(Event.user_id == user_id, Event.event_type == event_type)
     ).scalar_one()
 
 
@@ -49,8 +47,8 @@ def matches_trigger(session: Session, user: User, trigger: str) -> bool:
         from datetime import timedelta
 
         from pv_growth.database.types import utcnow
-        return started and user.last_seen_at is not None and \
-            utcnow() - user.last_seen_at >= timedelta(days=7)
+
+        return started and user.last_seen_at is not None and utcnow() - user.last_seen_at >= timedelta(days=7)
     return False
 
 
@@ -62,13 +60,53 @@ def gate_event_for(trigger: str) -> str | None:
     return "BOT_STARTED"
 
 
-def candidate_users(session: Session, trigger: str) -> list[tuple[User, object]]:
-    """[(user, gate_event_time)] for users currently matching the trigger."""
-    out = []
-    users = session.execute(select(User).where(User.is_blocked.is_(False))).scalars().all()
-    gate = gate_event_for(trigger)
-    for user in users:
-        if matches_trigger(session, user, trigger):
-            at = _latest_event_at(session, user.id, gate) if gate else None
-            out.append((user, at))
-    return out
+def candidate_users(
+    session: Session,
+    trigger: str,
+    *,
+    limit: int | None = None,
+) -> list[tuple[User, object]]:
+    """Return matching users with a set-based gate query, optionally bounded."""
+    if trigger in TRIGGERS:
+        gate, missing = TRIGGERS[trigger]
+    elif trigger == "first_purchase_onboarding":
+        gate, missing = "PAYMENT_SUCCESS", None
+    elif trigger == "winback":
+        gate, missing = "BOT_STARTED", "PAYMENT_SUCCESS"
+    else:
+        return []
+
+    gate_rows = (
+        select(
+            Event.user_id.label("user_id"),
+            func.max(Event.occurred_at).label("gate_at"),
+        )
+        .where(Event.event_type == gate, Event.user_id.isnot(None))
+        .group_by(Event.user_id)
+        .subquery()
+    )
+    statement = (
+        select(User, gate_rows.c.gate_at)
+        .join(gate_rows, gate_rows.c.user_id == User.id)
+        .where(User.is_blocked.is_(False))
+        .order_by(User.id)
+    )
+    if missing:
+        statement = statement.where(
+            ~exists().where(
+                Event.user_id == User.id,
+                Event.event_type == missing,
+            )
+        )
+    if trigger == "winback":
+        from datetime import timedelta
+
+        from pv_growth.database.types import utcnow
+
+        statement = statement.where(
+            User.last_seen_at.isnot(None),
+            User.last_seen_at <= utcnow() - timedelta(days=7),
+        )
+    if limit is not None:
+        statement = statement.limit(max(0, limit))
+    return [(user, gate_at) for user, gate_at in session.execute(statement).all()]

@@ -8,8 +8,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 from pv_growth.database.types import Base, Json, utcnow
 
 CONTENT_STATES = ("draft", "validated", "scheduled", "published", "failed")
-CONTENT_KINDS = ("free_public_config", "pv_exclusive", "education", "utility",
-                 "purchase_cta", "referral", "service_status")
+CONTENT_KINDS = (
+    "free_public_config",
+    "pv_exclusive",
+    "education",
+    "utility",
+    "purchase_cta",
+    "referral",
+    "service_status",
+)
 
 
 class ContentItem(Base):
@@ -28,16 +35,14 @@ class ContentItem(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     facts: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
     creative: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft",
-                                        index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", index=True)
     dedupe_key: Mapped[str | None] = mapped_column(String(128))
     campaign_code: Mapped[str | None] = mapped_column(String(64))
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime())
     published_at: Mapped[datetime | None] = mapped_column(DateTime())
     message_id: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow,
-                                                 onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow, onupdate=utcnow)
 
 
 class ContentPublication(Base):
@@ -60,9 +65,7 @@ class ContentPublication(Base):
     error_detail: Mapped[str | None] = mapped_column(Text)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(), nullable=False, default=utcnow, onupdate=utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow, onupdate=utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime())
 
 
@@ -70,9 +73,7 @@ class ContentInsight(Base):
     """Normalized snapshot of metrics for one remote publication."""
 
     __tablename__ = "content_insights"
-    __table_args__ = (
-        UniqueConstraint("publication_id", "captured_at", name="uq_content_insight_snapshot"),
-    )
+    __table_args__ = (UniqueConstraint("publication_id", "captured_at", name="uq_content_insight_snapshot"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     publication_id: Mapped[int] = mapped_column(

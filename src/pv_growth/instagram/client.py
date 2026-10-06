@@ -15,8 +15,7 @@ from pv_growth.core.errors import ExternalServiceError, NotConfigured, Validatio
 
 
 class InstagramAPIError(ExternalServiceError):
-    def __init__(self, *, status_code: int | None, retryable: bool,
-                 category: str, detail: str) -> None:
+    def __init__(self, *, status_code: int | None, retryable: bool, category: str, detail: str) -> None:
         self.status_code = status_code
         self.retryable = retryable
         self.category = category
@@ -26,14 +25,19 @@ class InstagramAPIError(ExternalServiceError):
 
 
 class InstagramTransport(Protocol):
-    def request(self, method: str, path: str, *, params: dict | None = None,
-                data: dict | bytes | None = None,
-                headers: dict | None = None) -> dict: ...
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict | None = None,
+        data: dict | bytes | None = None,
+        headers: dict | None = None,
+    ) -> dict: ...
 
 
 class HttpInstagramTransport:
-    def __init__(self, settings: Settings,
-                 transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(self, settings: Settings, transport: httpx.BaseTransport | None = None) -> None:
         if not settings.instagram_access_token or not settings.instagram_api_version:
             raise NotConfigured("Instagram access token/API version not configured")
         self._token = settings.instagram_access_token
@@ -49,9 +53,15 @@ class HttpInstagramTransport:
     def _safe(self, value: str) -> str:
         return value.replace(self._token, "[REDACTED]")[:240]
 
-    def request(self, method: str, path: str, *, params: dict | None = None,
-                data: dict | bytes | None = None,
-                headers: dict | None = None) -> dict:
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict | None = None,
+        data: dict | bytes | None = None,
+        headers: dict | None = None,
+    ) -> dict:
         kwargs: dict[str, Any] = {"params": params, "headers": headers}
         if isinstance(data, bytes):
             kwargs["content"] = data
@@ -105,33 +115,50 @@ class FakeInstagramTransport:
         self.calls: list[dict] = []
         self.canned: dict[tuple[str, str], dict] = {}
 
-    def request(self, method: str, path: str, *, params: dict | None = None,
-                data: dict | bytes | None = None,
-                headers: dict | None = None) -> dict:
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict | None = None,
+        data: dict | bytes | None = None,
+        headers: dict | None = None,
+    ) -> dict:
         normalized = method.upper()
-        self.calls.append({
-            "method": normalized,
-            "path": path,
-            "params": params,
-            "data": data,
-            "headers": headers,
-        })
+        self.calls.append(
+            {
+                "method": normalized,
+                "path": path,
+                "params": params,
+                "data": data,
+                "headers": headers,
+            }
+        )
         return dict(self.canned.get((normalized, path), {"id": f"fake-{len(self.calls)}"}))
 
 
 class InstagramClient:
     def __init__(self, settings: Settings, transport: InstagramTransport | None = None) -> None:
-        if (not settings.instagram_account_id or not settings.instagram_access_token
-                or not settings.instagram_api_version):
+        if (
+            not settings.instagram_account_id
+            or not settings.instagram_access_token
+            or not settings.instagram_api_version
+        ):
             raise NotConfigured(
                 "Instagram requires professional account ID, access token, and explicit API version"
             )
         self._settings = settings
         self._transport = transport or HttpInstagramTransport(settings)
 
-    def create_container(self, *, format: str, caption: str,
-                         media_url: str | None = None, is_video: bool = False,
-                         resumable: bool = False) -> dict:
+    def create_container(
+        self,
+        *,
+        format: str,
+        caption: str,
+        media_url: str | None = None,
+        is_video: bool = False,
+        resumable: bool = False,
+    ) -> dict:
         if format == "post":
             if not media_url:
                 raise NotConfigured("Instagram photo post requires a public media URL")
@@ -154,9 +181,7 @@ class InstagramClient:
                 raise NotConfigured("Instagram story requires media URL or resumable video upload")
         else:
             raise ValidationError(f"unsupported Instagram format: {format}")
-        return self._transport.request(
-            "POST", f"/{self._settings.instagram_account_id}/media", data=data
-        )
+        return self._transport.request("POST", f"/{self._settings.instagram_account_id}/media", data=data)
 
     def upload_video(self, upload_uri: str, content: bytes) -> dict:
         return self._transport.request(
@@ -171,9 +196,7 @@ class InstagramClient:
         )
 
     def container_status(self, container_id: str) -> dict:
-        return self._transport.request(
-            "GET", f"/{container_id}", params={"fields": "status_code,status"}
-        )
+        return self._transport.request("GET", f"/{container_id}", params={"fields": "status_code,status"})
 
     def publish_container(self, container_id: str) -> dict:
         return self._transport.request(
@@ -182,9 +205,19 @@ class InstagramClient:
             data={"creation_id": container_id},
         )
 
+    def owned_media(self, *, limit: int = 25) -> dict:
+        if limit < 1 or limit > 100:
+            raise ValidationError("Instagram owned-media limit must be between 1 and 100")
+        return self._transport.request(
+            "GET",
+            f"/{self._settings.instagram_account_id}/media",
+            params={
+                "fields": "id,caption,media_type,permalink,timestamp",
+                "limit": limit,
+            },
+        )
+
     def media_insights(self, media_id: str, metrics: list[str]) -> dict:
         if not metrics:
             raise ValidationError("at least one Instagram insight metric is required")
-        return self._transport.request(
-            "GET", f"/{media_id}/insights", params={"metric": ",".join(metrics)}
-        )
+        return self._transport.request("GET", f"/{media_id}/insights", params={"metric": ",".join(metrics)})

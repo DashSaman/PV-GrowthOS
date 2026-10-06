@@ -77,6 +77,27 @@ docker run -d --name pv-growth-app ... pv-growth-app:<previous-sha>   # see /opt
 ```
 Protected services are NEVER touched during GrowthOS rollback.
 
+## Instagram publish reconciliation contract
+
+Verified 2026-10-06 against Meta's official Instagram Platform documentation:
+
+- Instagram API with Facebook Login:
+  https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-facebook-login
+- Content Publishing:
+  https://developers.facebook.com/documentation/instagram-platform/content-publishing
+
+GrowthOS uses only the supported owned-media read for reconciliation:
+`GET /<IG_USER_ID>/media`, requesting `id,caption,media_type,permalink,timestamp`
+with a bounded `limit`. The durable caption marker is the per-content
+`socialc_<content_id>` token.
+
+After an ambiguous `media_publish` result, a post/reel is considered reconciled
+only when exactly one recent owned-media row contains that marker and its
+`timestamp` falls inside the bounded publication window. Zero matches, multiple
+matches, malformed timestamps, and stories remain `publish_unknown`; reconciliation
+never calls `media_publish` again. Container `status_code` is used only for
+container readiness and is not treated as proof of the published media id.
+
 ## Reboot safety (verified without rebooting)
 - pv-growth-app: `restart=unless-stopped`
 - forwarders pv-growth-pgforward/mysqlforward: `enabled`, `Restart=always`,

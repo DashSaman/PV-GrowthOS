@@ -121,10 +121,10 @@ class _PublishTimeoutTransport(FakeInstagramTransport):
     def request(self, method, path, *, params=None, data=None, headers=None):
         if method.upper() == "POST" and path == "/ig-account/media_publish":
             self.publish_attempts += 1
-            self.calls.append({"method": "POST", "path": path, "params": params,
-                               "data": data, "headers": headers})
-            raise InstagramAPIError(status_code=None, retryable=True,
-                                    category="transport", detail="timeout")
+            self.calls.append(
+                {"method": "POST", "path": path, "params": params, "data": data, "headers": headers}
+            )
+            raise InstagramAPIError(status_code=None, retryable=True, category="transport", detail="timeout")
         return super().request(method, path, params=params, data=data, headers=headers)
 
 
@@ -159,9 +159,16 @@ def test_reconcile_ambiguous_publication_before_retry(session, settings):
     )
     session.add(publication)
     session.flush()
-    transport.canned[("GET", "/container-known")] = {
-        "status_code": "FINISHED",
-        "published_media_id": "media-reconciled",
+    transport.canned[("GET", "/ig-account/media")] = {
+        "data": [
+            {
+                "id": "media-reconciled",
+                "caption": f"caption https://t.me/pvnetwork_bot?start=socialc_{item.id}",
+                "media_type": "IMAGE",
+                "permalink": "https://www.instagram.com/p/reconciled/",
+                "timestamp": publication.updated_at.isoformat(),
+            }
+        ],
     }
 
     reconciled = publisher.reconcile(publication.id)
@@ -172,12 +179,103 @@ def test_reconcile_ambiguous_publication_before_retry(session, settings):
     assert not any(call["path"] == "/ig-account/media_publish" for call in transport.calls)
 
 
+@pytest.mark.parametrize(
+    "remote_rows",
+    [
+        [],
+        [
+            {"id": "media-a", "media_type": "IMAGE"},
+            {"id": "media-b", "media_type": "IMAGE"},
+        ],
+    ],
+)
+def test_reconcile_zero_or_multiple_matches_stays_unknown(session, settings, remote_rows):
+    publisher, transport = _publisher(session, settings)
+    item = _item(session)
+    publication = ContentPublication(
+        content_id=item.id,
+        provider="instagram",
+        status="publish_unknown",
+        container_id=f"container-unknown-{item.id}",
+        attempt=1,
+    )
+    session.add(publication)
+    session.flush()
+    timestamp = publication.updated_at.isoformat()
+    rows = []
+    for row in remote_rows:
+        rows.append(
+            {
+                **row,
+                "caption": f"caption socialc_{item.id}",
+                "permalink": "https://www.instagram.com/p/example/",
+                "timestamp": timestamp,
+            }
+        )
+    transport.canned[("GET", "/ig-account/media")] = {"data": rows}
+
+    reconciled = publisher.reconcile(publication.id)
+
+    assert reconciled.status == "publish_unknown"
+    assert reconciled.media_id is None
+    with pytest.raises(ExternalServiceError, match="ambiguous"):
+        publisher.publish(item, "caption")
+    assert not any(call["path"] == "/ig-account/media_publish" for call in transport.calls)
+
+
+def test_reconcile_matching_media_outside_time_window_stays_unknown(session, settings):
+    publisher, transport = _publisher(session, settings)
+    item = _item(session)
+    publication = ContentPublication(
+        content_id=item.id,
+        provider="instagram",
+        status="publish_unknown",
+        container_id="container-old-match",
+        attempt=1,
+    )
+    session.add(publication)
+    session.flush()
+    transport.canned[("GET", "/ig-account/media")] = {
+        "data": [
+            {
+                "id": "media-too-old",
+                "caption": f"caption socialc_{item.id}",
+                "media_type": "IMAGE",
+                "permalink": "https://www.instagram.com/p/old/",
+                "timestamp": (publication.updated_at - timedelta(hours=1)).isoformat(),
+            }
+        ]
+    }
+
+    assert publisher.reconcile(publication.id).status == "publish_unknown"
+    assert publication.media_id is None
+
+
+def test_story_reconciliation_remains_unknown_without_owned_media_guess(session, settings):
+    publisher, transport = _publisher(session, settings)
+    item = _item(session, format="story")
+    publication = ContentPublication(
+        content_id=item.id,
+        provider="instagram",
+        status="publish_unknown",
+        container_id="container-story-unknown",
+        attempt=1,
+    )
+    session.add(publication)
+    session.flush()
+
+    reconciled = publisher.reconcile(publication.id)
+
+    assert reconciled.status == "publish_unknown"
+    assert reconciled.media_id is None
+    assert transport.calls == []
+
+
 def test_safe_retryable_create_failure_advances_attempt(session, settings):
     class _CreateFailure(FakeInstagramTransport):
         def request(self, method, path, **kwargs):
             if method.upper() == "POST" and path == "/ig-account/media":
-                raise InstagramAPIError(status_code=503, retryable=True,
-                                        category="upstream", detail="busy")
+                raise InstagramAPIError(status_code=503, retryable=True, category="upstream", detail="busy")
             return super().request(method, path, **kwargs)
 
     publisher, _ = _publisher(session, settings, _CreateFailure())
@@ -196,8 +294,7 @@ def test_retryable_create_failure_has_bounded_attempt_budget(session, settings):
     class _AlwaysUnavailable(FakeInstagramTransport):
         def request(self, method, path, **kwargs):
             if method.upper() == "POST" and path == "/ig-account/media":
-                raise InstagramAPIError(status_code=503, retryable=True,
-                                        category="upstream", detail="busy")
+                raise InstagramAPIError(status_code=503, retryable=True, category="upstream", detail="busy")
             return super().request(method, path, **kwargs)
 
     publisher, _ = _publisher(session, settings, _AlwaysUnavailable())
@@ -224,8 +321,7 @@ def test_instagram_publisher_rejects_unsupported_format(session, settings):
     assert transport.calls == []
 
 
-def test_job_does_not_construct_instagram_publisher_when_flag_off(
-        session, settings, monkeypatch):
+def test_job_does_not_construct_instagram_publisher_when_flag_off(session, settings, monkeypatch):
     from pv_growth.content import jobs as content_jobs
 
     configured = _settings(settings, flag_instagram_automation_enabled=False)
@@ -252,19 +348,25 @@ def test_job_does_not_construct_instagram_publisher_when_flag_off(
 def test_instagram_failure_does_not_block_later_telegram_item(session, settings):
     class _BrokenInstagram:
         def publish(self, item, rendered_body):
-            raise InstagramAPIError(status_code=503, retryable=True,
-                                    category="upstream", detail="unavailable")
+            raise InstagramAPIError(
+                status_code=503, retryable=True, category="upstream", detail="unavailable"
+            )
 
     class _Telegram:
         def publish(self, item, rendered_body):
             from pv_growth.content.publishers import PublishResult
+
             return PublishResult(remote_id="42", metadata={})
 
     due = utcnow() - timedelta(minutes=1)
     instagram = _item(session, body="instagram", status="scheduled", scheduled_at=due)
     telegram = _item(
-        session, channel="free", format="text", body="telegram",
-        status="scheduled", scheduled_at=due,
+        session,
+        channel="free",
+        format="text",
+        body="telegram",
+        status="scheduled",
+        scheduled_at=due,
     )
     flags = FlagService(_settings(settings))
 

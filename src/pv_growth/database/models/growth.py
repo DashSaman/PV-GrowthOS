@@ -49,7 +49,7 @@ class RewardLedger(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     source: Mapped[str] = mapped_column(String(32), nullable=False)  # referral|milestone|winback
-    kind: Mapped[str] = mapped_column(String(16), nullable=False)    # traffic_gb|days|credit
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # traffic_gb|days|credit
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     dedupe_key: Mapped[str] = mapped_column(String(128), unique=True)
     meta: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
@@ -97,6 +97,7 @@ class CommissionEntry(Base):
     partner_id: Mapped[int] = mapped_column(ForeignKey("partners.id"), index=True, nullable=False)
     order_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     amount_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    commission_cents: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     dedupe_key: Mapped[str] = mapped_column(String(128), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)

@@ -53,8 +53,9 @@ class RawConfig(Base):
     health_checked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     health_ok: Mapped[bool | None] = mapped_column(Boolean)
 
-    status: Mapped[str] = mapped_column(String(24), nullable=False, default="fetched",
-                                        index=True)  # fetched|validated|published|rejected|stale
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="fetched", index=True
+    )  # fetched|validated|published|rejected|stale
     fetched_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime())
 
@@ -95,5 +96,16 @@ class ExclusiveClaim(Base):
     service_ref: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending_provision")
     config_payload: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
+    provision_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_provision_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime())
+
+
+class ProvisioningQuotaLock(Base):
+    """Rows locked transactionally while reserving campaign/day quota."""
+
+    __tablename__ = "provisioning_quota_locks"
+
+    quota_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)

@@ -26,10 +26,15 @@ Handler = Callable[[Session, Settings, dict], None]
 _HANDLERS: dict[str, Handler] = {}
 
 
+class RetryableJobError(Exception):
+    """Handler state is intentional evidence and must commit before job backoff."""
+
+
 def handler(job_type: str):
     def register(fn: Handler) -> Handler:
         _HANDLERS[job_type] = fn
         return fn
+
     return register
 
 
@@ -37,6 +42,7 @@ def register_builtin_handlers() -> None:
     """Import handler modules so their @handler decorators register.
     Without this the registry is empty at runtime and every job errors."""
     import pv_growth.content.jobs  # noqa: F401
+    import pv_growth.conversions.service  # noqa: F401
     import pv_growth.lifecycle.service  # noqa: F401
     import pv_growth.mirza_adapter.sync_job  # noqa: F401
     import pv_growth.provisioning.lifecycle_job  # noqa: F401
@@ -50,15 +56,15 @@ def dispatch(session: Session, settings: Settings, job_type: str, payload: dict)
     fn(session, settings, payload)
 
 
-def run_tick(settings: Settings, *, worker_id: str | None = None, batch: int = 10) -> int:
+def run_tick(settings: Settings, *, worker_id: str | None = None, batch: int | None = None) -> int:
     """Claim and execute up to `batch` due jobs. Returns executed count."""
     worker = worker_id or f"worker-{threading.get_ident()}"
+    effective_batch = batch if batch is not None else settings.job_batch_size
     executed = 0
-    while executed < batch:
+    while executed < effective_batch:
         with session_scope(settings) as session:
             jobs.recover_stale(session, stale_seconds=settings.job_lock_stale_seconds)
-            job = jobs.claim_next(session, worker,
-                                  stale_seconds=settings.job_lock_stale_seconds)
+            job = jobs.claim_next(session, worker, stale_seconds=settings.job_lock_stale_seconds)
             if job is None:
                 break
             executed += 1
@@ -67,14 +73,29 @@ def run_tick(settings: Settings, *, worker_id: str | None = None, batch: int = 1
                 session.commit()
                 jobs.complete(session, job.id)
             except Exception as exc:  # noqa: BLE001 — job failures are data, not crashes
-                log.error("job execution failed", job_id=job.id,
-                          job_type=job.job_type, error=str(exc),
-                          trace=traceback.format_exc()[-500:])
-                session.rollback()
+                log.error(
+                    "job execution failed",
+                    job_id=job.id,
+                    job_type=job.job_type,
+                    error=str(exc),
+                    trace=traceback.format_exc()[-500:],
+                )
+                if isinstance(exc, RetryableJobError):
+                    session.commit()
+                else:
+                    session.rollback()
                 with session_scope(settings) as fresh:
                     fresh_job = fresh.get(type(job), job.id)
                     if fresh_job is not None:
-                        jobs.fail(fresh, fresh_job, str(exc))
+                        jobs.fail(
+                            fresh,
+                            fresh_job,
+                            str(exc),
+                            max_attempts=min(
+                                fresh_job.max_attempts,
+                                settings.job_max_attempts_default,
+                            ),
+                        )
     return executed
 
 

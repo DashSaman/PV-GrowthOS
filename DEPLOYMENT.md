@@ -1,122 +1,189 @@
-# DEPLOYMENT.md
+# PV GrowthOS production deployment
 
-Deployment contract: preflight → backup state → pull tested immutable image →
-migration → start → health check → protected-service smoke → success or rollback.
+Production contract: **green main CI → immutable SHA artifact → checksum →
+preflight → GrowthOS backup → dangerous flags OFF → migrate → replace only
+`pv-growth-app` → health/ready → protected-service smoke → canaries or
+GrowthOS-only rollback**.
 
-## One-time server preparation (owner, ~10 min)
+The production host never builds the image. The canonical secrets file is
+`/opt/pv-growth/config/.env` (`root:root`, mode `600`). Do not use `docker
+compose down` on the server and do not modify Mirza, reseller/AKH containers,
+Apache, Xray/X-UI configuration, tunnels, or firewall rules.
 
-```bash
-# 1. database (existing PostgreSQL 14 — no new install)
-sudo -u postgres psql <<'SQL'
-CREATE USER pv_growth WITH PASSWORD '<strong-password>';
-CREATE DATABASE pv_growth OWNER pv_growth;
-SQL
+## Release artifact
 
-# 2. namespace
-sudo mkdir -p /opt/pv-growth/config && cd /opt/pv-growth
-sudo git clone https://github.com/DashSaman/PV-GrowthOS.git repo
+The GitHub `main` workflow builds `pv-growth-app:<full-commit-sha>` only after
+lint, SQLite/PostgreSQL tests, migration tests and `pip-audit` pass. It uploads
+artifact `pv-growth-app-<sha>` containing:
 
-# 3. environment (secrets — root-owned)
-sudo tee /opt/pv-growth/config/.env >/dev/null <<'ENV'
-PVG_ENV=production
-PVG_DATABASE_URL=postgresql+psycopg://pv_growth:<strong-password>@127.0.0.1:5432/pv_growth
-PVG_ADMIN_TOKEN=<admin-token>
-PVG_TELEGRAM_BOT_TOKEN=<token>
-PVG_FREE_CHANNEL_ID=<id>
-PVG_OFFICIAL_CHANNEL_ID=<id>
-PVG_SCHEDULER_ENABLED=1
-ENV
-sudo chmod 600 /opt/pv-growth/config/.env
-
-# 4. dedicated network (subnet verified free by preflight in step 5)
-docker network create pv_growth_net --subnet 172.23.77.0/24
-
-# 5. READ-ONLY preflight (aborts on any FAIL)
-docker run --rm --network host \
-  --env-file /opt/pv-growth/config/.env pv-growth-app:<tag> python -m pv_growth preflight
-
-# 6. sentinelx cleanup (owner-authorized; dry-run first)
-sudo bash /opt/pv-growth/repo/scripts/sentinelx-cleanup.sh /opt/pv-growth/audit
-sudo CONFIRM=yes bash /opt/pv-growth/repo/scripts/sentinelx-cleanup.sh /opt/pv-growth/audit
+```text
+pv-growth-app-<sha>.tar
+pv-growth-app-<sha>.tar.sha256
 ```
 
-## Routine deploy (after CI/off-server build produces the image)
+Download that exact artifact; never rebuild the release on production. Before
+transfer/loading, verify the included checksum:
 
 ```bash
-cd /opt/pv-growth
+sha256sum -c pv-growth-app-<sha>.tar.sha256
+```
+
+Copy only those two release files to `/opt/pv-growth/releases/<sha>/` on the
+server. Re-run `sha256sum -c` there before `docker load`.
+
+## One-time host prerequisites
+
+These are prerequisites, not routine rollout commands:
+
+- existing PostgreSQL and GrowthOS-owned `pv_growth` DB/role;
+- existing `pv_growth_net`, collision-checked by preflight;
+- `/opt/pv-growth/config/.env` with GrowthOS-only credentials;
+- Mirza MySQL credentials are the `pv_growth_ro` SELECT-only account;
+- no production secret exists in Git or in the image.
+
+If a prerequisite is missing, stop the rollout. Do not repair a protected
+service as part of a GrowthOS deploy.
+
+## Protected rollout
+
+Set `SHA` to the exact green `main` commit used by the downloaded artifact.
+Commands below intentionally address only the GrowthOS container/database.
+
+```bash
+cd /opt/pv-growth/releases/<sha>
+sha256sum -c pv-growth-app-<sha>.tar.sha256
+docker load --input pv-growth-app-<sha>.tar
+docker image inspect pv-growth-app:<sha> --format '{{.Id}}'
+
+# Candidate is readable before touching the live container.
+docker run --rm --network host \
+  --env-file /opt/pv-growth/config/.env \
+  pv-growth-app:<sha> python -m pv_growth preflight
+
+# BEFORE evidence: current GrowthOS + protected neighbors.
+docker inspect pv-growth-app --format '{{.Config.Image}}' > previous-image.txt
+docker exec pv-growth-app python -m pv_growth smoke
+```
+
+Back up only the GrowthOS database using the existing live DB URL. `backup.sh`
+verifies gzip before returning success:
+
+```bash
 export PVG_DATABASE_URL="$(docker exec pv-growth-app python -c \
   'from pv_growth.core.config import get_settings; print(get_settings().database_url)')"
-bash /opt/pv-growth/repo/scripts/backup.sh   # pv_growth only; gzip verified
+/opt/pv-growth/repo/scripts/backup.sh
 unset PVG_DATABASE_URL
-docker exec pv-growth-app python -m pv_growth smoke # BEFORE: protected services healthy?
-docker pull <registry>/pv-growth-app:<new-sha>
-
-# Instagram rollout invariant: dangerous automation is OFF before migration.
-docker exec pv-growth-app python - <<'PY'
-from pv_growth.core.config import get_settings
-from sqlalchemy import create_engine, text
-e = create_engine(get_settings().database_url)
-with e.begin() as c:
-    for key in ("CONTENT_ENGINE_ENABLED", "INSTAGRAM_AUTOMATION_ENABLED"):
-        c.execute(text("INSERT INTO feature_flag(key,enabled) VALUES (:k,false) "
-                       "ON CONFLICT(key) DO UPDATE SET enabled=false"), {"k": key})
-PY
-
-# 0008 is backward-compatible with the previous app. Migrate before replacement.
-docker run --rm --network host --env-file /opt/pv-growth/config/.env \
-  <registry>/pv-growth-app:<new-sha> python -m pv_growth migrate
-docker stop pv-growth-app && docker rm pv-growth-app
-docker run -d --name pv-growth-app --restart unless-stopped \
-  --network pv_growth_net --env-file /opt/pv-growth/config/.env \
-  --memory 384m --cpus 0.75 --pids-limit 200 \
-  -p 127.0.0.1:8350:8350 <registry>/pv-growth-app:<new-sha>
-curl -fsS http://127.0.0.1:8350/ready
-docker exec pv-growth-app python -m pv_growth smoke # AFTER: rollback if anything fails
 ```
 
-Never build the production candidate on the 4 GB VPN host. If no off-server
-image can be transferred/pulled, deployment is **BLOCKED** rather than replaced
-with an ad-hoc mutable-container update.
+Capture current feature-flag state, then force the content/Instagram automation
+kill switches off before any migration. A DB override wins over env defaults.
+
+```bash
+docker exec pv-growth-app python -c \
+  "from pv_growth.core.config import get_settings; from sqlalchemy import create_engine,text; e=create_engine(get_settings().database_url); c=e.connect(); print(c.execute(text('select key,enabled from feature_flag order by key')).all()); c.close()"
+
+docker exec pv-growth-app python -c \
+  "from pv_growth.core.config import get_settings; from sqlalchemy import create_engine,text; e=create_engine(get_settings().database_url); c=e.begin(); x=c.__enter__(); [x.execute(text('insert into feature_flag(key,enabled) values (:k,false) on conflict(key) do update set enabled=false'), {'k': k}) for k in ('CONTENT_ENGINE_ENABLED','INSTAGRAM_AUTOMATION_ENABLED')]; c.__exit__(None,None,None)"
+```
+
+Run the candidate migrations to Alembic `0011`, then replace **only**
+`pv-growth-app`:
+
+```bash
+docker run --rm --network host \
+  --env-file /opt/pv-growth/config/.env \
+  pv-growth-app:<sha> python -m pv_growth migrate
+
+docker stop pv-growth-app
+docker rm pv-growth-app
+docker run -d --name pv-growth-app --restart unless-stopped \
+  --network pv_growth_net \
+  --env-file /opt/pv-growth/config/.env \
+  --memory 384m --cpus 0.75 --pids-limit 200 \
+  --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
+  --health-cmd="python -c \"import httpx;httpx.get('http://127.0.0.1:8350/health',timeout=4).raise_for_status()\"" \
+  --health-interval=30s --health-timeout=5s --health-retries=3 --health-start-period=15s \
+  -p 127.0.0.1:8350:8350 \
+  pv-growth-app:<sha>
+
+curl -fsS http://127.0.0.1:8350/health
+curl -fsS http://127.0.0.1:8350/ready
+docker exec pv-growth-app python -m pv_growth smoke
+```
+
+If `/health`, `/ready`, or any protected-service smoke changes from the
+pre-deploy baseline, stop and follow `ROLLBACK.md`. Never "fix" the protected
+neighbor.
+
+Re-enable only core flags that were already live before this deploy. Do not
+enable a newly introduced sales/partner/content surface merely because the
+application is healthy.
+
+## Sales-loop validation
+
+The release is meant to improve conversion, not merely keep a container up.
+After the technical smoke, verify the existing live paths remain observable:
+
+1. Mirza import remains SELECT-only and new settled payments become normalized
+   payment/conversion evidence once.
+2. Lifecycle queue remains bounded; stop conditions suppress sales reminders
+   after purchase and ambiguous Telegram delivery is never blindly resent.
+3. Referral/partner credit is created only from proven settled conversion
+   data; unknown commercial values stay unresolved.
+4. Free-config/exclusive claims respect quota and only confirmed provisioning
+   produces `TRIAL_CREATED`.
+5. Admin funnel/source/revenue views are used to compare bot-start → trial →
+   payment conversion rather than optimizing vanity metrics.
+
+These checks preserve the revenue feedback loop while avoiding fabricated
+sales attribution.
 
 ## Instagram one-time configuration and canary
 
-Keep both flags OFF until the Instagram account is a Meta-supported Professional
-account and the following values exist only in `/opt/pv-growth/config/.env`:
+`CONTENT_ENGINE_ENABLED` and `INSTAGRAM_AUTOMATION_ENABLED` stay OFF until the
+account is a Meta-supported Professional account and all readiness inputs are
+real. Secrets belong only in `/opt/pv-growth/config/.env`:
 
 ```text
 PVG_INSTAGRAM_ACCOUNT_ID=...
 PVG_INSTAGRAM_ACCESS_TOKEN=...
 PVG_INSTAGRAM_API_VERSION=...      # explicit supported version; never guessed
 PVG_MEDIA_PUBLIC_BASE_URL=https://...
-PVG_MEDIA_STORE_ROOT=/...          # directory actually served by that media origin
+PVG_MEDIA_STORE_ROOT=/...          # actually served by the public media origin
 PVG_MEDIA_RETENTION_HOURS=48
 ```
 
 `GET /admin/api/instagram/readiness` returns only booleans/missing key names;
-it never returns tokens. The public media origin must already exist — this
-rollout does not modify Apache/Mirza routes.
+it never exposes tokens. The public media origin must already exist; this
+rollout does not edit protected Apache/Mirza routes.
 
 Canary order:
 
-1. `POST /admin/api/instagram/plan/preview`; inspect facts/CTA. This preview is
-   rolled back and creates no content/publication rows.
-2. Enable `CONTENT_ENGINE_ENABLED`, then `INSTAGRAM_AUTOMATION_ENABLED` for a
-   single canary window only after readiness is green.
-3. Verify exactly one `content_publications` row reaches `published` and has a
-   remote `container_id` + `media_id`. Ambiguous publish results stay
-   `publish_unknown` and are never blindly repeated.
-4. Open the CTA and verify `social_<campaign>` becomes source
-   `social:<campaign>` in GrowthOS attribution.
-5. Verify a `content_insights` snapshot. Only then leave that format enabled.
-6. Verify post, reel and story separately before expanding the automatic mix.
+1. `POST /admin/api/instagram/plan/preview`; inspect facts and CTA. Preview is
+   rolled back and creates no content/publication row.
+2. Enable `CONTENT_ENGINE_ENABLED`, then `INSTAGRAM_AUTOMATION_ENABLED` for one
+   canary window only after readiness is green.
+3. Verify exactly one post/reel reaches `published` with its real remote media
+   id. `publish_unknown` is reconciled only by a unique owned-media marker
+   `socialc_<content_id>` within the bounded time window; it is never blindly
+   republished. Stories remain fail-closed when publication is ambiguous.
+4. Open the CTA and verify `socialc_<content_id>` is recorded as exact source
+   `socialc:<content_id>` with the owning campaign retained.
+5. Verify an insight snapshot for the exact content item. Optimize on
+   purchase/trial evidence, not reach alone.
+6. Verify post, reel and story independently before expanding the mix.
 
-Meta controls Explore/feed distribution. A successful canary proves supported
-publication/measurement, not guaranteed Explore placement.
-
-## Rollback
-See ROLLBACK.md. Short version: `docker compose down`, restore previous tag, re-smoke.
+Meta controls Explore/feed distribution. No implementation can guarantee that
+every post enters Explore; this system automates supported publishing,
+attribution, measurement and iteration toward sales.
 
 ## Resource policy
-- Container limits are mandatory: 384 MB memory, 0.75 CPU, 200 pids.
-- No image builds on this host. CI/off-server builds; the server only pulls/loads.
-- Logs: json-file driver, 10 MB × 3 rotations.
+
+- 384 MB memory, 0.75 CPU, 200 pids; localhost port `127.0.0.1:8350` only.
+- JSON logs rotate at 10 MB × 3.
+- No image build on the production host.
+- `docker-compose.yml` is for local/rehearsal parity only, not the production
+  replacement mechanism.
+- Keep the previous GrowthOS image until the post-deploy audit is complete.
+
+Rollback: see `ROLLBACK.md`.
