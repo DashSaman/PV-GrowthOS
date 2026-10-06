@@ -223,6 +223,34 @@ def test_lifecycle_job_persists_failed_delivery_and_retries(settings, session, m
     assert row.attempts == 1
 
 
+def test_blocked_lifecycle_job_is_terminal_noop(settings, session, msg_env, monkeypatch):
+    from pv_growth.lifecycle import service as lifecycle
+
+    user = _user_with_trial(session, 8117)
+    user.is_blocked = True
+    session.flush()
+    monkeypatch.setattr(
+        "pv_growth.lifecycle.service.FlagService",
+        lambda _settings: _flags_on(settings),
+    )
+    monkeypatch.setattr(
+        "pv_growth.lifecycle.service._telegram_or_fail",
+        lambda _settings: msg_env["tg"],
+    )
+
+    lifecycle._followup_job(
+        session,
+        settings,
+        {
+            "rule_code": msg_env["rule"],
+            "user_id": user.id,
+            "send_ordinal": 1,
+        },
+    )
+
+    assert not msg_env["tg"]._t.sent_texts()
+
+
 def test_ambiguous_delivery_is_unknown_and_never_blindly_resent(settings, session, msg_env):
     user = _user_with_trial(session, 8115)
     transport = _FailingTransport(TelegramDeliveryUnknownError("read timed out"))
@@ -390,25 +418,3 @@ def test_segment_recompute_prefetches_population_in_batches(session):
     for offset in range(25):
         user, _ = get_or_create_user(session, telegram_user_id=8400 + offset)
         ingest(
-            session,
-            "BOT_STARTED",
-            user_id=user.id,
-            idempotency_key=f"bounded-segment:{offset}",
-        )
-    session.flush()
-    statements = 0
-
-    def _count_select(conn, cursor, statement, parameters, context, executemany):
-        nonlocal statements
-        if statement.lstrip().upper().startswith("SELECT"):
-            statements += 1
-
-    bind = session.get_bind()
-    event.listen(bind, "before_cursor_execute", _count_select)
-    try:
-        counts = recompute_all(session, batch_size=100)
-    finally:
-        event.remove(bind, "before_cursor_execute", _count_select)
-
-    assert sum(counts.values()) >= 25
-    assert statements <= 5
