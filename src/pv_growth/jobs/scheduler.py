@@ -106,6 +106,7 @@ class Scheduler:
                     continue
                 if 0 <= hour <= 23 and hour not in publish_hours:
                     publish_hours.append(hour)
+            publish_hours = publish_hours[:2]  # hard safety cap: never more than two channel slots/day
             now_utc = time.gmtime(time.time())
             if now_utc.tm_hour in publish_hours:
                 slot = publish_hours.index(now_utc.tm_hour) + 1
