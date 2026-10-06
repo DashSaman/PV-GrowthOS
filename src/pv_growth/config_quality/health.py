@@ -6,6 +6,7 @@ This protects the production VPN server (spec §13).
 
 from __future__ import annotations
 
+import ipaddress
 import socket
 from concurrent.futures import ThreadPoolExecutor
 
@@ -17,10 +18,27 @@ log = get_logger("health")
 
 def tcp_check(host: str, port: int, timeout: float) -> bool:
     try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except (OSError, ValueError):
         return False
+    addresses = list(dict.fromkeys(info[4][0] for info in infos))
+    if not addresses:
+        return False
+    # Public feeds are untrusted input. Resolve first and fail closed if DNS
+    # points at any non-public address, then connect to the vetted IP itself
+    # so a second DNS lookup cannot rebind into localhost/private networks.
+    try:
+        if any(not ipaddress.ip_address(address).is_global for address in addresses):
+            return False
+    except ValueError:
+        return False
+    for address in addresses:
+        try:
+            with socket.create_connection((address, port), timeout=timeout):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def check_top_candidates(candidates: list[tuple[int, str, int]], settings: Settings) -> dict[int, bool]:
