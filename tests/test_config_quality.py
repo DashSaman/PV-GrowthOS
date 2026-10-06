@@ -2,7 +2,9 @@
 
 import base64
 import json
+import socket
 
+from pv_growth.config_quality.health import tcp_check
 from pv_growth.config_quality.parsers import is_private_host, parse_any, score, validate
 
 
@@ -76,3 +78,42 @@ def test_scoring_bounds_and_reliability():
 def test_is_private_host_domains_are_not_flagged():
     assert is_private_host("10.0.0.5") is True
     assert is_private_host("example.com") is False  # DNS filtering is health-check's job
+
+
+def test_tcp_health_rejects_domain_resolving_private(monkeypatch):
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("172.23.77.1", 443))],
+    )
+    attempted = []
+    monkeypatch.setattr(socket, "create_connection", lambda *args, **kwargs: attempted.append(args))
+
+    assert tcp_check("attacker.example", 443, 0.1) is False
+    assert attempted == []
+
+
+def test_tcp_health_connects_only_to_resolved_public_ip(monkeypatch):
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.1.1.1", 443))],
+    )
+
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    attempted = []
+
+    def _connect(address, timeout):
+        attempted.append((address, timeout))
+        return _Connection()
+
+    monkeypatch.setattr(socket, "create_connection", _connect)
+
+    assert tcp_check("public.example", 443, 0.1) is True
+    assert attempted == [(("1.1.1.1", 443), 0.1)]
