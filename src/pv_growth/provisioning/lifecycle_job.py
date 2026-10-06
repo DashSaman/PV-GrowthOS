@@ -8,6 +8,8 @@ service alive (clock skew tolerance).
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -104,7 +106,7 @@ def sweep_expired_claims(session: Session, settings: Settings) -> dict:
 
         allocation = session.scalar(
             select(FreeAllocation).where(
-                FreeAllocation.claim_id == claim.id, FreeAllocation.bucket == "lottery"
+                FreeAllocation.claim_id == claim.id, FreeAllocation.bucket.in_(["lottery", "gift"])
             )
         )
         if allocation is not None and allocation.status == "delivered":
@@ -143,20 +145,22 @@ def trial_end_job(session: Session, settings: Settings, payload: dict) -> None:
     if (
         claim is None
         or claim.status != "expired"
-        or not growth_policy(session).get("lottery_enabled")
         or not FlagService(settings).enabled("PV_EXCLUSIVE_CONFIG_ENABLED")
     ):
         return
     allocation = session.scalar(
         select(FreeAllocation).where(
             FreeAllocation.claim_id == claim.id,
-            FreeAllocation.bucket == "lottery",
+            FreeAllocation.bucket.in_(["lottery", "gift"]),
             FreeAllocation.status == "delivered",
         )
     )
     if allocation is None or not decision_for_user(session, settings, claim.user_id).eligible:
         return
-    user = session.get(User, claim.user_id)
+    policy_key = "gift_enabled" if allocation.bucket == "gift" else "lottery_enabled"
+    if not growth_policy(session).get(policy_key):
+        return
+    user = session.scalar(select(User).where(User.id == claim.user_id).with_for_update())
     if (
         user is None
         or user.is_blocked
@@ -166,6 +170,22 @@ def trial_end_job(session: Session, settings: Settings, payload: dict) -> None:
         return
     key = f"trial_end:{claim.claim_key}"
     if session.scalar(select(MessageLog).where(MessageLog.dedupe_key == key)) is not None:
+        return
+    if (
+        session.scalar(
+            select(MessageLog.id)
+            .where(
+                MessageLog.user_id == user.id,
+                MessageLog.purpose == "pv_trial_end",
+                (
+                    (MessageLog.status.in_(["reserved", "delivery_unknown"]))
+                    | ((MessageLog.status == "sent") & (MessageLog.sent_at >= utcnow() - timedelta(hours=24)))
+                ),
+            )
+            .limit(1)
+        )
+        is not None
+    ):
         return
     row = MessageLog(
         user_id=user.id,

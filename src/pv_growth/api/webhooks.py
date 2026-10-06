@@ -120,6 +120,8 @@ def _free_context(start_param: str | None) -> str | None:
     param = start_param[len("freecfg_") :]
     if param == "pv_daily_lottery":
         context = "lottery:pv_daily_lottery"
+    elif param == "welcome_100":
+        context = "gift:pv_welcome_100"
     elif match := re.fullmatch(r"shared_(\d{4}-\d{2}-\d{2})_(\d+)", param):
         context = f"shared:{match[1]}:{match[2]}"
     elif match := re.fullmatch(r"community_([1-9]\d*)", param):
@@ -182,7 +184,25 @@ def _free_dialogue(client, session, settings, user, context: str) -> None:
         return
     if not _membership_ready(client, settings, user, context):
         return
-    if context == "lottery:pv_daily_lottery":
+    if context == "gift:pv_welcome_100":
+        from pv_growth.free_config.welcome_gift import gift_enabled
+
+        if not gift_enabled(session, settings, FlagService(settings)):
+            _safe_send(
+                client,
+                user.telegram_user_id,
+                "پیشنهاد اشانتیون امروز فعلاً قابل دریافت نیست.",
+                _purchase_keyboard(include_free=False),
+            )
+            return
+        text = (
+            "🎁 اشانتیون امروز: ۱۰۰ مگابایت از پلن تانل اصلی PV Network\n"
+            "⏳ اعتبار حداکثر ۲۴ ساعت یا پایان حجم؛ یک بار برای هر نفر.\n"
+            "فقط برای کاربران ربات اصلی بدون هیچ سابقهٔ خرید و بدون سرویس فعال، با عضویت در هر دو کانال.\n"
+            "برای دریافت روی دکمه بزنید."
+        )
+        label = "🎁 دریافت اشانتیون ۱۰۰ مگی"
+    elif context == "lottery:pv_daily_lottery":
         if not _enabled(session, FlagService(settings)):
             _safe_send(
                 client,
@@ -323,6 +343,21 @@ def _handle_callback(client, callback: TgCallback) -> None:
             if valid_context(context):
                 _free_dialogue(client, session, settings, user, context)
             _safe_answer(client, callback.id, "عضویت و شرایط دریافت دوباره بررسی شد.")
+            return
+        if data == "gift:pv_welcome_100":
+            from pv_growth.free_config.welcome_gift import request_gift
+
+            try:
+                outcome = request_gift(session, settings, flags, client, user_id=user.id)
+            except ValidationError as exc:
+                _safe_answer(client, callback.id, str(exc))
+                return
+            label = {
+                "delivered": "اشانتیون در گفت‌وگوی خصوصی ارسال شد.",
+                "already_reserved": "درخواست اشانتیون شما قبلاً ثبت شده است.",
+                "unavailable": "اشانتیون امروز فعلاً قابل دریافت نیست.",
+            }.get(outcome, "اشانتیون امروز فعلاً قابل دریافت نیست.")
+            _safe_answer(client, callback.id, label)
             return
         if data.startswith(("shared:", "community:")):
             if not valid_context(data):

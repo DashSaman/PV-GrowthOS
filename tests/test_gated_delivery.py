@@ -115,6 +115,24 @@ def test_shared_receipt_private_once_with_durable_log_before_api(session, settin
     assert [payload["chat_id"] for method, payload in transport.calls if method == "sendMessage"] == [123]
 
 
+def test_final_membership_check_cannot_send_an_exhausted_config(session, settings, monkeypatch):
+    p, s, user, row, tg, transport, backend = setup(session, settings, monkeypatch)
+    original = p.require_membership
+    rounds = 0
+
+    def check(*args, **kwargs):
+        nonlocal rounds
+        rounds += 1
+        original(*args, **kwargs)
+        if rounds == 3:
+            original_state = backend.service_state
+            backend.service_state = lambda ref: {**original_state(ref), "quota_exhausted": True}
+
+    monkeypatch.setattr(p, "require_membership", check)
+    assert deliver(p, session, s, user, tg, backend) == "unavailable"
+    assert not transport.sent_texts()
+
+
 @pytest.mark.parametrize(
     "stage",
     [

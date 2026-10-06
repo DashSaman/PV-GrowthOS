@@ -55,3 +55,49 @@ def test_unknown_delivery_is_never_resent(session, settings, monkeypatch):
     sweep.trial_end_job(session, s, {"claim_id": row.id})
     assert len(t.calls) == 1
     assert session.query(MessageLog).one().status == "delivery_unknown"
+
+
+def test_gift_end_sends_the_same_single_purchase_cta(session, settings, monkeypatch):
+    row, s, t = setup(session, settings, monkeypatch)
+    session.query(FreeAllocation).one().bucket = "gift"
+    session.get(AppConfig, "pv_free_growth_policy").value = {"gift_enabled": True}
+    session.commit()
+    sweep.trial_end_job(session, s, {"claim_id": row.id})
+    sweep.trial_end_job(session, s, {"claim_id": row.id})
+    assert len(t.calls) == 1 and "حجم" in t.sent_texts()[0]
+
+
+def test_purchase_cta_cooldown_spans_gift_and_lottery_claims(session, settings, monkeypatch):
+    from pv_growth.database.models import ExclusiveClaim
+
+    row, s, t = setup(session, settings, monkeypatch)
+    sweep.trial_end_job(session, s, {"claim_id": row.id})
+    other = ExclusiveClaim(
+        claim_key="gift-other",
+        campaign_id=row.campaign_id,
+        user_id=row.user_id,
+        claim_date=row.claim_date,
+        status="expired",
+        traffic_gb=0,
+        traffic_bytes=100 * 1024**2,
+        validity_hours=24,
+        config_payload={"end_reason": "volume"},
+    )
+    session.add(other)
+    session.flush()
+    session.add(
+        FreeAllocation(
+            id="gift-other",
+            day=row.claim_date,
+            bucket="gift",
+            traffic_bytes=100 * 1024**2,
+            claim_id=other.id,
+            user_id=row.user_id,
+            campaign_id=row.campaign_id,
+            status="delivered",
+        )
+    )
+    session.get(AppConfig, "pv_free_growth_policy").value = {"gift_enabled": True, "lottery_enabled": True}
+    session.commit()
+    sweep.trial_end_job(session, s, {"claim_id": other.id})
+    assert len(t.calls) == 1

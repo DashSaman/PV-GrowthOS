@@ -155,6 +155,12 @@ def deliver_config(session, settings, flags, telegram, *, user_id: int, context:
         receipt.status = "gate_blocked"
         session.commit()
         raise
+    try:
+        _panel_proof(adapter, allocation)
+    except Exception:
+        receipt.status = "gate_blocked"
+        session.commit()
+        return "unavailable"
     text = (
         "🎁 <b>تست رایگان سرویس اصلی PV Network</b>\n"
         "📦 حجم کل: ۱ گیگ مشترک بین استفاده‌کنندگان این کانفیگ\n"

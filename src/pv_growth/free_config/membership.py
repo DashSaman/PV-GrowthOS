@@ -74,7 +74,7 @@ def valid_context(context: str) -> bool:
         and len(("memberships:" + context).encode()) <= 64
         and re.fullmatch(
             r"(?:shared:\d{4}-\d{2}-\d{2}:(?:[1-9]|10)|community:[1-9]\d*|"
-            r"lottery:pv_daily_lottery|claim:[A-Za-z0-9_-]{1,40})",
+            r"lottery:pv_daily_lottery|gift:pv_welcome_100|claim:[A-Za-z0-9_-]{1,40})",
             context,
         )
     )

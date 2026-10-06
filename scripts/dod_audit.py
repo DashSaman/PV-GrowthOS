@@ -130,9 +130,9 @@ def main(*, live: bool = False, allow_provisioning_canary: bool = False) -> int:
     for name, path in modules.items():
         record(f"module: {name}", check_module(path))
 
-    # 2. migration chain 0001..0011 present and ordered
+    # 2. migration chain 0001..0012 present and ordered
     versions = sorted(p.name for p in (ROOT / "alembic/versions").glob("*.py"))
-    record("migrations: 11 revisions chained", len(versions) == 11, ", ".join(v[:4] for v in versions))
+    record("migrations: 12 revisions chained", len(versions) == 12, ", ".join(v[:4] for v in versions))
 
     # 3. feature flags all defined
     sys.modules.pop("pv_growth.core.flags", None)
@@ -216,8 +216,8 @@ def main(*, live: bool = False, allow_provisioning_canary: bool = False) -> int:
                 ".execute(text('select version_num from alembic_version')).scalar_one())\""
             )
             record(
-                "production migration head = 0011",
-                "0011" in out if out is not None else None,
+                "production migration head = 0012",
+                "0012" in out if out is not None else None,
                 out or "no ssh",
             )
             out = ssh_readonly("docker network ls --format '{{.Name}}' | grep -c '^pv_growth_net$'")
@@ -239,7 +239,7 @@ def main(*, live: bool = False, allow_provisioning_canary: bool = False) -> int:
         )
         record("production /ready = 200", None, "run with --live after rollout")
         record("production container healthy", None, "run with --live after rollout")
-        record("production migration head = 0011", None, "run with --live after rollout")
+        record("production migration head = 0012", None, "run with --live after rollout")
         record("production network pv_growth_net", None, "run with --live after rollout")
         record("protected Mirza+Reseller = 200/200", None, "run with --live after rollout")
 
