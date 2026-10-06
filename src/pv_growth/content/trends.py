@@ -29,12 +29,16 @@ class PerformanceTrendProvider:
     """Reuse themes from our own published content; never scrapes Instagram."""
 
     def suggestions(self, session: Session, *, limit: int = 5) -> list[TrendSuggestion]:
-        rows = session.execute(
-            select(ContentItem)
-            .where(ContentItem.channel == "instagram", ContentItem.status == "published")
-            .order_by(ContentItem.published_at.desc(), ContentItem.id.desc())
-            .limit(max(limit * 4, limit))
-        ).scalars().all()
+        rows = (
+            session.execute(
+                select(ContentItem)
+                .where(ContentItem.channel == "instagram", ContentItem.status == "published")
+                .order_by(ContentItem.published_at.desc(), ContentItem.id.desc())
+                .limit(max(limit * 4, limit))
+            )
+            .scalars()
+            .all()
+        )
         ranked = sorted(
             rows,
             key=lambda item: float((item.creative or {}).get("performance_score", 0)),

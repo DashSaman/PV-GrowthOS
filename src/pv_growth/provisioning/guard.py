@@ -27,17 +27,20 @@ class GuardDenied(Exception):
 def claims_today(session: Session, day: date | None = None) -> int:
     day = day or date.today()
     return session.execute(
-        select(func.count()).select_from(ExclusiveClaim).where(
+        select(func.count())
+        .select_from(ExclusiveClaim)
+        .where(
             ExclusiveClaim.claim_date == day,
             ExclusiveClaim.status.in_(("active", "pending_provision")),
         )
     ).scalar_one()
 
 
-def check(session: Session, settings: Settings, adapter) -> None:
-    """Raise GuardDenied when any condition fails. Never retries."""
+def check_backend(session: Session, adapter) -> None:
+    """Fail closed on database/backend health without re-counting a reservation."""
     # database availability
     from sqlalchemy import text
+
     try:
         session.execute(text("SELECT 1"))
     except Exception as exc:  # noqa: BLE001
@@ -54,10 +57,20 @@ def check(session: Session, settings: Settings, adapter) -> None:
     except Exception as exc:  # noqa: BLE001
         raise GuardDenied(f"provisioning health check failed: {type(exc).__name__}") from exc
 
-    # daily free budget
-    used = claims_today(session)
+    log.info("provision backend guard passed")
+
+
+def check(
+    session: Session,
+    settings: Settings,
+    adapter,
+    *,
+    day: date | None = None,
+) -> None:
+    """Compatibility guard: backend health plus pre-reservation daily budget."""
+    check_backend(session, adapter)
+    used = claims_today(session, day)
     if used >= settings.free_daily_budget:
         raise GuardDenied(f"daily free budget exhausted ({used}/{settings.free_daily_budget})")
 
-    log.info("provision guard passed", used_today=used,
-             budget=settings.free_daily_budget)
+    log.info("provision guard passed", used_today=used, budget=settings.free_daily_budget)

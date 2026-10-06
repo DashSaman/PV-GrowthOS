@@ -37,15 +37,14 @@ router = APIRouter(dependencies=[Depends(require_admin)])
 
 # ---------- dashboard ----------
 
+
 @router.get("/dashboard")
 def dashboard() -> dict:
     from pv_growth.analytics import queries
 
     settings = get_settings()
     with session_scope(settings) as session:
-        recent_events = session.execute(
-            select(Event).order_by(Event.id.desc()).limit(20)
-        ).scalars().all()
+        recent_events = session.execute(select(Event).order_by(Event.id.desc()).limit(20)).scalars().all()
         from pv_growth.admin.service import system_health
 
         health = system_health(session)
@@ -59,8 +58,12 @@ def dashboard() -> dict:
             "campaigns": queries.campaign_performance(session),
             "system": health,
             "recent_events": [
-                {"event_id": e.event_id, "type": e.event_type,
-                 "user_id": e.user_id, "at": e.occurred_at.isoformat()}
+                {
+                    "event_id": e.event_id,
+                    "type": e.event_type,
+                    "user_id": e.user_id,
+                    "at": e.occurred_at.isoformat(),
+                }
                 for e in recent_events
             ],
         }
@@ -75,6 +78,7 @@ def cohorts() -> list[dict]:
 
 
 # ---------- feature flags ----------
+
 
 @router.get("/flags")
 def list_flags() -> dict:
@@ -102,6 +106,7 @@ def set_flag(key: str, payload: dict) -> dict:
 
 # ---------- campaigns / templates / rules / sources ----------
 
+
 class CampaignIn(BaseModel):
     code: str = Field(min_length=2, max_length=64)
     name: str
@@ -114,16 +119,23 @@ class CampaignIn(BaseModel):
 def campaigns_list() -> list[dict]:
     with session_scope(get_settings()) as session:
         rows = session.execute(select(Campaign)).scalars().all()
-        return [{"id": c.id, "code": c.code, "name": c.name, "kind": c.kind,
-                 "status": c.status, "config": c.config} for c in rows]
+        return [
+            {
+                "id": c.id,
+                "code": c.code,
+                "name": c.name,
+                "kind": c.kind,
+                "status": c.status,
+                "config": c.config,
+            }
+            for c in rows
+        ]
 
 
 @router.post("/campaigns", status_code=201)
 def campaigns_create(payload: CampaignIn) -> dict:
     with session_scope(get_settings()) as session:
-        clash = session.execute(
-            select(Campaign).where(Campaign.code == payload.code)
-        ).scalar_one_or_none()
+        clash = session.execute(select(Campaign).where(Campaign.code == payload.code)).scalar_one_or_none()
         if clash is not None:
             from fastapi import HTTPException
 
@@ -137,9 +149,7 @@ def campaigns_create(payload: CampaignIn) -> dict:
 @router.patch("/campaigns/{code}")
 def campaigns_update(code: str, payload: dict) -> dict:
     with session_scope(get_settings()) as session:
-        row = session.execute(
-            select(Campaign).where(Campaign.code == code)
-        ).scalar_one_or_none()
+        row = session.execute(select(Campaign).where(Campaign.code == code)).scalar_one_or_none()
         if row is None:
             from fastapi import HTTPException
 
@@ -162,8 +172,9 @@ class TemplateIn(BaseModel):
 def templates_list() -> list[dict]:
     with session_scope(get_settings()) as session:
         rows = session.execute(select(MessageTemplate)).scalars().all()
-        return [{"code": t.code, "intent": t.intent, "body": t.body,
-                 "active": bool(t.is_active)} for t in rows]
+        return [
+            {"code": t.code, "intent": t.intent, "body": t.body, "active": bool(t.is_active)} for t in rows
+        ]
 
 
 @router.post("/templates", status_code=201)
@@ -188,9 +199,18 @@ class RuleIn(BaseModel):
 def rules_list() -> list[dict]:
     with session_scope(get_settings()) as session:
         rows = session.execute(select(LifecycleRule)).scalars().all()
-        return [{"code": r.code, "trigger": r.trigger, "active": bool(r.is_active),
-                 "template": r.template_code, "cooldown_h": r.cooldown_hours,
-                 "max_sends": r.max_sends, "stop": r.stop_conditions} for r in rows]
+        return [
+            {
+                "code": r.code,
+                "trigger": r.trigger,
+                "active": bool(r.is_active),
+                "template": r.template_code,
+                "cooldown_h": r.cooldown_hours,
+                "max_sends": r.max_sends,
+                "stop": r.stop_conditions,
+            }
+            for r in rows
+        ]
 
 
 @router.post("/rules", status_code=201)
@@ -203,9 +223,7 @@ def rules_create(payload: RuleIn) -> dict:
 @router.patch("/rules/{code}")
 def rules_toggle(code: str, payload: dict) -> dict:
     with session_scope(get_settings()) as session:
-        row = session.execute(
-            select(LifecycleRule).where(LifecycleRule.code == code)
-        ).scalar_one_or_none()
+        row = session.execute(select(LifecycleRule).where(LifecycleRule.code == code)).scalar_one_or_none()
         if row is None:
             from fastapi import HTTPException
 
@@ -224,10 +242,17 @@ class ConfigSourceIn(BaseModel):
 def sources_list() -> list[dict]:
     with session_scope(get_settings()) as session:
         rows = session.execute(select(ConfigSource)).scalars().all()
-        return [{"id": s.id, "kind": s.kind, "name": s.name, "url": s.url,
-                 "active": s.is_active,
-                 "reliability": round(s.ok_count / max(1, s.fetch_count), 3)}
-                for s in rows]
+        return [
+            {
+                "id": s.id,
+                "kind": s.kind,
+                "name": s.name,
+                "url": s.url,
+                "active": s.is_active,
+                "reliability": round(s.ok_count / max(1, s.fetch_count), 3),
+            }
+            for s in rows
+        ]
 
 
 @router.post("/sources", status_code=201)
@@ -238,6 +263,7 @@ def sources_create(payload: ConfigSourceIn) -> dict:
 
 
 # ---------- content ----------
+
 
 class ContentIn(BaseModel):
     title: str = Field(min_length=1, max_length=255)
@@ -332,6 +358,7 @@ def content_retry(item_id: int) -> dict:
 
 # ---------- Instagram growth loop ----------
 
+
 @router.get("/instagram/readiness")
 def instagram_readiness() -> dict:
     settings = get_settings()
@@ -347,12 +374,10 @@ def instagram_readiness() -> dict:
         if not value:
             missing.append(name)
     flags = FlagService(settings).snapshot()
-    api_configured = all(required[name] for name in (
-        "instagram_account_id", "instagram_access_token", "instagram_api_version"
-    ))
-    media_configured = bool(
-        required["media_public_base_url"] and required["media_store_root"]
+    api_configured = all(
+        required[name] for name in ("instagram_account_id", "instagram_access_token", "instagram_api_version")
     )
+    media_configured = bool(required["media_public_base_url"] and required["media_store_root"])
     return {
         "api_credentials_configured": api_configured,
         "public_media_store_configured": media_configured,
@@ -366,36 +391,48 @@ def instagram_readiness() -> dict:
 @router.get("/instagram/publications")
 def instagram_publications() -> list[dict]:
     with session_scope(get_settings()) as session:
-        rows = session.execute(
-            select(ContentPublication)
-            .where(ContentPublication.provider == "instagram")
-            .order_by(ContentPublication.id.desc())
-            .limit(200)
-        ).scalars().all()
-        return [{
-            "id": row.id,
-            "content_id": row.content_id,
-            "status": row.status,
-            "container_id": row.container_id,
-            "media_id": row.media_id,
-            "error_category": row.error_category,
-            "attempt": row.attempt,
-            "published_at": row.published_at.isoformat() if row.published_at else None,
-        } for row in rows]
+        rows = (
+            session.execute(
+                select(ContentPublication)
+                .where(ContentPublication.provider == "instagram")
+                .order_by(ContentPublication.id.desc())
+                .limit(200)
+            )
+            .scalars()
+            .all()
+        )
+        return [
+            {
+                "id": row.id,
+                "content_id": row.content_id,
+                "status": row.status,
+                "container_id": row.container_id,
+                "media_id": row.media_id,
+                "error_category": row.error_category,
+                "attempt": row.attempt,
+                "published_at": row.published_at.isoformat() if row.published_at else None,
+            }
+            for row in rows
+        ]
 
 
 @router.get("/instagram/insights")
 def instagram_insights() -> list[dict]:
     with session_scope(get_settings()) as session:
-        rows = session.execute(
-            select(ContentInsight).order_by(ContentInsight.id.desc()).limit(500)
-        ).scalars().all()
-        return [{
-            "id": row.id,
-            "publication_id": row.publication_id,
-            "captured_at": row.captured_at.isoformat(),
-            "metrics": row.metrics,
-        } for row in rows]
+        rows = (
+            session.execute(select(ContentInsight).order_by(ContentInsight.id.desc()).limit(500))
+            .scalars()
+            .all()
+        )
+        return [
+            {
+                "id": row.id,
+                "publication_id": row.publication_id,
+                "captured_at": row.captured_at.isoformat(),
+                "metrics": row.metrics,
+            }
+            for row in rows
+        ]
 
 
 @router.post("/instagram/plan/preview")
@@ -415,15 +452,20 @@ def instagram_plan_preview() -> list[dict]:
 @router.get("/instagram/rankings")
 def instagram_rankings() -> list[dict]:
     with session_scope(get_settings()) as session:
-        content_ids = list(session.execute(
-            select(ContentItem.id).where(
-                ContentItem.channel == "instagram", ContentItem.status == "published"
+        content_ids = list(
+            session.execute(
+                select(ContentItem.id).where(
+                    ContentItem.channel == "instagram", ContentItem.status == "published"
+                )
             )
-        ).scalars().all())
+            .scalars()
+            .all()
+        )
         return [asdict(score) for score in rank_candidates(session, content_ids)]
 
 
 # ---------- partners / experiments / competitor sources ----------
+
 
 @router.get("/partners")
 def partners_list() -> list[dict]:
@@ -451,8 +493,7 @@ def experiments_list() -> list[dict]:
         out = []
         for exp in rows:
             report = exp_svc.results(session, exp.key)
-            out.append({"key": exp.key, "status": exp.status,
-                        "report": report})
+            out.append({"key": exp.key, "status": exp.status, "report": report})
         return out
 
 
@@ -483,6 +524,5 @@ class CompetitorSourceIn(BaseModel):
 @router.post("/competitor-sources", status_code=201)
 def competitor_sources_create(payload: CompetitorSourceIn) -> dict:
     with session_scope(get_settings()) as session:
-        session.add(CompetitorSource(name=payload.name, url=payload.url,
-                                     fields=payload.fields))
+        session.add(CompetitorSource(name=payload.name, url=payload.url, fields=payload.fields))
         return {"name": payload.name}

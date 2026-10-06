@@ -29,8 +29,11 @@ class TelegramPoller:
         try:
             resp = httpx.get(
                 f"{self._settings.telegram_api_base.rstrip('/')}/bot{token}/getUpdates",
-                params={"timeout": 25, "offset": self._offset + 1,
-                        "allowed_updates": '["message","callback_query"]'},
+                params={
+                    "timeout": 25,
+                    "offset": self._offset + 1,
+                    "allowed_updates": '["message","callback_query"]',
+                },
                 timeout=30.0,
             )
             body = resp.json()
@@ -45,6 +48,5 @@ class TelegramPoller:
             try:
                 self._handler(update)
             except Exception as exc:  # noqa: BLE001 — one bad update never stops polling
-                log.error("update handling failed", update_id=update.get("update_id"),
-                          error=str(exc))
+                log.error("update handling failed", update_id=update.get("update_id"), error=str(exc))
         return len(updates)

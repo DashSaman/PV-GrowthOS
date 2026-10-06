@@ -23,21 +23,19 @@ log = get_logger("partners")
 PARTNER_KINDS = ("affiliate", "partner", "reseller")
 
 
-def create_partner(session: Session, *, name: str, kind: str = "affiliate",
-                   user_id: int | None = None) -> Partner:
+def create_partner(
+    session: Session, *, name: str, kind: str = "affiliate", user_id: int | None = None
+) -> Partner:
     if kind not in PARTNER_KINDS:
         raise ValidationError(f"unknown partner kind: {kind}")
-    partner = Partner(name=name, kind=kind, user_id=user_id,
-                      code="pt" + secrets.token_hex(3))
+    partner = Partner(name=name, kind=kind, user_id=user_id, code="pt" + secrets.token_hex(3))
     session.add(partner)
     session.flush()
     return partner
 
 
 def get_by_code(session: Session, code: str) -> Partner | None:
-    return session.execute(
-        select(Partner).where(Partner.code == code)
-    ).scalar_one_or_none()
+    return session.execute(select(Partner).where(Partner.code == code)).scalar_one_or_none()
 
 
 def record_click(session: Session, partner: Partner) -> None:
@@ -49,7 +47,11 @@ def record_start(session: Session, partner: Partner) -> None:
 
 
 def record_conversion(
-    session: Session, *, partner_id: int, order_ref: str, amount_cents: int,
+    session: Session,
+    *,
+    partner_id: int,
+    order_ref: str,
+    amount_cents: int,
     commission_cents: int,
 ) -> tuple[CommissionEntry, bool]:
     """Record a PARTNER_CONVERSION and open a pending commission. Idempotent."""
@@ -59,8 +61,13 @@ def record_conversion(
     ).scalar_one_or_none()
     if existing is not None:
         return existing, False
-    entry = CommissionEntry(partner_id=partner_id, order_ref=order_ref,
-                            amount_cents=amount_cents, dedupe_key=dedupe)
+    entry = CommissionEntry(
+        partner_id=partner_id,
+        order_ref=order_ref,
+        amount_cents=amount_cents,
+        commission_cents=commission_cents,
+        dedupe_key=dedupe,
+    )
     # commission can be recomputed; store both for audit
     entry.status = "pending"
     session.flush()
@@ -76,10 +83,18 @@ def record_conversion(
     partner = session.get(Partner, partner_id)
     if partner is not None:
         partner.orders += 1
-    ingest(session, "PARTNER_CONVERSION", user_id=(partner.user_id if partner else None),
-           idempotency_key=f"pconv:{dedupe}",
-           metadata={"partner_id": partner_id, "order_ref": order_ref,
-                     "amount_cents": amount_cents, "commission_cents": commission_cents})
+    ingest(
+        session,
+        "PARTNER_CONVERSION",
+        user_id=(partner.user_id if partner else None),
+        idempotency_key=f"pconv:{dedupe}",
+        metadata={
+            "partner_id": partner_id,
+            "order_ref": order_ref,
+            "amount_cents": amount_cents,
+            "commission_cents": commission_cents,
+        },
+    )
     log.info("partner conversion recorded", partner_id=partner_id, order_ref=order_ref)
     return entry, True
 
@@ -93,15 +108,23 @@ def approve_commission(session: Session, entry: CommissionEntry) -> CommissionEn
 
 
 def partner_summary(session: Session, partner: Partner) -> dict:
-    entries = session.execute(
-        select(CommissionEntry).where(CommissionEntry.partner_id == partner.id)
-    ).scalars().all()
-    pending = sum(e.amount_cents for e in entries if e.status == "pending")
-    approved = sum(e.amount_cents for e in entries if e.status in ("approved", "paid"))
+    entries = (
+        session.execute(select(CommissionEntry).where(CommissionEntry.partner_id == partner.id))
+        .scalars()
+        .all()
+    )
+    resolved = [e for e in entries if e.commission_cents is not None]
+    pending = sum(e.commission_cents for e in resolved if e.status == "pending")
+    approved = sum(e.commission_cents for e in resolved if e.status in ("approved", "paid"))
     return {
-        "code": partner.code, "kind": partner.kind, "clicks": partner.clicks,
-        "starts": partner.starts, "orders": partner.orders,
-        "pending_commission_cents": pending, "approved_commission_cents": approved,
+        "code": partner.code,
+        "kind": partner.kind,
+        "clicks": partner.clicks,
+        "starts": partner.starts,
+        "orders": partner.orders,
+        "pending_commission_cents": pending,
+        "approved_commission_cents": approved,
+        "unresolved_commission_entries": sum(1 for entry in entries if entry.commission_cents is None),
     }
 
 

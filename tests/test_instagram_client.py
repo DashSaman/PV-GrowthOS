@@ -73,7 +73,9 @@ def test_create_story_uses_story_media_type(settings):
     transport.canned[("POST", "/ig-acct-42/media")] = {"id": "container-story"}
 
     client.create_container(
-        format="story", caption="ignored for story", media_url="https://cdn.example/story.mp4",
+        format="story",
+        caption="ignored for story",
+        media_url="https://cdn.example/story.mp4",
         is_video=True,
     )
 
@@ -88,15 +90,42 @@ def test_upload_status_publish_and_insights_contract(settings):
     transport.canned[("POST", "https://rupload.example/session-1")] = {"success": True}
     transport.canned[("GET", "/container-1")] = {"status_code": "FINISHED"}
     transport.canned[("POST", "/ig-acct-42/media_publish")] = {"id": "media-1"}
-    transport.canned[("GET", "/media-1/insights")] = {
-        "data": [{"name": "reach", "values": [{"value": 120}]}]
-    }
+    transport.canned[("GET", "/media-1/insights")] = {"data": [{"name": "reach", "values": [{"value": 120}]}]}
 
     assert client.upload_video("https://rupload.example/session-1", b"video") == {"success": True}
     assert client.container_status("container-1")["status_code"] == "FINISHED"
     assert client.publish_container("container-1")["id"] == "media-1"
     assert client.media_insights("media-1", ["reach", "views"])["data"][0]["name"] == "reach"
     assert transport.calls[-1]["params"] == {"metric": "reach,views"}
+
+
+def test_owned_media_read_uses_documented_reconciliation_fields(settings):
+    client, transport = _fake_client(settings)
+    transport.canned[("GET", "/ig-acct-42/media")] = {
+        "data": [
+            {
+                "id": "media-42",
+                "caption": "hello socialc_42",
+                "media_type": "IMAGE",
+                "permalink": "https://www.instagram.com/p/example/",
+                "timestamp": "2026-10-06T10:00:00+0000",
+            }
+        ]
+    }
+
+    result = client.owned_media(limit=25)
+
+    assert result["data"][0]["id"] == "media-42"
+    assert transport.calls[-1] == {
+        "method": "GET",
+        "path": "/ig-acct-42/media",
+        "params": {
+            "fields": "id,caption,media_type,permalink,timestamp",
+            "limit": 25,
+        },
+        "data": None,
+        "headers": None,
+    }
 
 
 def test_http_transport_uses_explicit_timeout_and_redacts_token(settings):
@@ -106,13 +135,16 @@ def test_http_transport_uses_explicit_timeout_and_redacts_token(settings):
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen_timeout.update(request.extensions["timeout"])
-        return httpx.Response(400, json={
-            "error": {
-                "type": "OAuthException",
-                "code": 190,
-                "message": "bad token TEST-SECRET-TOKEN",
-            }
-        })
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "type": "OAuthException",
+                    "code": 190,
+                    "message": "bad token TEST-SECRET-TOKEN",
+                }
+            },
+        )
 
     configured = _configured(settings)
     transport = HttpInstagramTransport(configured, transport=httpx.MockTransport(handler))
@@ -133,9 +165,11 @@ def test_http_transport_classifies_rate_limit_and_server_errors_retryable(settin
 
     transport = HttpInstagramTransport(
         _configured(settings),
-        transport=httpx.MockTransport(lambda request: httpx.Response(
-            status_code, json={"error": {"type": "UpstreamError", "code": status_code}}
-        )),
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                status_code, json={"error": {"type": "UpstreamError", "code": status_code}}
+            )
+        ),
     )
 
     with pytest.raises(InstagramAPIError) as caught:

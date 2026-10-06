@@ -21,8 +21,7 @@ class Experiment(Base):
     split_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
     seed: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="running")
-    metric_event: Mapped[str] = mapped_column(String(32), nullable=False,
-                                              default="PAYMENT_SUCCESS")
+    metric_event: Mapped[str] = mapped_column(String(32), nullable=False, default="PAYMENT_SUCCESS")
     created_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime())
 
@@ -49,5 +48,4 @@ class AppConfig(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow,
-                                                 onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow, onupdate=utcnow)

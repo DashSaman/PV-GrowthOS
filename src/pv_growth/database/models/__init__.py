@@ -17,6 +17,7 @@ from pv_growth.database.models.events import EVENT_TYPES, Event  # noqa: F401
 from pv_growth.database.models.free_config import (  # noqa: F401
     ConfigSource,
     ExclusiveClaim,
+    ProvisioningQuotaLock,
     PublishedPost,
     RawConfig,
 )

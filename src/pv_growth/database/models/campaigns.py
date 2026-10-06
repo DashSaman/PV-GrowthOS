@@ -8,11 +8,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 from pv_growth.database.types import Base, Json, utcnow
 
 CAMPAIGN_KINDS = (
-    "free_config_public",   # public/community config posts
+    "free_config_public",  # public/community config posts
     "free_config_exclusive",  # PV-provisioned exclusive configs
-    "purchase",             # purchase CTA campaigns
-    "referral",             # referral pushes
-    "content",              # scheduled content series
+    "purchase",  # purchase CTA campaigns
+    "referral",  # referral pushes
+    "content",  # scheduled content series
 )
 CAMPAIGN_STATUSES = ("draft", "active", "paused", "finished")
 
@@ -29,6 +29,4 @@ class Campaign(Base):
     end_at: Mapped[datetime | None] = mapped_column(DateTime())
     config: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(), nullable=False, default=utcnow, onupdate=utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow, onupdate=utcnow)

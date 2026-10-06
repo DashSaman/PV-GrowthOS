@@ -13,9 +13,7 @@ from pv_growth.database.types import utcnow
 
 
 def get_by_code(session: Session, code: str) -> Campaign | None:
-    return session.execute(
-        select(Campaign).where(Campaign.code == code)
-    ).scalar_one_or_none()
+    return session.execute(select(Campaign).where(Campaign.code == code)).scalar_one_or_none()
 
 
 def require_by_code(session: Session, code: str) -> Campaign:

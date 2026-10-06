@@ -19,24 +19,37 @@ NOW = datetime(2026, 10, 5, 18, 0, 0)
 
 def _published(session, *, campaign=None, media_id=None):
     campaign = campaign or Campaign(
-        code=f"opt_{uuid.uuid4().hex[:8]}", name="Optimizer", kind="purchase",
-        status="active", config={"price": 100},
+        code=f"opt_{uuid.uuid4().hex[:8]}",
+        name="Optimizer",
+        kind="purchase",
+        status="active",
+        config={"price": 100},
     )
     if campaign.id is None:
         session.add(campaign)
         session.flush()
     item = ContentItem(
-        title="published", kind="purchase_cta", channel="instagram", format="post",
-        body="caption", facts={"price": campaign.config["price"]}, creative={},
-        status="published", campaign_code=campaign.code,
-        dedupe_key=f"published:{uuid.uuid4().hex}", published_at=NOW,
+        title="published",
+        kind="purchase_cta",
+        channel="instagram",
+        format="post",
+        body="caption",
+        facts={"price": campaign.config["price"]},
+        creative={},
+        status="published",
+        campaign_code=campaign.code,
+        dedupe_key=f"published:{uuid.uuid4().hex}",
+        published_at=NOW,
     )
     session.add(item)
     session.flush()
     publication = ContentPublication(
-        content_id=item.id, provider="instagram", status="published",
+        content_id=item.id,
+        provider="instagram",
+        status="published",
         container_id=f"container-{uuid.uuid4().hex[:8]}",
-        media_id=media_id or f"media-{uuid.uuid4().hex[:8]}", published_at=NOW,
+        media_id=media_id or f"media-{uuid.uuid4().hex[:8]}",
+        published_at=NOW,
     )
     session.add(publication)
     session.flush()
@@ -60,9 +73,7 @@ def test_sync_insights_accepts_partial_metrics_and_refreshes_idempotently(sessio
     from pv_growth.instagram.insights import sync_insights
 
     _, publication, _ = _published(session, media_id="partial")
-    client = _InsightsClient({"partial": {
-        "data": [{"name": "reach", "values": [{"value": 120}]}]
-    }})
+    client = _InsightsClient({"partial": {"data": [{"name": "reach", "values": [{"value": 120}]}]}})
 
     assert sync_insights(session, client, now=NOW) == 1
     client.payloads["partial"] = {
@@ -84,10 +95,12 @@ def test_meta_outage_isolated_per_publication(session):
 
     _published(session, media_id="offline")
     _, good, _ = _published(session, media_id="online")
-    client = _InsightsClient({
-        "offline": ExternalServiceError("simulated outage"),
-        "online": {"data": [{"name": "reach", "values": [{"value": 22}]}]},
-    })
+    client = _InsightsClient(
+        {
+            "offline": ExternalServiceError("simulated outage"),
+            "online": {"data": [{"name": "reach", "values": [{"value": 22}]}]},
+        }
+    )
 
     synced = sync_insights(session, client, now=NOW)
 
@@ -99,17 +112,23 @@ def test_score_maps_content_campaign_source_to_bot_trial_and_payment(session):
     from pv_growth.content.optimizer import score_content
 
     item, publication, campaign = _published(session)
-    session.add(ContentInsight(
-        publication_id=publication.id, captured_at=NOW,
-        metrics={"reach": 400, "likes": 20, "comments": 2, "shares": 3, "saves": 4},
-    ))
-    user, _ = get_or_create_user(
-        session, telegram_user_id=8_000_000 + uuid.uuid4().int % 1_000_000
+    session.add(
+        ContentInsight(
+            publication_id=publication.id,
+            captured_at=NOW,
+            metrics={"reach": 400, "likes": 20, "comments": 2, "shares": 3, "saves": 4},
+        )
     )
-    attribute(session, user.id, f"social_{campaign.code}")
+    user, _ = get_or_create_user(session, telegram_user_id=8_000_000 + uuid.uuid4().int % 1_000_000)
+    attribute(session, user.id, f"socialc_{item.id}")
     ingest(session, "TRIAL_CREATED", user_id=user.id, idempotency_key=f"trial:{uuid.uuid4()}")
-    ingest(session, "PAYMENT_SUCCESS", user_id=user.id,
-           idempotency_key=f"pay:{uuid.uuid4()}", metadata={"amount_cents": 500})
+    ingest(
+        session,
+        "PAYMENT_SUCCESS",
+        user_id=user.id,
+        idempotency_key=f"pay:{uuid.uuid4()}",
+        metadata={"amount_cents": 500},
+    )
     session.flush()
 
     score = score_content(session, item.id)
@@ -126,20 +145,20 @@ def test_one_purchase_outranks_reach_only_content(session):
     from pv_growth.content.optimizer import rank_candidates, score_content
 
     viral, viral_pub, _ = _published(session)
-    session.add(ContentInsight(
-        publication_id=viral_pub.id, captured_at=NOW,
-        metrics={"reach": 1_000_000, "likes": 50_000},
-    ))
-    buyer_item, buyer_pub, buyer_campaign = _published(session)
-    session.add(ContentInsight(
-        publication_id=buyer_pub.id, captured_at=NOW, metrics={"reach": 100, "likes": 2}
-    ))
-    user, _ = get_or_create_user(
-        session, telegram_user_id=9_000_000 + uuid.uuid4().int % 500_000
+    session.add(
+        ContentInsight(
+            publication_id=viral_pub.id,
+            captured_at=NOW,
+            metrics={"reach": 1_000_000, "likes": 50_000},
+        )
     )
-    attribute(session, user.id, f"social_{buyer_campaign.code}")
-    ingest(session, "PAYMENT_SUCCESS", user_id=user.id,
-           idempotency_key=f"pay:{uuid.uuid4()}")
+    buyer_item, buyer_pub, buyer_campaign = _published(session)
+    session.add(
+        ContentInsight(publication_id=buyer_pub.id, captured_at=NOW, metrics={"reach": 100, "likes": 2})
+    )
+    user, _ = get_or_create_user(session, telegram_user_id=9_000_000 + uuid.uuid4().int % 500_000)
+    attribute(session, user.id, f"socialc_{buyer_item.id}")
+    ingest(session, "PAYMENT_SUCCESS", user_id=user.id, idempotency_key=f"pay:{uuid.uuid4()}")
     session.flush()
 
     viral_score = score_content(session, viral.id)
@@ -148,6 +167,55 @@ def test_one_purchase_outranks_reach_only_content(session):
 
     assert buyer_score.score > viral_score.score
     assert ranked[0].content_id == buyer_item.id
+
+
+def test_same_campaign_items_do_not_share_downstream_conversions(session):
+    from pv_growth.content.optimizer import score_content
+
+    campaign = Campaign(
+        code=f"shared_{uuid.uuid4().hex[:8]}",
+        name="Shared campaign",
+        kind="purchase",
+        status="active",
+        config={"price": 100},
+    )
+    session.add(campaign)
+    session.flush()
+    item_a, _, _ = _published(session, campaign=campaign)
+    item_b, _, _ = _published(session, campaign=campaign)
+    buyer, _ = get_or_create_user(session, telegram_user_id=9_600_000 + uuid.uuid4().int % 100_000)
+    attribute(session, buyer.id, f"socialc_{item_a.id}")
+    ingest(
+        session,
+        "TRIAL_CREATED",
+        user_id=buyer.id,
+        idempotency_key=f"trial:{uuid.uuid4()}",
+    )
+    ingest(
+        session,
+        "PAYMENT_SUCCESS",
+        user_id=buyer.id,
+        idempotency_key=f"pay:{uuid.uuid4()}",
+    )
+    legacy, _ = get_or_create_user(session, telegram_user_id=9_700_000 + uuid.uuid4().int % 100_000)
+    attribute(session, legacy.id, f"social_{campaign.code}")
+    ingest(
+        session,
+        "PAYMENT_SUCCESS",
+        user_id=legacy.id,
+        idempotency_key=f"legacy-pay:{uuid.uuid4()}",
+    )
+    session.flush()
+
+    score_a = score_content(session, item_a.id)
+    score_b = score_content(session, item_b.id)
+
+    assert score_a.bot_starts == 1
+    assert score_a.trials == 1
+    assert score_a.purchases == 1
+    assert score_b.bot_starts == 0
+    assert score_b.trials == 0
+    assert score_b.purchases == 0
 
 
 def test_weak_sample_never_declares_winner(session):

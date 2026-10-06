@@ -41,17 +41,18 @@ def test_planner_copies_campaign_facts_and_adds_attributable_cta(session, settin
 
     campaign = _campaign(session)
 
-    planned = [item for item in plan_cycle(session, settings, now=NOW)
-               if item.campaign_code == campaign.code]
+    planned = [item for item in plan_cycle(session, settings, now=NOW) if item.campaign_code == campaign.code]
 
     assert len(planned) == 3
     assert {item.format for item in planned} == {"reel", "post", "story"}
     assert all(item.status == "scheduled" for item in planned)
     for item in planned:
-        assert item.facts == {"price": 43_721, "traffic_gb": 17,
-                              "locations": ["A", "B"]}
-        assert f"https://t.me/pvnetwork_bot?start=social_{campaign.code}" in item.body
+        assert item.facts == {"price": 43_721, "traffic_gb": 17, "locations": ["A", "B"]}
+        cta = f"https://t.me/pvnetwork_bot?start=socialc_{item.id}"
+        assert cta in item.body
+        assert item.creative["cta"] == cta
         assert "43721" not in item.body  # value stays data, body uses validated placeholders
+    assert len({item.creative["cta"] for item in planned}) == len(planned)
 
 
 def test_planner_uses_changed_campaign_data_without_code_change(session, settings):
@@ -62,8 +63,7 @@ def test_planner_uses_changed_campaign_data_without_code_change(session, setting
         config={"price": 91_337, "traffic_gb": 23, "locations": ["IR", "DE", "TR"]},
     )
 
-    planned = [item for item in plan_cycle(session, settings, now=NOW)
-               if item.campaign_code == campaign.code]
+    planned = [item for item in plan_cycle(session, settings, now=NOW) if item.campaign_code == campaign.code]
 
     assert planned
     assert all(item.facts["price"] == 91_337 for item in planned)
@@ -88,15 +88,19 @@ def test_planner_configuration_controls_hooks_without_changing_facts(session, se
     from pv_growth.content.planner import plan_cycle
 
     campaign = _campaign(session)
-    session.merge(AppConfig(key="content_planner", value={
-        "hooks": ["HOOK FROM DATA"],
-        "slots_utc": [10],
-        "formats": ["post"],
-    }))
+    session.merge(
+        AppConfig(
+            key="content_planner",
+            value={
+                "hooks": ["HOOK FROM DATA"],
+                "slots_utc": [10],
+                "formats": ["post"],
+            },
+        )
+    )
     session.flush()
 
-    planned = [item for item in plan_cycle(session, settings, now=NOW)
-               if item.campaign_code == campaign.code]
+    planned = [item for item in plan_cycle(session, settings, now=NOW) if item.campaign_code == campaign.code]
 
     assert len(planned) == 1
     assert planned[0].title == "HOOK FROM DATA"
@@ -111,9 +115,11 @@ def test_trend_provider_failure_falls_back_without_changing_commercial_facts(ses
             raise RuntimeError("provider unavailable")
 
     campaign = _campaign(session)
-    planned = [item for item in plan_cycle(
-        session, settings, now=NOW, trend_provider=_BrokenTrendProvider()
-    ) if item.campaign_code == campaign.code]
+    planned = [
+        item
+        for item in plan_cycle(session, settings, now=NOW, trend_provider=_BrokenTrendProvider())
+        if item.campaign_code == campaign.code
+    ]
 
     assert len(planned) == 3
     assert all(item.facts["price"] == 43_721 for item in planned)

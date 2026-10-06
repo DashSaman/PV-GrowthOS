@@ -8,7 +8,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 from pv_growth.database.types import Base, utcnow
 
 # attribution source kinds parsed from `start=` deep links
-SOURCE_KINDS = ("freecfg", "ref", "partner", "seo", "channel", "social", "organic", "direct")
+SOURCE_KINDS = (
+    "freecfg",
+    "ref",
+    "partner",
+    "seo",
+    "channel",
+    "social",
+    "socialc",
+    "organic",
+    "direct",
+)
 
 
 class Source(Base):

@@ -18,6 +18,14 @@ from pv_growth.core.logging import get_logger
 log = get_logger("telegram")
 
 
+class TelegramRetryableError(ExternalServiceError):
+    """The request was not accepted by Telegram and is safe to retry."""
+
+
+class TelegramDeliveryUnknownError(ExternalServiceError):
+    """Telegram may have accepted the request; automatic resend is unsafe."""
+
+
 @dataclass(frozen=True)
 class InlineKeyboard:
     buttons: list[list[dict]]  # [[{text, url|callback_data}, ...], ...]
@@ -45,9 +53,12 @@ class HttpTelegramTransport:
             resp = self._client.post(f"/bot{self._token}/{method}", json=payload)
             resp.raise_for_status()
             body = resp.json()
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
+            log.error("telegram connection failed", method=method, error=str(exc))
+            raise TelegramRetryableError(f"telegram: {exc}") from exc
         except httpx.HTTPError as exc:
-            log.error("telegram call failed", method=method, error=str(exc))
-            raise ExternalServiceError(f"telegram: {exc}") from exc
+            log.error("telegram delivery outcome unknown", method=method, error=str(exc))
+            raise TelegramDeliveryUnknownError(f"telegram: {exc}") from exc
         if not body.get("ok"):
             raise ExternalServiceError(f"telegram api error: {body.get('description')}")
         return body["result"]
@@ -81,25 +92,35 @@ class TelegramClient:
     def get_me(self) -> dict:
         return self._t.call("getMe", {})
 
-    def send_message(self, chat_id: int | str, text: str,
-                     keyboard: InlineKeyboard | None = None) -> dict:
+    def send_message(self, chat_id: int | str, text: str, keyboard: InlineKeyboard | None = None) -> dict:
         payload: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
         if keyboard:
             payload["reply_markup"] = {"inline_keyboard": keyboard.to_api()}
         return self._t.call("sendMessage", payload)
 
     def edit_message_text(self, chat_id: int | str, message_id: int, text: str) -> dict:
-        return self._t.call("editMessageText", {
-            "chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML",
-        })
+        return self._t.call(
+            "editMessageText",
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "parse_mode": "HTML",
+            },
+        )
 
     def answer_callback_query(self, callback_query_id: str, text: str = "") -> dict:
-        return self._t.call("answerCallbackQuery", {
-            "callback_query_id": callback_query_id, "text": text,
-        })
+        return self._t.call(
+            "answerCallbackQuery",
+            {
+                "callback_query_id": callback_query_id,
+                "text": text,
+            },
+        )
 
-    def send_channel_post(self, channel_id: int | str, text: str,
-                          keyboard: InlineKeyboard | None = None) -> dict:
+    def send_channel_post(
+        self, channel_id: int | str, text: str, keyboard: InlineKeyboard | None = None
+    ) -> dict:
         payload: dict[str, Any] = {"chat_id": channel_id, "text": text, "parse_mode": "HTML"}
         if keyboard:
             payload["reply_markup"] = {"inline_keyboard": keyboard.to_api()}

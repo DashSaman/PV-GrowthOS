@@ -2,7 +2,7 @@
 
 Parses `start=<code>` deep-link params:
     freecfg_<campaign> | ref_<user> | partner_<partner> | seo_<page>
-    | channel_<campaign> | social_<campaign> | <raw code>
+    | channel_<campaign> | social_<campaign> | socialc_<content_id> | <raw code>
 
 Emits SOURCE_ATTRIBUTED events (idempotent per user+source so repeat clicks
 on the same link do not spam the log).
@@ -18,13 +18,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pv_growth.core.logging import get_logger
-from pv_growth.database.models import AttributionTouch, Campaign, Event, Source
+from pv_growth.database.models import AttributionTouch, Campaign, ContentItem, Event, Source
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import ingest
 
 log = get_logger("attribution")
 
 _KIND_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("socialc", re.compile(r"^socialc[_-](?P<ref>\d+)$")),
     ("freecfg", re.compile(r"^freecfg[_-](?P<ref>.+)$")),
     ("ref", re.compile(r"^ref[_-](?P<ref>.+)$")),
     ("partner", re.compile(r"^partner[_-](?P<ref>.+)$")),
@@ -38,10 +39,10 @@ VALID_START_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,120}$")
 
 @dataclass
 class ParsedStart:
-    code: str          # canonical source code, e.g. "freecfg:summer"
-    kind: str          # freecfg|ref|partner|seo|channel|social|organic|direct
-    reference: str     # campaign/user/page/partner identifier ("" for organic)
-    raw: str | None    # original start param
+    code: str  # canonical source code, e.g. "freecfg:summer"
+    kind: str  # freecfg|ref|partner|seo|channel|social|organic|direct
+    reference: str  # campaign/user/page/partner identifier ("" for organic)
+    raw: str | None  # original start param
 
 
 def parse_start_param(start_param: str | None) -> ParsedStart:
@@ -55,8 +56,19 @@ def parse_start_param(start_param: str | None) -> ParsedStart:
         if match:
             reference = match.group("ref")
             return ParsedStart(code=f"{kind}:{reference}", kind=kind, reference=reference, raw=raw)
+    if raw.startswith(("socialc_", "socialc-")):
+        return ParsedStart(code="direct", kind="direct", reference="", raw=raw)
     # bare custom code — treated as a channel-style source
     return ParsedStart(code=f"custom:{raw}", kind="channel", reference=raw, raw=raw)
+
+
+def _validated_parsed(session: Session, parsed: ParsedStart) -> ParsedStart:
+    if parsed.kind != "socialc":
+        return parsed
+    item = session.get(ContentItem, int(parsed.reference))
+    if item is None or item.channel != "instagram":
+        return ParsedStart(code="direct", kind="direct", reference="", raw=parsed.raw)
+    return parsed
 
 
 def _resolve_source(session: Session, parsed: ParsedStart) -> Source:
@@ -71,6 +83,13 @@ def _resolve_source(session: Session, parsed: ParsedStart) -> Source:
             select(Campaign).where(Campaign.code == parsed.reference)
         ).scalar_one_or_none()
         campaign_id = campaign.id if campaign else None
+    elif parsed.kind == "socialc":
+        item = session.get(ContentItem, int(parsed.reference))
+        if item is not None and item.campaign_code:
+            campaign = session.execute(
+                select(Campaign).where(Campaign.code == item.campaign_code)
+            ).scalar_one_or_none()
+            campaign_id = campaign.id if campaign else None
 
     source = Source(
         code=parsed.code,
@@ -96,34 +115,40 @@ def attribute(
     (unique constraint uq_touch_user_kind is the hard guarantee).
     """
     occurred_at = occurred_at or utcnow()
-    parsed = parse_start_param(start_param)
+    parsed = _validated_parsed(session, parse_start_param(start_param))
     source = _resolve_source(session, parsed)
     source.bot_starts += 1
 
     first = session.execute(
-        select(AttributionTouch).where(
-            AttributionTouch.user_id == user_id, AttributionTouch.kind == "first"
-        )
+        select(AttributionTouch).where(AttributionTouch.user_id == user_id, AttributionTouch.kind == "first")
     ).scalar_one_or_none()
     first_created = first is None
     if first is None:
-        session.add(AttributionTouch(
-            user_id=user_id, kind="first", source_id=source.id,
-            campaign_id=source.campaign_id, raw_start_param=parsed.raw,
-            occurred_at=occurred_at,
-        ))
+        session.add(
+            AttributionTouch(
+                user_id=user_id,
+                kind="first",
+                source_id=source.id,
+                campaign_id=source.campaign_id,
+                raw_start_param=parsed.raw,
+                occurred_at=occurred_at,
+            )
+        )
 
     last = session.execute(
-        select(AttributionTouch).where(
-            AttributionTouch.user_id == user_id, AttributionTouch.kind == "last"
-        )
+        select(AttributionTouch).where(AttributionTouch.user_id == user_id, AttributionTouch.kind == "last")
     ).scalar_one_or_none()
     if last is None:
-        session.add(AttributionTouch(
-            user_id=user_id, kind="last", source_id=source.id,
-            campaign_id=source.campaign_id, raw_start_param=parsed.raw,
-            occurred_at=occurred_at,
-        ))
+        session.add(
+            AttributionTouch(
+                user_id=user_id,
+                kind="last",
+                source_id=source.id,
+                campaign_id=source.campaign_id,
+                raw_start_param=parsed.raw,
+                occurred_at=occurred_at,
+            )
+        )
     else:
         last.source_id = source.id
         last.campaign_id = source.campaign_id
@@ -133,26 +158,34 @@ def attribute(
 
     # idempotent SOURCE_ATTRIBUTED per user+source (repeat clicks don't spam)
     ingest(
-        session, "SOURCE_ATTRIBUTED",
-        user_id=user_id, source_id=source.id, campaign_id=source.campaign_id,
+        session,
+        "SOURCE_ATTRIBUTED",
+        user_id=user_id,
+        source_id=source.id,
+        campaign_id=source.campaign_id,
         occurred_at=occurred_at,
         idempotency_key=f"srcattr:{user_id}:{source.code}",
-        metadata={"kind": parsed.kind, "reference": parsed.reference,
-                  "raw": parsed.raw, "first_touch": first_created},
+        metadata={
+            "kind": parsed.kind,
+            "reference": parsed.reference,
+            "raw": parsed.raw,
+            "first_touch": first_created,
+        },
     )
     return source, first_created
 
 
 def first_touch(session: Session, user_id: int) -> AttributionTouch | None:
     return session.execute(
-        select(AttributionTouch).where(
-            AttributionTouch.user_id == user_id, AttributionTouch.kind == "first"
-        )
+        select(AttributionTouch).where(AttributionTouch.user_id == user_id, AttributionTouch.kind == "first")
     ).scalar_one_or_none()
 
 
 def user_source_history(session: Session, user_id: int) -> list[Event]:
-    return list(session.execute(
-        select(Event).where(Event.user_id == user_id, Event.event_type == "SOURCE_ATTRIBUTED")
-        .order_by(Event.occurred_at)
-    ).scalars())
+    return list(
+        session.execute(
+            select(Event)
+            .where(Event.user_id == user_id, Event.event_type == "SOURCE_ATTRIBUTED")
+            .order_by(Event.occurred_at)
+        ).scalars()
+    )

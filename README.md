@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/DashSaman/PV-GrowthOS/actions/workflows/ci.yml/badge.svg)](https://github.com/DashSaman/PV-GrowthOS/actions)
 ![Production](https://img.shields.io/badge/production-live%20%40%20RoboT-10b981)
-![Tests](https://img.shields.io/badge/tests-98%20passing-3b82f6)
+![Tests](https://img.shields.io/badge/tests-CI%20gated-3b82f6)
 ![Version](https://img.shields.io/badge/release-v1.0.0-8b5cf6)
 
 **v1.0.0** · Modular Monolith · FastAPI · SQLAlchemy 2 · PostgreSQL 14 · Telegram-native
@@ -35,27 +35,24 @@ Acquisition → Bot Start → Free Config/Trial → Connection → Pricing
 → Affiliate/Reseller → Win-back
 ```
 
-## 🟢 Current Production Status (2026-10-03)
+## 🟢 Production baseline + release candidate (2026-10-06)
 
 | Aspect | State |
 |---|---|
-| Deployed | **YES** — container `pv-growth-app` on host `RoboT` (91.107.240.235), image built off-server, never on the server |
+| Deployed baseline | **YES** — `pv-growth-app` on host `RoboT`; last recorded baseline 2026-10-05 was healthy. The 2026-10-06 hardening candidate is not pre-claimed deployed |
 | Binding | `127.0.0.1:8350` only (never 0.0.0.0) |
 | Network | dedicated `pv_growth_net` (172.23.77.0/24 — collision-checked live) |
-| Limits | 384 MB mem / 0.75 CPU / 200 pids — actual usage ≈ 64 MB, <1% CPU |
-| Database | `pv_growth` on the existing PostgreSQL 14 · Alembic head **0007** (28 tables) · least-privilege role |
-| Mirza integration | **LIVE read-only, 100% reconciled**: 7,272 payments + 213 checkouts + 7,032 renewals ingested from 7,496 invoices via role `pv_growth_ro` (SELECT on `hajsaman.invoice/user` only) · `SERVICE_EXPIRED` change-detection on observed `active→disabledn` transitions |
+| Limits | 384 MB mem / 0.75 CPU / 200 pids |
+| Database | production baseline: `pv_growth` on existing PostgreSQL, Alembic **0007**; candidate migration head is **0011** and has a tested downgrade chain |
+| Mirza integration | established production path is read-only via `pv_growth_ro`; candidate makes payment ingestion transition-driven so repeat scans cannot fabricate settled conversions |
 | Telegram | **LIVE**: dedicated bot [@pvgrowthos_bot](https://t.me/pvgrowthos_bot) + channel [PV Network | Free Config](https://t.me/pvnetwork_freeconfig) (bot = admin) · long-polling (localhost-only topology, one mechanism) · deep-link attribution `freecfg_*` verified end-to-end |
-| Free Config | **LIVE pipeline**: 1,846 real configs staged from an approved public aggregator; one health-checked config published to the channel; exclusive campaign `exc_e2e` claimed idempotently (1 GB/24h quota) |
-| Referral | **LIVE E2E**: A→link→B→settled payment→exactly 1 reward; self-referral + duplicate reward + duplicate payment all rejected |
-| **PV Exclusive provisioning** | **REAL (B5 closed)**: XUIProvisioningAdapter over Mirza's own panel API — production E2E: claim → provision → panel-visible 1GB/24h service → subscription URI → idempotent duplicates → cleanup |
-| Lifecycle | **canary verified**: real onboarding message delivered to a paying user; strict fact-validation refused 240 sends lacking real numbers (safety worked) |
-| Feature flags | 6/10 ON: attribution, free-config, public, exclusive, lifecycle, referral · partner/content/competitor/experiments remain OFF (per rollout plan) |
+| Free Config / referral / lifecycle | established core paths remain the production growth loop; candidate adds quota serialization, bounded retry, truthful delivery state and settled-conversion coordination |
+| **PV Exclusive provisioning** | existing XUI adapter is constrained to deterministic `growth-*` identities; candidate adds TLS verification by default and DB-backed quota/retry safety |
+| Feature flags | 11 defined; customer-facing/dangerous automation defaults OFF and DB overrides remain the kill switch. Rollout restores only flags proven live before deploy |
 | Protected services | Mirza 200→200 · Reseller 200→200 · AKH 401→401 · Apache/X-UI/Xray/Hedioum/tunnels: identical before/after (audited) |
-| Tests / CI | 79 tests green · GitHub Actions green (lint, sqlite+postgres matrix, migrations up/down, pip-audit, docker build) |
-| Swap | 2 GB swapfile added (was none) — persistent, conservative |
-| Backup/rollback | pg_dump backup verified · rollback rehearsed live (stop → protected services unaffected → start) |
-| Blocked (external) | dedicated Telegram bot token (webhook/publishing/lifecycle messaging inactive until provided) — see [BLOCKERS.md](BLOCKERS.md) |
+| Candidate verification | local format/lint/DoD contract/security scan and SQLite `0008→0011→0008→0011` are green; full SQLite+PostgreSQL + Docker artifact is a mandatory GitHub CI merge gate |
+| Release artifact | green `main` exports checksum-verified `pv-growth-app:<sha>` as downloadable Actions artifact; registry credentials are not required |
+| Instagram activation | code is candidate-ready but live automation stays OFF until Meta Professional authorization + public media origin are real — see [BLOCKERS.md](BLOCKERS.md) |
 
 ## Growth Funnel
 
@@ -125,6 +122,18 @@ weak samples). Admin API (token-auth) manages campaigns, templates, rules,
 sources, flags, partners, experiments and shows queue depth, failed jobs and
 recent events.
 
+## Instagram → sales attribution
+
+Supported Meta publishing is isolated behind `CONTENT_ENGINE_ENABLED` and
+`INSTAGRAM_AUTOMATION_ENABLED`. Every planned item carries a durable
+`socialc_<content_id>` CTA marker, and bot attribution records the exact source
+as `socialc:<content_id>` while retaining its campaign. This lets the optimizer
+rank content with downstream trial/purchase evidence instead of treating reach
+as revenue. Ambiguous post/reel publication is reconciled conservatively;
+stories remain fail-closed when remote publication cannot be proven. Meta still
+decides Explore/feed distribution — GrowthOS does not promise guaranteed
+Explore placement.
+
 ## Deployment
 
 Full runbook: [`DEPLOYMENT.md`](DEPLOYMENT.md) · operations:
@@ -132,7 +141,7 @@ Full runbook: [`DEPLOYMENT.md`](DEPLOYMENT.md) · operations:
 
 ```bash
 curl -s http://127.0.0.1:8350/health   # on the server
-python -m pytest                       # 79 tests anywhere
+python -m pytest                       # full local/CI suite
 python scripts/dod_audit.py            # machine-verifiable DoD
 ```
 
@@ -140,22 +149,24 @@ python scripts/dod_audit.py            # machine-verifiable DoD
 
 No secrets in Git (scanned) · admin token constant-time auth · rate-limited
 ingestion/webhooks · least-privilege DB roles (`pv_growth`, `pv_growth_ro`
-SELECT-only) · secrets in root-owned `.env` · pip-audit in CI · forbidden
+SELECT-only) · secrets in root-owned `/opt/pv-growth/config/.env` · hash-locked
+production dependencies + pip-audit in CI · forbidden
 destructive commands documented in [`SECURITY.md`](SECURITY.md).
 
 ## Testing
 
-79 tests: idempotency everywhere, scheduler double-run safety, referral
-fraud, commercial-fact fabrication rejection, webhook flows, Mirza sync
-(transition/limit/outage), PG+SQLite parity. CI additionally runs migrations
-up/down on both engines and builds the image.
+Tests cover idempotency, scheduler safety, referral fraud, commercial-fact
+fabrication rejection, webhook flows, Mirza transitions, provisioning
+concurrency/retry, lifecycle delivery state, per-content attribution and
+Instagram publish reconciliation. CI runs the full suite and migrations on
+SQLite and PostgreSQL, audits the resolved lock, then builds the exact SHA image.
 
 ## Repository Structure
 
 ```
 src/pv_growth/       23 modules (see ARCHITECTURE.md)
-alembic/versions/    0001..0007 (tested up+down, sqlite+postgres)
-tests/               79 tests
+alembic/versions/    0001..0011 (reversible; SQLite+PostgreSQL CI)
+tests/               unit, service, API, migration and integration-contract tests
 scripts/             preflight/smoke CLI · backup.sh · loadtest.py · dod_audit.py · sentinelx-cleanup.sh
 docs/                images (7 diagrams) · operations/RUNBOOK.md · deployment-audits/ · report/ (Persian PDF)
 .github/workflows/   ci.yml (lint · test matrix · migrations · pip-audit · docker)
@@ -163,14 +174,14 @@ docs/                images (7 diagrams) · operations/RUNBOOK.md · deployment-
 
 ## Known Limitations (honest, current)
 
-1. Telegram bot/publishing/lifecycle messaging are **built and tested but
-   inactive** — needs the owner to supply a dedicated bot token + channel IDs
-   (never reusing X-UI's token). Webhook returns 503 until then.
-2. Mirza sync is passive observation of invoices; SERVICE_EXPIRED/RENEWED
-   events are not yet derivable from Mirza's schema (marked unavailable
-   rather than fabricated).
-3. Analytics cover what flows through events; Mirza history (7,491 invoices)
-   backfills at 300/cycle, then forward-only.
+1. Live Instagram publishing is intentionally blocked until Meta Professional
+   account authorization/API credentials and a Meta-fetchable public media
+   origin are configured. No password/private-API workaround exists.
+2. Explore placement is controlled by Meta and cannot be guaranteed. The
+   system can automate supported publishing, exact attribution, insights and
+   conversion-driven iteration.
+3. Analytics report only evidence that reaches the event model; missing
+   commercial facts remain unknown rather than being fabricated.
 
 ## License
 

@@ -46,13 +46,13 @@ def check_source(session: Session, source: CompetitorSource, client: httpx.Clien
     """Fetch one source, diff against last snapshot, persist change records."""
     source.last_checked_at = utcnow()
     try:
-        resp = client.get(source.url, timeout=10.0,
-                          headers={"User-Agent": "Mozilla/5.0 (compatible; PVBot/1.0)"})
+        resp = client.get(
+            source.url, timeout=10.0, headers={"User-Agent": "Mozilla/5.0 (compatible; PVBot/1.0)"}
+        )
         resp.raise_for_status()
         snapshot = extract_fields(resp.text, source.fields)
     except httpx.HTTPError as exc:
-        log.warning("competitor fetch failed (isolated)", source=source.name,
-                    error=str(exc))
+        log.warning("competitor fetch failed (isolated)", source=source.name, error=str(exc))
         return -1  # failure never propagates
 
     changes = diff_snapshots(source.last_snapshot or {}, snapshot)
@@ -64,9 +64,14 @@ def check_source(session: Session, source: CompetitorSource, client: httpx.Clien
         ).scalar_one_or_none()
         if existing is not None:
             continue
-        row = CompetitorChange(source_id=source.id, field=field, old_value=old_value,
-                               new_value=new_value, dedupe_key=dedupe,
-                               source_url=source.url)
+        row = CompetitorChange(
+            source_id=source.id,
+            field=field,
+            old_value=old_value,
+            new_value=new_value,
+            dedupe_key=dedupe,
+            source_url=source.url,
+        )
         try:
             with session.begin_nested():
                 session.add(row)
@@ -81,15 +86,16 @@ def check_source(session: Session, source: CompetitorSource, client: httpx.Clien
     return recorded
 
 
-def run_watch(session: Session, settings: Settings, flags: FlagService,
-              client: httpx.Client | None = None) -> dict:
+def run_watch(
+    session: Session, settings: Settings, flags: FlagService, client: httpx.Client | None = None
+) -> dict:
     """One watch cycle over all active sources. Flag-gated; failures isolated."""
     if not flags.enabled("COMPETITOR_WATCH_ENABLED"):
         return {"skipped": "disabled"}
     client = client or httpx.Client()
-    sources = session.execute(
-        select(CompetitorSource).where(CompetitorSource.is_active.is_(True))
-    ).scalars().all()
+    sources = (
+        session.execute(select(CompetitorSource).where(CompetitorSource.is_active.is_(True))).scalars().all()
+    )
     summary = {"sources": len(sources), "changes": 0, "failures": 0}
     for source in sources:
         result = check_source(session, source, client)

@@ -40,13 +40,15 @@ def _planner_config(session: Session) -> dict:
 
 
 def _campaigns(session: Session, now: datetime) -> list[Campaign]:
-    rows = session.execute(
-        select(Campaign).where(Campaign.status == "active").order_by(Campaign.id)
-    ).scalars().all()
+    rows = (
+        session.execute(select(Campaign).where(Campaign.status == "active").order_by(Campaign.id))
+        .scalars()
+        .all()
+    )
     return [
-        row for row in rows
-        if (row.start_at is None or row.start_at <= now)
-        and (row.end_at is None or row.end_at >= now)
+        row
+        for row in rows
+        if (row.start_at is None or row.start_at <= now) and (row.end_at is None or row.end_at >= now)
     ]
 
 
@@ -65,7 +67,8 @@ def _suggestions(session: Session, provider: TrendProvider, config: dict) -> lis
     if isinstance(configured_hooks, list) and configured_hooks:
         return [
             TrendSuggestion("configured", str(hook), "planner_config", utcnow())
-            for hook in configured_hooks if str(hook).strip()
+            for hook in configured_hooks
+            if str(hook).strip()
         ]
     try:
         suggestions = provider.suggestions(session, limit=5)
@@ -74,9 +77,7 @@ def _suggestions(session: Session, provider: TrendProvider, config: dict) -> lis
         suggestions = []
     if suggestions:
         return suggestions
-    return [
-        TrendSuggestion("evergreen", hook, "evergreen", utcnow()) for hook in _DEFAULT_HOOKS
-    ]
+    return [TrendSuggestion("evergreen", hook, "evergreen", utcnow()) for hook in _DEFAULT_HOOKS]
 
 
 def _body(facts: dict, cta: str) -> str:
@@ -88,20 +89,31 @@ def _body(facts: dict, cta: str) -> str:
     return "\n".join(lines)
 
 
-def plan_cycle(session: Session, settings: Settings, *, now: datetime | None = None,
-               trend_provider: TrendProvider | None = None) -> list[ContentItem]:
+def plan_cycle(
+    session: Session,
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+    trend_provider: TrendProvider | None = None,
+) -> list[ContentItem]:
     """Create the next bounded set of validated/scheduled Instagram items."""
     del settings  # planner business inputs come from DB, not environment constants
     now = now or utcnow()
     config = _planner_config(session)
     provider = trend_provider or PerformanceTrendProvider()
     suggestions = _suggestions(session, provider, config)
-    formats = [str(value) for value in _settings_list(config, "formats", _DEFAULT_FORMATS)
-               if str(value) in _DEFAULT_FORMATS]
+    formats = [
+        str(value)
+        for value in _settings_list(config, "formats", _DEFAULT_FORMATS)
+        if str(value) in _DEFAULT_FORMATS
+    ]
     if not formats:
         formats = list(_DEFAULT_FORMATS)
-    slots = [int(value) for value in _settings_list(config, "slots_utc", _DEFAULT_SLOTS_UTC)
-             if isinstance(value, int) and 0 <= value <= 23]
+    slots = [
+        int(value)
+        for value in _settings_list(config, "slots_utc", _DEFAULT_SLOTS_UTC)
+        if isinstance(value, int) and 0 <= value <= 23
+    ]
     if not slots:
         slots = list(_DEFAULT_SLOTS_UTC)
     slots = slots[:6]  # hard bound per campaign/cycle
@@ -111,7 +123,6 @@ def plan_cycle(session: Session, settings: Settings, *, now: datetime | None = N
         facts = _facts(campaign)
         if not facts:
             continue
-        cta = f"https://t.me/pvnetwork_bot?start=social_{campaign.code}"
         for index, hour in enumerate(slots):
             scheduled = datetime.combine(now.date(), time(hour=hour))
             if scheduled <= now:
@@ -129,14 +140,13 @@ def plan_cycle(session: Session, settings: Settings, *, now: datetime | None = N
                 kind="purchase_cta" if campaign.kind == "purchase" else "education",
                 channel="instagram",
                 format=format_name,
-                body=_body(facts, cta),
+                body=_body(facts, ""),
                 facts=facts,
                 creative={
                     "template": "brand_card",
                     "hook": suggestion.hook,
                     "trend_topic": suggestion.topic,
                     "trend_source": suggestion.source,
-                    "cta": cta,
                 },
                 status="draft",
                 dedupe_key=dedupe_key,
@@ -144,6 +154,9 @@ def plan_cycle(session: Session, settings: Settings, *, now: datetime | None = N
             )
             session.add(item)
             session.flush()
+            cta = f"https://t.me/pvnetwork_bot?start=socialc_{item.id}"
+            item.body = _body(facts, cta)
+            item.creative = {**item.creative, "cta": cta}
             content_service.transition(session, item, "validated")
             content_service.schedule(session, item, scheduled)
             planned.append(item)

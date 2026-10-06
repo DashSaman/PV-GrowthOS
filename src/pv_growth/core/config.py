@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     provisioning_base_url: str = ""
     provisioning_token: str = ""
     provisioning_timeout_seconds: float = 10.0
+    provisioning_tls_verify: bool = True
+    provisioning_ca_bundle: str = ""
     provisioning_inbound_ids: str = "1"
     provisioning_sublink: str = ""
     free_daily_budget: int = 25
@@ -74,6 +76,13 @@ class Settings(BaseSettings):
     job_batch_size: int = 10
     job_lock_stale_seconds: int = 300
     job_max_attempts_default: int = 5
+    job_retention_days: int = 14
+    job_failed_retention_days: int = 90
+    lifecycle_scan_limit: int = 1000
+    segment_batch_size: int = 500
+    instagram_insights_lookback_days: int = 30
+    instagram_insights_limit: int = 100
+    instagram_insight_retention_days: int = 180
 
     # --- free-config pipeline limits ---
     fetch_max_configs: int = 2000

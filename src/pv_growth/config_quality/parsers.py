@@ -22,8 +22,8 @@ class ParsedConfig:
     protocol: str
     host: str
     port: int
-    credential: str          # uuid / password / method:password
-    credential_fp: str       # sha256(credential)[:16]
+    credential: str  # uuid / password / method:password
+    credential_fp: str  # sha256(credential)[:16]
     remark: str
     raw_uri: str
     tls: bool = False
@@ -49,7 +49,7 @@ def _fingerprint(secret: str) -> str:
 
 def parse_vmess(uri: str) -> ParsedConfig | None:
     try:
-        payload = json.loads(_b64decode(uri[len("vmess://"):]).decode("utf-8", "replace"))
+        payload = json.loads(_b64decode(uri[len("vmess://") :]).decode("utf-8", "replace"))
     except (ValueError, json.JSONDecodeError):
         return None
     host = str(payload.get("add", "")).strip()
@@ -61,9 +61,14 @@ def parse_vmess(uri: str) -> ParsedConfig | None:
     if not host or not cred or not port:
         return None
     return ParsedConfig(
-        protocol="vmess", host=host, port=port, credential=cred,
-        credential_fp=_fingerprint(cred), remark=str(payload.get("ps", "")),
-        raw_uri=uri, tls=str(payload.get("tls", "")).lower() in {"tls", "reality"},
+        protocol="vmess",
+        host=host,
+        port=port,
+        credential=cred,
+        credential_fp=_fingerprint(cred),
+        remark=str(payload.get("ps", "")),
+        raw_uri=uri,
+        tls=str(payload.get("tls", "")).lower() in {"tls", "reality"},
         extra={"net": payload.get("net"), "path": payload.get("path")},
     )
 
@@ -78,9 +83,13 @@ def parse_userinfo_uri(uri: str, protocol: str) -> ParsedConfig | None:
     if not parts.hostname or not parts.username or not port:
         return None
     return ParsedConfig(
-        protocol=protocol, host=parts.hostname, port=port,
-        credential=unquote(parts.username), credential_fp=_fingerprint(unquote(parts.username)),
-        remark=unquote(parts.fragment or ""), raw_uri=uri,
+        protocol=protocol,
+        host=parts.hostname,
+        port=port,
+        credential=unquote(parts.username),
+        credential_fp=_fingerprint(unquote(parts.username)),
+        remark=unquote(parts.fragment or ""),
+        raw_uri=uri,
         tls=protocol in {"vless", "trojan"} or parts.scheme.endswith("s"),
         extra={k: v[0] for k, v in parse_qs(parts.query).items()} or None,
     )
@@ -88,7 +97,7 @@ def parse_userinfo_uri(uri: str, protocol: str) -> ParsedConfig | None:
 
 def parse_ss(uri: str) -> ParsedConfig | None:
     """ss:// SIP002: base64(method:pass)@host:port#remark  (or legacy full-b64)."""
-    body = uri[len("ss://"):]
+    body = uri[len("ss://") :]
     remark = ""
     if "#" in body:
         body, frag = body.split("#", 1)
@@ -110,9 +119,14 @@ def parse_ss(uri: str) -> ParsedConfig | None:
     except (ValueError, IndexError):
         return None
     return ParsedConfig(
-        protocol="ss", host=host, port=port, credential=f"{method}:{password}",
-        credential_fp=_fingerprint(f"{method}:{password}"), remark=remark,
-        raw_uri=uri, tls=False,
+        protocol="ss",
+        host=host,
+        port=port,
+        credential=f"{method}:{password}",
+        credential_fp=_fingerprint(f"{method}:{password}"),
+        remark=remark,
+        raw_uri=uri,
+        tls=False,
     )
 
 
@@ -129,10 +143,20 @@ def parse_any(uri: str) -> ParsedConfig | None:
     return None
 
 
-PRIVATE_NETS = tuple(ipaddress.ip_network(n) for n in (
-    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "169.254.0.0/16",
-    "100.64.0.0/10", "::1/128", "fc00::/7", "fe80::/10",
-))
+PRIVATE_NETS = tuple(
+    ipaddress.ip_network(n)
+    for n in (
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "100.64.0.0/10",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10",
+    )
+)
 
 
 def is_private_host(host: str) -> bool:
@@ -163,8 +187,6 @@ def validate(parsed: ParsedConfig, *, allow_private: bool = False) -> str | None
 def score(parsed: ParsedConfig, source_reliability: float = 0.5) -> float:
     """Quality score in [0,1]: reliability + completeness + tls bonus."""
     base = 0.5 * max(0.0, min(1.0, source_reliability))
-    completeness = 0.3 * (
-        0.4 * bool(parsed.remark) + 0.3 * bool(parsed.tls) + 0.3 * bool(parsed.extra)
-    )
+    completeness = 0.3 * (0.4 * bool(parsed.remark) + 0.3 * bool(parsed.tls) + 0.3 * bool(parsed.extra))
     rarity = 0.2 * (0.5 if parsed.protocol in {"vmess", "ss"} else 1.0)
     return round(min(1.0, base + completeness + rarity), 4)

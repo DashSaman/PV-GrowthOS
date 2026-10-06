@@ -16,9 +16,7 @@ class Job(Base):
     `idempotency_key` prevents duplicate enqueue of the same logical work."""
 
     __tablename__ = "jobs"
-    __table_args__ = (
-        Index("ix_jobs_due", "status", "scheduled_at"),
-    )
+    __table_args__ = (Index("ix_jobs_due", "status", "scheduled_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     job_type: Mapped[str] = mapped_column(String(64), index=True)
@@ -67,9 +65,11 @@ class MessageLog(Base):
     template_code: Mapped[str] = mapped_column(String(64))
     purpose: Mapped[str] = mapped_column(String(64), index=True)  # rule/campaign code
     dedupe_key: Mapped[str] = mapped_column(String(255), unique=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="sent")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="reserved")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    send_ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     meta: Mapped[dict] = mapped_column(Json, nullable=False, default=dict)
-    sent_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False, default=utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime())
 
 
 class LifecycleRule(Base):

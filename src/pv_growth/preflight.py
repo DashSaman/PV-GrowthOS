@@ -114,8 +114,11 @@ def check_protected_containers(containers: list[str]) -> CheckResult:
 
 def check_port_free(port: int, ss_output: str | None) -> CheckResult:
     if ss_output is None:
-        return CheckResult("growth_port_free", SKIP if not is_linux() else FAIL,
-                           "ss unavailable" if is_linux() else "not linux")
+        return CheckResult(
+            "growth_port_free",
+            SKIP if not is_linux() else FAIL,
+            "ss unavailable" if is_linux() else "not linux",
+        )
     busy = parse_listening_ports(ss_output)
     if port in busy:
         return CheckResult("growth_port_free", FAIL, f"port {port} already listening")
@@ -149,8 +152,9 @@ def check_duplicate_instance(container_name: str, port: int, ss_output: str | No
     existing = out is not None and out.strip() == container_name
     port_busy = ss_output is not None and port in parse_listening_ports(ss_output)
     if existing or port_busy:
-        return CheckResult("no_duplicate_instance", FAIL,
-                           f"container exists={existing}, port busy={port_busy}")
+        return CheckResult(
+            "no_duplicate_instance", FAIL, f"container exists={existing}, port busy={port_busy}"
+        )
     return CheckResult("no_duplicate_instance", PASS, "none found")
 
 
@@ -205,8 +209,7 @@ def run(args: list[str] | None = None) -> int:
     docker_subnets: list[str] = []
     if network_names and "pv_growth_net" in network_names:
         inspect = _run(
-            ["docker", "network", "inspect", "pv_growth_net",
-             "--format", "{{(index .IPAM.Config 0).Subnet}}"]
+            ["docker", "network", "inspect", "pv_growth_net", "--format", "{{(index .IPAM.Config 0).Subnet}}"]
         )
         if inspect:
             docker_subnets.append(inspect.strip())

@@ -19,7 +19,10 @@ def check_http(name: str, url: str, timeout: float) -> tuple[str, bool, str]:
     try:
         # internal hosts (x-ui etc.) use self-signed certs; smoke only checks liveness
         resp = httpx.get(
-            url, timeout=timeout, follow_redirects=True, verify=False  # noqa: S501
+            url,
+            timeout=timeout,
+            follow_redirects=True,
+            verify=False,  # noqa: S501
         )
         ok = resp.status_code < 500  # protected services may 401/404; only 5xx/down is failure
         return name, ok, f"HTTP {resp.status_code}"

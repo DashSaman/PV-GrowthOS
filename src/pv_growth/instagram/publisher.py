@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,10 +22,17 @@ class InstagramPublisher:
 
     provider = "instagram"
     max_attempts = 5
+    reconciliation_limit = 25
+    reconciliation_window = timedelta(minutes=15)
 
-    def __init__(self, session: Session, client: InstagramClient, *,
-                 renderer: MediaRenderer | None = None,
-                 media_store: MediaStore | None = None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        client: InstagramClient,
+        *,
+        renderer: MediaRenderer | None = None,
+        media_store: MediaStore | None = None,
+    ) -> None:
         self._session = session
         self._client = client
         self._renderer = renderer
@@ -45,8 +55,9 @@ class InstagramPublisher:
             self._session.flush()
         return publication
 
-    def _record_api_error(self, publication: ContentPublication,
-                          exc: InstagramAPIError, *, ambiguous: bool = False) -> bool:
+    def _record_api_error(
+        self, publication: ContentPublication, exc: InstagramAPIError, *, ambiguous: bool = False
+    ) -> bool:
         publication.error_category = exc.category
         publication.error_detail = exc.detail
         if exc.retryable:
@@ -60,8 +71,9 @@ class InstagramPublisher:
         self._session.flush()
         return exc.retryable and publication.attempt < self.max_attempts
 
-    def _raise_api_error(self, publication: ContentPublication,
-                         exc: InstagramAPIError, *, ambiguous: bool = False) -> None:
+    def _raise_api_error(
+        self, publication: ContentPublication, exc: InstagramAPIError, *, ambiguous: bool = False
+    ) -> None:
         can_retry = self._record_api_error(publication, exc, ambiguous=ambiguous)
         if exc.retryable and not can_retry:
             raise ExternalServiceError("Instagram retry budget exhausted") from exc
@@ -74,17 +86,44 @@ class InstagramPublisher:
         if publication.media_id or not publication.container_id:
             return publication
 
+        if publication.status == "publish_unknown":
+            item = self._session.get(ContentItem, publication.content_id)
+            if item is None or item.format == "story":
+                return publication
+            response = self._client.owned_media(limit=self.reconciliation_limit)
+            rows = response.get("data", [])
+            rows = rows if isinstance(rows, list) else []
+            marker = re.compile(rf"(?<![A-Za-z0-9])socialc_{item.id}(?![0-9])")
+            center = publication.updated_at or publication.created_at
+            lower = center - self.reconciliation_window
+            upper = center + self.reconciliation_window
+            matches: list[tuple[dict, datetime]] = []
+            for row in rows:
+                if not isinstance(row, dict) or not row.get("id"):
+                    continue
+                caption = row.get("caption")
+                if not isinstance(caption, str) or marker.search(caption) is None:
+                    continue
+                published_at = _parse_instagram_timestamp(row.get("timestamp"))
+                if published_at is None or not lower <= published_at <= upper:
+                    continue
+                matches.append((row, published_at))
+            if len(matches) == 1:
+                row, published_at = matches[0]
+                publication.media_id = str(row["id"])
+                publication.status = "published"
+                publication.error_category = None
+                publication.error_detail = None
+                publication.published_at = published_at
+            else:
+                publication.error_category = "reconciliation_ambiguous"
+                publication.error_detail = f"owned-media matches={len(matches)}"
+            self._session.flush()
+            return publication
+
         status = self._client.container_status(publication.container_id)
-        media_id = status.get("published_media_id")
-        if media_id:
-            publication.media_id = str(media_id)
-            publication.status = "published"
-            publication.error_category = None
-            publication.error_detail = None
-            publication.published_at = utcnow()
-        elif publication.status != "publish_unknown":
-            remote_status = str(status.get("status_code") or status.get("status") or "").upper()
-            publication.status = "ready" if remote_status == "FINISHED" else "processing"
+        remote_status = str(status.get("status_code") or status.get("status") or "").upper()
+        publication.status = "ready" if remote_status == "FINISHED" else "processing"
         self._session.flush()
         return publication
 
@@ -104,13 +143,13 @@ class InstagramPublisher:
             if publication.media_id:
                 return PublishResult(
                     remote_id=publication.media_id,
-                    metadata={"provider": self.provider,
-                              "container_id": publication.container_id,
-                              "reconciled": True},
+                    metadata={
+                        "provider": self.provider,
+                        "container_id": publication.container_id,
+                        "reconciled": True,
+                    },
                 )
-            raise ExternalServiceError(
-                "Instagram publication is ambiguous; refusing a blind publish retry"
-            )
+            raise ExternalServiceError("Instagram publication is ambiguous; refusing a blind publish retry")
 
         creative = dict(item.creative or {})
         if not creative.get("media_url"):
@@ -193,3 +232,15 @@ class InstagramPublisher:
             remote_id=publication.media_id,
             metadata={"provider": self.provider, "container_id": publication.container_id},
         )
+
+
+def _parse_instagram_timestamp(value) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed

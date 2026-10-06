@@ -23,8 +23,7 @@ def tcp_check(host: str, port: int, timeout: float) -> bool:
         return False
 
 
-def check_top_candidates(candidates: list[tuple[int, str, int]],
-                         settings: Settings) -> dict[int, bool]:
+def check_top_candidates(candidates: list[tuple[int, str, int]], settings: Settings) -> dict[int, bool]:
     """candidates: [(config_db_id, host, port)] already capped by the caller.
     Returns {config_db_id: reachable}."""
     if not candidates:

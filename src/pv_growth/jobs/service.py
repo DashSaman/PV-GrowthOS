@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -48,8 +48,11 @@ def enqueue(
             return existing, False
 
     job = Job(
-        job_type=job_type, payload=payload, scheduled_at=scheduled_at or utcnow(),
-        idempotency_key=idempotency_key, max_attempts=max_attempts or 5,
+        job_type=job_type,
+        payload=payload,
+        scheduled_at=scheduled_at or utcnow(),
+        idempotency_key=idempotency_key,
+        max_attempts=max_attempts or 5,
         priority=priority,
     )
     if not idempotency_key:
@@ -65,29 +68,33 @@ def enqueue(
         if existing is not None:
             return existing, False
         raise
-    log.info("job enqueued", job_type=job_type, job_id=job.id,
-             idempotency_key=idempotency_key)
+    log.info("job enqueued", job_type=job_type, job_id=job.id, idempotency_key=idempotency_key)
     return job, True
 
 
-def claim_next(session: Session, worker_id: str, *, stale_seconds: int,
-               now: datetime | None = None) -> Job | None:
+def claim_next(
+    session: Session, worker_id: str, *, stale_seconds: int, now: datetime | None = None
+) -> Job | None:
     """Atomically claim the next due job. Works identically on PostgreSQL and
     SQLite: single-row UPDATE wins exactly one contender."""
     now = now or utcnow()
     stale_before = now - timedelta(seconds=stale_seconds)
 
-    candidates = session.execute(
-        select(Job.id)
-        .where(
-            Job.status.in_(("pending", "running")),
-            (Job.retry_after.is_(None)) | (Job.retry_after <= now),
-            Job.scheduled_at <= now,
-            (Job.locked_at.is_(None)) | (Job.locked_at < stale_before),
+    candidates = (
+        session.execute(
+            select(Job.id)
+            .where(
+                Job.status.in_(("pending", "running")),
+                (Job.retry_after.is_(None)) | (Job.retry_after <= now),
+                Job.scheduled_at <= now,
+                (Job.locked_at.is_(None)) | (Job.locked_at < stale_before),
+            )
+            .order_by(Job.priority.desc(), Job.scheduled_at)
+            .limit(10)
         )
-        .order_by(Job.priority.desc(), Job.scheduled_at)
-        .limit(10)
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if not candidates:
         return None
 
@@ -109,7 +116,8 @@ def claim_next(session: Session, worker_id: str, *, stale_seconds: int,
 
 def complete(session: Session, job_id: int) -> None:
     session.execute(
-        update(Job).where(Job.id == job_id)
+        update(Job)
+        .where(Job.id == job_id)
         .values(status="done", finished_at=utcnow(), locked_at=None, locked_by=None)
     )
     session.commit()
@@ -120,21 +128,33 @@ def fail(session: Session, job: Job, error: str, *, max_attempts: int | None = N
     effective_max = max_attempts or job.max_attempts
     if job.attempt >= effective_max:
         session.execute(
-            update(Job).where(Job.id == job.id)
-            .values(status="failed", finished_at=utcnow(), last_error=error[:2000],
-                    locked_at=None, locked_by=None)
+            update(Job)
+            .where(Job.id == job.id)
+            .values(
+                status="failed", finished_at=utcnow(), last_error=error[:2000], locked_at=None, locked_by=None
+            )
         )
-        log.error("job dead after max attempts", job_id=job.id, job_type=job.job_type,
-                  attempt=job.attempt)
+        log.error("job dead after max attempts", job_id=job.id, job_type=job.job_type, attempt=job.attempt)
     else:
         backoff = min(BACKOFF_CAP_SECONDS, BACKOFF_BASE_SECONDS * (2 ** max(0, job.attempt - 1)))
         session.execute(
-            update(Job).where(Job.id == job.id)
-            .values(status="pending", retry_after=utcnow() + timedelta(seconds=backoff),
-                    last_error=error[:2000], locked_at=None, locked_by=None)
+            update(Job)
+            .where(Job.id == job.id)
+            .values(
+                status="pending",
+                retry_after=utcnow() + timedelta(seconds=backoff),
+                last_error=error[:2000],
+                locked_at=None,
+                locked_by=None,
+            )
         )
-        log.warning("job failed, will retry", job_id=job.id, job_type=job.job_type,
-                    attempt=job.attempt, backoff_seconds=backoff)
+        log.warning(
+            "job failed, will retry",
+            job_id=job.id,
+            job_type=job.job_type,
+            attempt=job.attempt,
+            backoff_seconds=backoff,
+        )
     session.commit()
     session.refresh(job)
     return job
@@ -158,7 +178,31 @@ def recover_stale(session: Session, *, stale_seconds: int, now: datetime | None 
 def queue_depth(session: Session) -> dict[str, int]:
     out: dict[str, int] = {}
     for status in ("pending", "running", "failed", "done"):
-        out[status] = len(
-            session.execute(select(Job.id).where(Job.status == status)).scalars().all()
-        )
+        out[status] = len(session.execute(select(Job.id).where(Job.status == status)).scalars().all())
     return out
+
+
+def prune_terminal(
+    session: Session,
+    *,
+    done_before: datetime,
+    failed_before: datetime,
+) -> int:
+    """Prune terminal queue history while retaining failed diagnostics longer."""
+    result = session.execute(
+        delete(Job).where(
+            or_(
+                (
+                    Job.status.in_(("done", "cancelled"))
+                    & (Job.finished_at.isnot(None))
+                    & (Job.finished_at < done_before)
+                ),
+                (
+                    (Job.status == "failed")
+                    & (Job.finished_at.isnot(None))
+                    & (Job.finished_at < failed_before)
+                ),
+            )
+        )
+    )
+    return int(result.rowcount or 0)

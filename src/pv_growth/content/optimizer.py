@@ -57,39 +57,55 @@ def _latest_metrics(session: Session, content_id: int) -> dict:
     return dict(insight.metrics or {}) if insight else {}
 
 
-def _attributed_counts(session: Session, campaign_code: str | None) -> tuple[int, int, int]:
-    if not campaign_code:
-        return 0, 0, 0
+def _attributed_counts(session: Session, content_id: int) -> tuple[int, int, int]:
     source = session.execute(
-        select(Source).where(Source.code == f"social:{campaign_code}")
+        select(Source).where(Source.code == f"socialc:{content_id}")
     ).scalar_one_or_none()
     if source is None:
         return 0, 0, 0
-    user_ids = set(session.execute(
-        select(AttributionTouch.user_id).where(
-            AttributionTouch.source_id == source.id
-        ).distinct()
-    ).scalars().all())
+    user_ids = set(
+        session.execute(
+            select(AttributionTouch.user_id).where(AttributionTouch.source_id == source.id).distinct()
+        )
+        .scalars()
+        .all()
+    )
     if not user_ids:
         return 0, 0, 0
-    bot_users = set(session.execute(
-        select(Event.user_id).where(
-            Event.source_id == source.id,
-            Event.event_type == "SOURCE_ATTRIBUTED",
-            Event.user_id.isnot(None),
-        ).distinct()
-    ).scalars().all())
-    trial_users = set(session.execute(
-        select(Event.user_id).where(
-            Event.user_id.in_(user_ids),
-            Event.event_type.in_(("TRIAL_CREATED", "TRIAL_CONNECTED")),
-        ).distinct()
-    ).scalars().all())
-    purchase_users = set(session.execute(
-        select(Event.user_id).where(
-            Event.user_id.in_(user_ids), Event.event_type == "PAYMENT_SUCCESS"
-        ).distinct()
-    ).scalars().all())
+    bot_users = set(
+        session.execute(
+            select(Event.user_id)
+            .where(
+                Event.source_id == source.id,
+                Event.event_type == "SOURCE_ATTRIBUTED",
+                Event.user_id.isnot(None),
+            )
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    trial_users = set(
+        session.execute(
+            select(Event.user_id)
+            .where(
+                Event.user_id.in_(user_ids),
+                Event.event_type.in_(("TRIAL_CREATED", "TRIAL_CONNECTED")),
+            )
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    purchase_users = set(
+        session.execute(
+            select(Event.user_id)
+            .where(Event.user_id.in_(user_ids), Event.event_type == "PAYMENT_SUCCESS")
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
     return len(bot_users), len(trial_users), len(purchase_users)
 
 
@@ -99,9 +115,8 @@ def score_content(session: Session, content_id: int) -> GrowthScore:
         raise ValidationError("content item not found")
     metrics = _latest_metrics(session, content_id)
     reach = int(metrics.get("reach", 0) or 0)
-    engagement = sum(int(metrics.get(key, 0) or 0)
-                     for key in ("likes", "comments", "shares", "saves"))
-    bot_starts, trials, purchases = _attributed_counts(session, item.campaign_code)
+    engagement = sum(int(metrics.get(key, 0) or 0) for key in ("likes", "comments", "shares", "saves"))
+    bot_starts, trials, purchases = _attributed_counts(session, item.id)
     config = _optimizer_config(session)
     weights = dict(config.get("weights") or {})
     purchase_weight = float(weights.get("purchase", 1000))
@@ -114,9 +129,7 @@ def score_content(session: Session, content_id: int) -> GrowthScore:
     min_sample = max(1, int(config.get("min_sample", 20)))
     sample_size = bot_starts
     sufficient = sample_size >= min_sample
-    confidence = "high" if sample_size >= min_sample * 5 else (
-        "medium" if sufficient else "low"
-    )
+    confidence = "high" if sample_size >= min_sample * 5 else ("medium" if sufficient else "low")
     score = (
         purchases * purchase_weight
         + trials * trial_weight
@@ -154,11 +167,13 @@ def rank_candidates(session: Session, content_ids: list[int]) -> list[GrowthScor
 
 
 def persist_performance_metadata(session: Session) -> int:
-    items = session.execute(
-        select(ContentItem).where(
-            ContentItem.channel == "instagram", ContentItem.status == "published"
+    items = (
+        session.execute(
+            select(ContentItem).where(ContentItem.channel == "instagram", ContentItem.status == "published")
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if not items:
         return 0
     scores = rank_candidates(session, [item.id for item in items])
@@ -166,11 +181,13 @@ def persist_performance_metadata(session: Session) -> int:
     for item in items:
         result = by_id[item.id]
         creative = dict(item.creative or {})
-        creative.update({
-            "performance_score": result.score,
-            "performance_confidence": result.confidence,
-            "winner": result.is_winner,
-        })
+        creative.update(
+            {
+                "performance_score": result.score,
+                "performance_confidence": result.confidence,
+                "winner": result.is_winner,
+            }
+        )
         item.creative = creative
     session.flush()
     return len(items)

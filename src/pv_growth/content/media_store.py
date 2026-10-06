@@ -32,8 +32,7 @@ class LocalMediaStore:
     This class never configures that origin or modifies Apache/nginx routes itself.
     """
 
-    def __init__(self, *, root: str | Path, public_base_url: str,
-                 retention_hours: int = 48) -> None:
+    def __init__(self, *, root: str | Path, public_base_url: str, retention_hours: int = 48) -> None:
         if not public_base_url.startswith(("https://", "http://")):
             raise ValidationError("public media base URL must be HTTP(S)")
         if retention_hours < 1:
@@ -46,8 +45,7 @@ class LocalMediaStore:
     @staticmethod
     def _key(key: str) -> PurePosixPath:
         parsed = PurePosixPath(key)
-        if parsed.is_absolute() or not parsed.parts or any(part in {"", ".", ".."}
-                                                           for part in parsed.parts):
+        if parsed.is_absolute() or not parsed.parts or any(part in {"", ".", ".."} for part in parsed.parts):
             raise ValidationError("invalid media store key")
         return parsed
 

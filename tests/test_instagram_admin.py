@@ -17,28 +17,42 @@ ADMIN = {"X-Admin-Token": "test-admin-token"}
 
 def _published(session):
     campaign = Campaign(
-        code=f"admin_ig_{uuid.uuid4().hex[:8]}", name="IG admin",
-        kind="purchase", status="active", config={"price": 1234},
+        code=f"admin_ig_{uuid.uuid4().hex[:8]}",
+        name="IG admin",
+        kind="purchase",
+        status="active",
+        config={"price": 1234},
     )
     session.add(campaign)
     session.flush()
     item = ContentItem(
-        title="admin item", kind="purchase_cta", channel="instagram", format="post",
-        body="caption", facts={"price": 1234}, creative={"template": "brand_card"},
-        status="published", campaign_code=campaign.code, published_at=utcnow(),
+        title="admin item",
+        kind="purchase_cta",
+        channel="instagram",
+        format="post",
+        body="caption",
+        facts={"price": 1234},
+        creative={"template": "brand_card"},
+        status="published",
+        campaign_code=campaign.code,
+        published_at=utcnow(),
         dedupe_key=f"admin-ig:{uuid.uuid4().hex}",
     )
     session.add(item)
     session.flush()
     publication = ContentPublication(
-        content_id=item.id, provider="instagram", status="published",
+        content_id=item.id,
+        provider="instagram",
+        status="published",
         container_id=f"container-{uuid.uuid4().hex[:8]}",
-        media_id=f"media-{uuid.uuid4().hex[:8]}", published_at=utcnow(),
+        media_id=f"media-{uuid.uuid4().hex[:8]}",
+        published_at=utcnow(),
     )
     session.add(publication)
     session.flush()
     insight = ContentInsight(
-        publication_id=publication.id, captured_at=utcnow(),
+        publication_id=publication.id,
+        captured_at=utcnow(),
         metrics={"reach": 99, "likes": 7},
     )
     session.add(insight)

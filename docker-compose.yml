@@ -1,20 +1,20 @@
-# PV GrowthOS — production-oriented compose with hard resource limits.
+# PV GrowthOS — local/rehearsal compose with production-equivalent limits.
+# Production rollout uses the checksum-verified CI artifact and explicit
+# `docker run` commands from DEPLOYMENT.md; it never builds on the VPN host.
 # The app binds 127.0.0.1:8350 on the host only. Never 0.0.0.0.
 # Create the network first: docker network create pv_growth_net --subnet 172.23.77.0/24
 # (only after the read-only preflight confirms the subnet is free).
 services:
   pv-growth-app:
-    build: .
-    image: pv-growth-app:local
+    image: ${PVG_IMAGE:-pv-growth-app:local}
     container_name: pv-growth-app
     restart: unless-stopped
     user: "10001:10001"
-    env_file: /opt/pv-growth/.env
+    env_file: /opt/pv-growth/config/.env
     environment:
       PVG_ENV: production
       PVG_HOST: 0.0.0.0
       PVG_PORT: 8350
-      PVG_DATABASE_URL: ${PVG_DATABASE_URL}
     ports:
       - "127.0.0.1:8350:8350"
     networks:
