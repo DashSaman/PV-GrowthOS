@@ -162,6 +162,9 @@ def publish_shared_slot(
             ],
         ]
     )
+    from pv_growth.acquisition.entry import share_button
+
+    keyboard.buttons.append([share_button()])
     try:
         result = telegram.send_channel_post(settings.free_channel_id, body, keyboard)
         if not result.get("message_id"):

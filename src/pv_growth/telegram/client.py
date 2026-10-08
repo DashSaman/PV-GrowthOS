@@ -55,11 +55,11 @@ class HttpTelegramTransport:
             resp.raise_for_status()
             body = resp.json()
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
-            log.error("telegram connection failed", method=method, error=str(exc))
-            raise TelegramRetryableError(f"telegram: {exc}") from exc
+            log.error("telegram connection failed", method=method, error=type(exc).__name__)
+            raise TelegramRetryableError("telegram connection unavailable") from None
         except httpx.HTTPError as exc:
-            log.error("telegram delivery outcome unknown", method=method, error=str(exc))
-            raise TelegramDeliveryUnknownError(f"telegram: {exc}") from exc
+            log.error("telegram delivery outcome unknown", method=method, error=type(exc).__name__)
+            raise TelegramDeliveryUnknownError("telegram delivery outcome unknown") from None
         if not body.get("ok"):
             raise ExternalServiceError(f"telegram api error: {body.get('description')}")
         return body["result"]

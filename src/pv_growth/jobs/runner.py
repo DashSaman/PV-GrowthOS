@@ -41,6 +41,7 @@ def handler(job_type: str):
 def register_builtin_handlers() -> None:
     """Import handler modules so their @handler decorators register.
     Without this the registry is empty at runtime and every job errors."""
+    import pv_growth.acquisition.daily  # noqa: F401
     import pv_growth.content.jobs  # noqa: F401
     import pv_growth.conversions.service  # noqa: F401
     import pv_growth.free_config.jobs  # noqa: F401

@@ -156,6 +156,7 @@ def send_user_message(
     row.status = "reserved"
     row.attempts += 1
     row.meta = {}
+    session.commit()  # preserve the reservation if the process dies after acceptance
 
     try:
         result = telegram.send_message(user.telegram_chat_id, rendered)
