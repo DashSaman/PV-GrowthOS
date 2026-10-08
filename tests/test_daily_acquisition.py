@@ -165,6 +165,26 @@ def test_purchase_after_reservation_blocks_send(session, settings, monkeypatch):
     assert session.query(MessageLog).one().status == "audience_blocked"
 
 
+def test_purchase_during_final_panel_read_blocks_send(session, settings, monkeypatch):
+    daily, s, reader, bot = prepare_run(session, settings, monkeypatch, contacts=(144,))
+    buyer = [False]
+    proofs = [0]
+
+    def proof(*args):
+        proofs[0] += 1
+        if proofs[0] == 2:
+            buyer[0] = True
+        return True
+
+    monkeypatch.setattr(daily, "two_owned_posts", proof)
+    reader.fetch_private_invite_history = lambda _: (
+        ([{"Status": "active"}], [], []) if buyer[0] else ([], [], [])
+    )
+    result = daily.run_daily(session, s, "2026-10-08", reader=reader, bot=bot, adapter=object())
+    assert result["sent"] == 0 and bot.sent == 0
+    assert session.query(MessageLog).one().status == "audience_blocked"
+
+
 def test_missing_receipt_is_terminal_and_previous_failed_invites_excluded(session, settings, monkeypatch):
     daily, s, reader, bot = prepare_run(session, settings, monkeypatch, contacts=(144, 145), cap=2)
     user, _ = get_or_create_user(session, telegram_user_id=144, telegram_chat_id=144)

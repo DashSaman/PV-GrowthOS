@@ -320,6 +320,8 @@ def run_daily(session, settings, day, *, reader=None, bot=None, adapter=None):
             summary["attempted"] += 1
 
             def final_guard(recipient=recipient):
+                if not two_owned_posts(session, settings, adapter):
+                    raise DispatchBlocked("offers_unavailable")
                 # Complete current three-table history after pacing/reservation.
                 history = reader.fetch_private_invite_history(recipient)
                 decision = (
@@ -336,13 +338,6 @@ def run_daily(session, settings, day, *, reader=None, bot=None, adapter=None):
                     or time.monotonic() - started > 120
                 ):
                     raise DispatchBlocked("outside_window")
-                if not two_owned_posts(session, settings, adapter):
-                    raise DispatchBlocked("offers_unavailable")
-                # Panel reads also take time; close the window again after them.
-                if not dispatch_window() or time.monotonic() - started > 120:
-                    raise DispatchBlocked("outside_window")
-                if enabled_policy(session) is None:
-                    raise DispatchBlocked("policy_disabled")
 
             try:
                 result = bot.call(
