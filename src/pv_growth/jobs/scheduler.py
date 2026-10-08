@@ -24,6 +24,16 @@ def enqueue_free_growth(session, settings: Settings, now: datetime | None = None
     now = now or utcnow()
     day = local_day(now).isoformat()
     policy = growth_policy(session)
+    from pv_growth.acquisition.daily import enabled_policy
+
+    if enabled_policy(session) is not None and now.hour == 6 and 15 <= now.minute < 30:
+        jobs.enqueue(
+            session,
+            "acquisition.daily_invite",
+            {"day": day},
+            idempotency_key=f"acquisition_daily:{day}",
+            max_attempts=1,
+        )
     if policy.get("public_shared_enabled") and now.hour in SHARED_HOURS_UTC:
         slot = SHARED_HOURS_UTC.index(now.hour) + 1
         jobs.enqueue(

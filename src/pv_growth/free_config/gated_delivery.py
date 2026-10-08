@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from pv_growth.core.errors import ValidationError
 from pv_growth.database.models import AppConfig, FreeAllocation, MessageLog, PublishedPost, User
 from pv_growth.database.types import utcnow
+from pv_growth.events.service import ingest
 from pv_growth.free_config.audience import decision_for_user
 from pv_growth.free_config.budgets import GIB
 from pv_growth.free_config.membership import require_membership, valid_context
@@ -180,5 +181,13 @@ def deliver_config(session, settings, flags, telegram, *, user_id: int, context:
     receipt.status = "sent"
     receipt.sent_at = utcnow()
     receipt.meta = {**receipt.meta, "message_id": result["message_id"]}
+    ingest(
+        session,
+        "TRIAL_DELIVERED",
+        user_id=user_id,
+        idempotency_key=f"delivered:{receipt.dedupe_key}",
+        metadata={"delivery_kind": "shared", "owned": True, "health_method": "https_via_proxy"},
+        occurred_at=receipt.sent_at,
+    )
     session.commit()
     return "delivered"

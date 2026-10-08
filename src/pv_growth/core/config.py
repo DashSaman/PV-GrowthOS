@@ -103,6 +103,7 @@ class Settings(BaseSettings):
     flag_pv_exclusive_config_enabled: bool = False
     flag_lifecycle_automation_enabled: bool = False
     flag_referral_enabled: bool = False
+    purchase_bot_token: str = ""
     flag_partner_enabled: bool = False
     flag_content_engine_enabled: bool = False
     flag_instagram_automation_enabled: bool = False

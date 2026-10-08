@@ -73,6 +73,53 @@ class MirzaMySQLReader:
             cur.execute("SELECT id_invoice FROM invoice")
             return [str(r["id_invoice"]) for r in cur.fetchall()]
 
+    def list_private_invite_contacts(self, *, limit=5000):
+        """Existing active ordinary private-bot users only; bounded readonly discovery."""
+        if type(limit) is not int or not 1 <= limit <= 5000:
+            raise ValueError("invalid contact limit")
+        with self.connect() as conn, conn.cursor() as cur:
+            try:
+                cur.execute("START TRANSACTION READ ONLY")
+                cur.execute(
+                    "SELECT id FROM user WHERE User_Status='Active' AND agent='f' "
+                    "AND step='home' ORDER BY id DESC LIMIT %s",
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                return [
+                    int(row["id"])
+                    for row in rows
+                    if str(row.get("id", "")).isdigit() and 0 < int(row["id"]) < 2**52
+                ]
+            finally:
+                conn.rollback()
+
+    def fetch_private_invite_history(self, recipient):
+        with self.connect() as conn, conn.cursor() as cur:
+            try:
+                cur.execute("START TRANSACTION READ ONLY")
+                cur.execute("SELECT id,User_Status,agent,step FROM user WHERE id=%s", (recipient,))
+                row = cur.fetchone()
+                if (
+                    not row
+                    or str(row["id"]) != str(recipient)
+                    or row["User_Status"] != "Active"
+                    or row["agent"] != "f"
+                    or row["step"] != "home"
+                ):
+                    return None
+                results = []
+                for query in (
+                    "SELECT Status,price_product,time_sell FROM invoice WHERE id_user=%s",
+                    "SELECT type,status,price,time FROM service_other WHERE id_user=%s",
+                    "SELECT payment_Status,price,time,at_updated FROM Payment_report WHERE id_user=%s",
+                ):
+                    cur.execute(query, (recipient,))
+                    results.append(list(cur.fetchall()))
+                return tuple(results)
+            finally:
+                conn.rollback()
+
     def fetch_free_audience_history(self, telegram_user_id: int) -> tuple[list, list, list]:
         """Read business history, including renewals, without granting privileges.
 
@@ -223,6 +270,13 @@ def sync_mirza(
                 "volume": invoice.get("Volume"),
                 "service_time": invoice.get("Service_time"),
                 "source": "mirza_db",
+                "observation_kind": (
+                    "first_observed"
+                    if inv_id in fresh_set
+                    else "status_transition"
+                    if previous_statuses.get(inv_id) == "unpaid" and status == _PAID
+                    else "status_change"
+                ),
             }
             if status == _PAID:
                 amount_cents = amount * 10 if amount is not None else None

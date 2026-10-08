@@ -4,23 +4,60 @@ a purchase kills every inappropriate sales reminder (spec §16)."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from pv_growth.core.config import Settings
 from pv_growth.core.flags import FlagService
 from pv_growth.core.logging import get_logger
-from pv_growth.database.models import Event, LifecycleRule, User
+from pv_growth.database.models import Event, LifecycleRule, MessageLog, User
 from pv_growth.database.types import utcnow
 from pv_growth.jobs import service as jobs
-from pv_growth.jobs.runner import RetryableJobError, handler
+from pv_growth.jobs.runner import DeferredJobError, RetryableJobError, handler
 from pv_growth.lifecycle.triggers import candidate_users
 from pv_growth.messaging import service as messaging
 from pv_growth.telegram.client import TelegramRetryableError
 
 log = get_logger("lifecycle")
+
+
+def _activation_cutoff(conditions: dict):
+    if "not_before_utc" not in conditions:
+        return None
+    try:
+        value = datetime.fromisoformat(conditions["not_before_utc"])
+        if value.tzinfo is None:
+            return False
+        return value.astimezone(UTC).replace(tzinfo=None)
+    except (TypeError, ValueError):
+        return False
+
+
+def marketing_cooldown(session, user_id: int, hours: int = 24) -> bool:
+    """Reservations and uncertain delivery consume the same marketing interval."""
+    return (
+        session.scalar(
+            select(MessageLog.id)
+            .where(
+                MessageLog.user_id == user_id,
+                MessageLog.status.in_(("reserved", "sent", "delivery_unknown")),
+                or_(
+                    MessageLog.status == "reserved",
+                    MessageLog.sent_at.is_(None),
+                    MessageLog.sent_at >= utcnow() - timedelta(hours=hours),
+                ),
+                or_(
+                    MessageLog.purpose.startswith("pv_"),
+                    MessageLog.purpose.startswith("bot45_"),
+                    MessageLog.purpose.startswith("never_buyer_invite_"),
+                ),
+            )
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def scan(session: Session, settings: Settings, flags: FlagService) -> int:
@@ -36,13 +73,24 @@ def scan(session: Session, settings: Settings, flags: FlagService) -> int:
     )
     scheduled = 0
     for rule in rules:
+        cond = rule.conditions or {}
+        cutoff = _activation_cutoff(cond)
+        if cutoff is False:
+            continue
         for user, gate_at in candidate_users(
             session,
             rule.trigger,
             limit=settings.lifecycle_scan_limit,
+            not_before=cutoff,
         ):
             # optional condition filters
             cond = rule.conditions or {}
+            if "marketing_cooldown_hours" in cond:
+                hours = cond["marketing_cooldown_hours"]
+                if type(hours) is not int or not 1 <= hours <= 168:
+                    continue
+                if marketing_cooldown(session, user.id, hours):
+                    continue
             if cond.get("free_audience"):
                 from pv_growth.free_config.audience import decision_for_user
 
@@ -89,15 +137,40 @@ def send_followup(session: Session, settings: Settings, flags: FlagService, tele
     if not flags.enabled("LIFECYCLE_AUTOMATION_ENABLED"):
         return "blocked"
     rule = session.execute(
-        select(LifecycleRule).where(LifecycleRule.code == payload["rule_code"])
+        select(LifecycleRule)
+        .where(LifecycleRule.code == payload["rule_code"])
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if rule is None or rule.is_active != 1:
         return "blocked"
-    user = session.get(User, payload["user_id"])
+    # Every marketing purpose serializes its fresh checks and durable reservation
+    # on the same user row. The send engine commits that reservation before I/O.
+    user = session.scalar(
+        select(User)
+        .where(User.id == payload["user_id"])
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if user is None or user.is_blocked:
         return "blocked"
 
     purpose = rule.code
+    conditions = rule.conditions or {}
+    cutoff = _activation_cutoff(conditions)
+    if cutoff is False:
+        return "blocked"
+    if cutoff is not None:
+        from pv_growth.lifecycle.triggers import _latest_event_at, gate_event_for, matches_trigger
+
+        gate_at = _latest_event_at(session, user.id, gate_event_for(rule.trigger))
+        if gate_at is None or gate_at < cutoff or not matches_trigger(session, user, rule.trigger):
+            return "stopped"
+    if "marketing_cooldown_hours" in conditions:
+        hours = conditions["marketing_cooldown_hours"]
+        if type(hours) is not int or not 1 <= hours <= 168:
+            return "blocked"
+        if marketing_cooldown(session, user.id, hours):
+            return "cooldown"
 
     if (rule.conditions or {}).get("free_audience"):
         from pv_growth.free_config.audience import decision_for_user
@@ -142,6 +215,31 @@ def send_followup(session: Session, settings: Settings, flags: FlagService, tele
     return row.status
 
 
+def cooldown_until(session, rule, user_id):
+    hours = (rule.conditions or {}).get("marketing_cooldown_hours", 24)
+    if type(hours) is not int or not 1 <= hours <= 168:
+        return None
+    logs = session.scalars(
+        select(MessageLog).where(
+            MessageLog.user_id == user_id,
+            MessageLog.status.in_(("reserved", "sent", "delivery_unknown")),
+            or_(
+                MessageLog.purpose == rule.code,
+                MessageLog.purpose.startswith("pv_"),
+                MessageLog.purpose.startswith("bot45_"),
+                MessageLog.purpose.startswith("never_buyer_invite_"),
+            ),
+        )
+    ).all()
+    if any(row.status == "reserved" or row.sent_at is None for row in logs):
+        return None  # uncertain reservations require reconciliation, never blind retry
+    ends = [
+        row.sent_at + timedelta(hours=max(hours, rule.cooldown_hours) if row.purpose == rule.code else hours)
+        for row in logs
+    ]
+    return max([utcnow() + timedelta(minutes=1), *ends]) + timedelta(seconds=1)
+
+
 # ---- job handlers wired into the runner ----
 
 
@@ -165,6 +263,11 @@ def _followup_job(session: Session, settings: Settings, payload: dict) -> None:
         raise RetryableJobError(str(exc)) from exc
     if status == "blocked":
         log.info("lifecycle followup blocked; treating as terminal no-op")
+    if status == "cooldown":
+        rule = session.scalar(select(LifecycleRule).where(LifecycleRule.code == payload["rule_code"]))
+        until = cooldown_until(session, rule, payload["user_id"])
+        if until is not None:
+            raise DeferredJobError(until)
 
 
 def _telegram_or_fail(settings: Settings):

@@ -17,6 +17,7 @@ TRIGGERS = {
     "started_no_trial": ("BOT_STARTED", "TRIAL_CREATED"),
     "trial_no_connect": ("TRIAL_CREATED", "TRIAL_CONNECTED"),
     "trial_no_purchase": ("TRIAL_CONNECTED", "PAYMENT_SUCCESS"),
+    "trial_received_no_purchase": ("TRIAL_DELIVERED", "PAYMENT_SUCCESS"),
     "checkout_abandoned": ("CHECKOUT_STARTED", "PAYMENT_SUCCESS"),
 }
 
@@ -65,6 +66,7 @@ def candidate_users(
     trigger: str,
     *,
     limit: int | None = None,
+    not_before=None,
 ) -> list[tuple[User, object]]:
     """Return matching users with a set-based gate query, optionally bounded."""
     if trigger in TRIGGERS:
@@ -98,6 +100,8 @@ def candidate_users(
                 Event.event_type == missing,
             )
         )
+    if not_before is not None:
+        statement = statement.where(gate_rows.c.gate_at >= not_before)
     if trigger == "winback":
         from datetime import timedelta
 

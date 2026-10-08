@@ -440,6 +440,14 @@ def deliver_winner(
     allocation.status = "delivered"
     allocation.payload = {**allocation.payload, "message_id": result["message_id"]}
     claim.status = "active"
+    ingest(
+        session,
+        "TRIAL_DELIVERED",
+        user_id=claim.user_id,
+        campaign_id=claim.campaign_id,
+        idempotency_key=f"delivered:{claim.claim_key}",
+        metadata={"delivery_kind": "lottery", "owned": True, "health_method": "https_via_proxy"},
+    )
     session.commit()
     return True
 

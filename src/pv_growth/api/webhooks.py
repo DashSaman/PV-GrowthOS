@@ -104,11 +104,13 @@ def _safe_answer(client, callback_id: str, text: str) -> None:
 
 
 def _purchase_keyboard(*, include_free: bool = True):
+    from pv_growth.acquisition.entry import share_button
     from pv_growth.telegram.client import InlineKeyboard
 
     rows = [[{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}]]
     if include_free:
         rows.append([{"text": "🎁 کانفیگ رایگان", "url": "https://t.me/pvnetwork_freeconfig"}])
+        rows.append([share_button()])
     return InlineKeyboard(rows)
 
 
@@ -274,6 +276,21 @@ def _handle_message(client, message: TgMessage) -> None:
             attribute(session, user.id, start_param)
             referrals.handle_bot_start(session, user.id, start_param)
             partners.handle_bot_start(session, user.id, start_param)
+            from pv_growth.acquisition.entry import is_acquisition_start, latest_shared_context
+
+            if is_acquisition_start(start_param) and free_allowed:
+                latest = latest_shared_context(session, settings)
+                if latest is not None:
+                    _free_dialogue(client, session, settings, user, latest)
+                else:
+                    _safe_send(
+                        client,
+                        chat_id,
+                        "تست تأییدشدهٔ قابل دریافت فعلاً در دسترس نیست؛ "
+                        "پیشنهاد تازه را در کانال رایگان دنبال کن.",
+                        _purchase_keyboard(include_free=True),
+                    )
+                return
             context = _free_context(start_param)
             if context is not None:
                 _free_dialogue(client, session, settings, user, context)
@@ -291,6 +308,11 @@ def _handle_message(client, message: TgMessage) -> None:
                 main_service_pitch(include_trial=free_allowed),
                 _purchase_keyboard(include_free=free_allowed),
             )
+        elif text.split(" ", 1)[0] in {"/share", "/referral"}:
+            from pv_growth.acquisition.entry import sharing_prompt
+
+            body, keyboard = sharing_prompt()
+            _safe_send(client, chat_id, body, keyboard)
         elif text.startswith("/help"):
             from pv_growth.free_config.audience import decision_for_user
             from pv_growth.free_config.sales_copy import main_service_pitch

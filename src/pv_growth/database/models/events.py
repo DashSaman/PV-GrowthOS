@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from pv_growth.database.types import Base, Json, utcnow
 
-# The 23 normalized event types (spec §10). Ingestion rejects anything else.
+# Normalized event types. Ingestion rejects anything else.
 EVENT_TYPES = frozenset(
     {
         "BOT_STARTED",
@@ -16,6 +16,7 @@ EVENT_TYPES = frozenset(
         "FREE_CONFIG_CLICKED",
         "FREE_CONFIG_CLAIMED",
         "TRIAL_CREATED",
+        "TRIAL_DELIVERED",
         "TRIAL_CONNECTED",
         "PRICING_VIEWED",
         "CHECKOUT_STARTED",
