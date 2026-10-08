@@ -136,8 +136,10 @@ def send_user_message(
     rendered = render(template.body, build_facts(session, user_id, template, facts))
     key = dedupe_key or f"msg:{purpose}:{user_id}:{send_ordinal}:v{template.version}"
 
-    user = session.get(User, user_id)
-    if user is None or not user.telegram_chat_id:
+    user = session.scalar(
+        select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True)
+    )
+    if user is None or user.is_blocked or not user.telegram_chat_id:
         log.warning("cannot send: user has no chat", user_id=user_id)
         return None, False
 

@@ -99,5 +99,33 @@ def test_purchase_cta_cooldown_spans_gift_and_lottery_claims(session, settings, 
     )
     session.get(AppConfig, "pv_free_growth_policy").value = {"gift_enabled": True, "lottery_enabled": True}
     session.commit()
-    sweep.trial_end_job(session, s, {"claim_id": other.id})
+    import pytest
+
+    from pv_growth.jobs.runner import DeferredJobError
+
+    with pytest.raises(DeferredJobError):
+        sweep.trial_end_job(session, s, {"claim_id": other.id})
     assert len(t.calls) == 1
+
+
+def test_invitation_also_defers_expiry_marketing(session, settings, monkeypatch):
+    import pytest
+
+    from pv_growth.database.types import utcnow
+    from pv_growth.jobs.runner import DeferredJobError
+
+    row, s, t = setup(session, settings, monkeypatch)
+    session.add(
+        MessageLog(
+            user_id=row.user_id,
+            template_code="invite",
+            purpose="never_buyer_invite_20261008",
+            dedupe_key="invite",
+            status="sent",
+            sent_at=utcnow(),
+        )
+    )
+    session.commit()
+    with pytest.raises(DeferredJobError):
+        sweep.trial_end_job(session, s, {"claim_id": row.id})
+    assert not t.calls

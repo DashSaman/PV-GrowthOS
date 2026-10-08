@@ -8,8 +8,6 @@ service alive (clock skew tolerance).
 
 from __future__ import annotations
 
-from datetime import timedelta
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -171,21 +169,21 @@ def trial_end_job(session: Session, settings: Settings, payload: dict) -> None:
     key = f"trial_end:{claim.claim_key}"
     if session.scalar(select(MessageLog).where(MessageLog.dedupe_key == key)) is not None:
         return
-    if (
-        session.scalar(
-            select(MessageLog.id)
-            .where(
-                MessageLog.user_id == user.id,
-                MessageLog.purpose == "pv_trial_end",
-                (
-                    (MessageLog.status.in_(["reserved", "delivery_unknown"]))
-                    | ((MessageLog.status == "sent") & (MessageLog.sent_at >= utcnow() - timedelta(hours=24)))
-                ),
-            )
-            .limit(1)
+    from types import SimpleNamespace
+
+    from pv_growth.jobs.runner import DeferredJobError
+    from pv_growth.lifecycle.service import cooldown_until, marketing_cooldown
+
+    if marketing_cooldown(session, user.id, 24):
+        until = cooldown_until(
+            session,
+            SimpleNamespace(
+                code="pv_trial_end", conditions={"marketing_cooldown_hours": 24}, cooldown_hours=24
+            ),
+            user.id,
         )
-        is not None
-    ):
+        if until is not None:
+            raise DeferredJobError(until)
         return
     row = MessageLog(
         user_id=user.id,

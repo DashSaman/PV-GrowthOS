@@ -30,6 +30,14 @@ class RetryableJobError(Exception):
     """Handler state is intentional evidence and must commit before job backoff."""
 
 
+class DeferredJobError(Exception):
+    """Expected cooldown; keep the same job without consuming a retry attempt."""
+
+    def __init__(self, scheduled_at):
+        super().__init__("dispatch deferred")
+        self.scheduled_at = scheduled_at
+
+
 def handler(job_type: str):
     def register(fn: Handler) -> Handler:
         _HANDLERS[job_type] = fn
@@ -76,6 +84,13 @@ def run_tick(settings: Settings, *, worker_id: str | None = None, batch: int | N
                 dispatch(session, settings, job.job_type, job.payload)
                 session.commit()
                 jobs.complete(session, job.id)
+            except DeferredJobError as exc:
+                job.status = "pending"
+                job.scheduled_at = exc.scheduled_at
+                job.attempt = max(0, job.attempt - 1)
+                job.locked_at = job.locked_by = None
+                job.retry_after = job.finished_at = job.last_error = None
+                session.commit()
             except Exception as exc:  # noqa: BLE001 — job failures are data, not crashes
                 log.error(
                     "job execution failed",

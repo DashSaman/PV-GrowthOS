@@ -6,7 +6,7 @@ import pytest
 
 from pv_growth.core.errors import ValidationError
 from pv_growth.core.flags import FlagService
-from pv_growth.database.models import AppConfig, FreeAllocation, MessageLog, PublishedPost, User
+from pv_growth.database.models import AppConfig, Event, FreeAllocation, MessageLog, PublishedPost, User
 from pv_growth.free_config.audience import AudienceDecision
 from pv_growth.free_config.budgets import GIB
 from pv_growth.free_config.plan_binding import TUNNEL_INBOUNDS
@@ -112,6 +112,8 @@ def test_shared_receipt_private_once_with_durable_log_before_api(session, settin
     assert len(texts) == 1 and "&lt;secret&gt;" in texts[0] and "۱ گیگ مشترک" in texts[0]
     assert session.query(FreeAllocation).count() == 1 and row.traffic_bytes == GIB
     assert session.query(MessageLog).one().status == "sent"
+    event = session.query(Event).filter_by(event_type="TRIAL_DELIVERED").one()
+    assert event.user_id == user.id and event.metadata_json["delivery_kind"] == "shared"
     assert [payload["chat_id"] for method, payload in transport.calls if method == "sendMessage"] == [123]
 
 
@@ -221,5 +223,6 @@ def test_unknown_delivery_is_reserved_and_never_retransmitted(session, settings,
     transport.fail_methods.add("sendMessage")
     assert deliver(p, session, s, user, tg, backend) == "unavailable"
     assert session.query(MessageLog).one().status == "delivery_unknown"
+    assert session.query(Event).filter_by(event_type="TRIAL_DELIVERED").count() == 0
     assert deliver(p, session, s, user, tg, backend) == "already_delivered"
     assert len(transport.sent_texts()) == 1

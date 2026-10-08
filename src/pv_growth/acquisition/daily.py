@@ -10,7 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from pv_growth.acquisition.entry import latest_shared_context
-from pv_growth.database.models import AppConfig, FreeAllocation, MessageLog, PublishedPost
+from pv_growth.database.models import AppConfig, FreeAllocation, MessageLog, PublishedPost, User
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import get_or_create_user
 from pv_growth.free_config.audience import evaluate_history
@@ -22,7 +22,7 @@ from pv_growth.jobs.runner import handler
 from pv_growth.lifecycle.service import marketing_cooldown
 from pv_growth.messaging.service import record_send
 from pv_growth.mirza_adapter.mysql_reader import MirzaMySQLReader
-from pv_growth.provisioning.xui import get_provisioning
+from pv_growth.provisioning.xui import client_email_for, get_provisioning
 
 
 def enabled_policy(session):
@@ -79,6 +79,15 @@ class BotFailure(Exception):
         self.code = code
 
 
+class DispatchBlocked(Exception):
+    pass
+
+
+def dispatch_window():
+    now = utcnow()
+    return 6 * 60 + 15 <= now.hour * 60 + now.minute < 6 * 60 + 30
+
+
 class PurchaseBot:
     """Single worker rate <=2 requests/sec. No exception exposes token or URL."""
 
@@ -87,10 +96,12 @@ class PurchaseBot:
         self.next_at = 0.0
         self.client = httpx.Client(timeout=15, follow_redirects=False)
 
-    def call(self, method, payload):
+    def call(self, method, payload, *, guard=None):
         delay = max(0, self.next_at - time.monotonic())
         if delay:
             time.sleep(delay)
+        if guard is not None:
+            guard()  # after pacing, directly before external I/O
         self.next_at = time.monotonic() + 0.5
         try:
             response = self.client.post(f"https://api.telegram.org/bot{self.token}/{method}", json=payload)
@@ -131,6 +142,8 @@ def two_owned_posts(session, settings, adapter):
         valid_refs, messages = set(), set()
         for row, post in rows:
             payload = row.payload
+            if not isinstance(payload, dict) or row.service_ref != client_email_for(row.id):
+                continue
             if payload.get("tunnel_plan") != binding or payload.get("health_method") != "https_via_proxy":
                 continue
             try:
@@ -141,6 +154,8 @@ def two_owned_posts(session, settings, adapter):
             if not now.replace(tzinfo=UTC) - timedelta(hours=24) <= checked <= now.replace(tzinfo=UTC):
                 continue
             service = payload.get("service", {})
+            if not isinstance(service, dict) or service.get("service_ref") != row.service_ref:
+                continue
             state = adapter.service_state(row.service_ref)
             require_client_identity(service, state)
             if (
@@ -200,6 +215,8 @@ def run_daily(session, settings, day, *, reader=None, bot=None, adapter=None):
     policy = enabled_policy(session)
     if policy is None or day != local_day().isoformat() or not settings.purchase_bot_token:
         return {"status": "disabled"}
+    if not dispatch_window():
+        return {"status": "outside_window"}
     adapter = adapter or get_provisioning(settings)
     if not two_owned_posts(session, settings, adapter):
         return {"status": "offers_unavailable"}
@@ -212,6 +229,7 @@ def run_daily(session, settings, day, *, reader=None, bot=None, adapter=None):
             not isinstance(identity, dict)
             or identity.get("username") != "pvnetwork_bot"
             or identity.get("is_bot") is not True
+            or str(identity.get("id")) != settings.purchase_bot_token.split(":", 1)[0]
         ):
             return {"status": "identity_mismatch"}
         key = f"pv_acquisition_day:{day}"
@@ -233,6 +251,7 @@ def run_daily(session, settings, day, *, reader=None, bot=None, adapter=None):
                 summary["attempted"] >= policy["daily_cap"]
                 or time.monotonic() - started > 120
                 or day != local_day().isoformat()
+                or not dispatch_window()
             ):
                 break
             if enabled_policy(session) is None:
@@ -267,6 +286,21 @@ def run_daily(session, settings, day, *, reader=None, bot=None, adapter=None):
                     continue
                 summary["status"] = "api_stopped"
                 break
+            # Same user lock as lifecycle dispatch: check -> durable reservation
+            # is indivisible across purposes, then commit releases the lock.
+            user = session.scalar(
+                select(User)
+                .where(User.id == user.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if (
+                user.is_blocked
+                or previously_invited(session, user.id)
+                or marketing_cooldown(session, user.id, 168)
+            ):
+                session.commit()
+                continue
             # Forever dedupe spans every daily campaign, not just today's key.
             row, created = record_send(
                 session,
@@ -284,23 +318,48 @@ def run_daily(session, settings, day, *, reader=None, bot=None, adapter=None):
             }
             session.commit()
             summary["attempted"] += 1
-            # Complete current user and three-table purchase history after reservation.
-            history = reader.fetch_private_invite_history(recipient)
-            decision = (
-                evaluate_history(*history, now=utcnow(), dormant_days=45) if history is not None else None
-            )
-            if decision is None or not decision.eligible or decision.reason != "never_purchased":
-                row.status = "audience_blocked"
-                session.commit()
-                continue
+
+            def final_guard(recipient=recipient):
+                # Complete current three-table history after pacing/reservation.
+                history = reader.fetch_private_invite_history(recipient)
+                decision = (
+                    evaluate_history(*history, now=utcnow(), dormant_days=45) if history is not None else None
+                )
+                if decision is None or not decision.eligible or decision.reason != "never_purchased":
+                    raise DispatchBlocked("audience_blocked")
+                current_policy = enabled_policy(session)
+                if current_policy is None or summary["attempted"] > current_policy["daily_cap"]:
+                    raise DispatchBlocked("policy_disabled")
+                if (
+                    day != local_day().isoformat()
+                    or not dispatch_window()
+                    or time.monotonic() - started > 120
+                ):
+                    raise DispatchBlocked("outside_window")
+                if not two_owned_posts(session, settings, adapter):
+                    raise DispatchBlocked("offers_unavailable")
+                # Panel reads also take time; close the window again after them.
+                if not dispatch_window() or time.monotonic() - started > 120:
+                    raise DispatchBlocked("outside_window")
+                if enabled_policy(session) is None:
+                    raise DispatchBlocked("policy_disabled")
+
             try:
-                result = bot.call("sendMessage", {"chat_id": recipient, "text": body, "reply_markup": markup})
+                result = bot.call(
+                    "sendMessage",
+                    {"chat_id": recipient, "text": body, "reply_markup": markup},
+                    guard=final_guard,
+                )
                 if not verified_receipt(result, recipient, body, markup):
                     raise BotFailure()
                 row.status = "sent"
                 row.sent_at = utcnow()
                 row.meta = {**row.meta, "message_id": result["message_id"], "receipt_verified": True}
                 summary["sent"] += 1
+            except DispatchBlocked as exc:
+                row.status = "audience_blocked" if str(exc) == "audience_blocked" else "gate_blocked"
+                if row.status == "gate_blocked":
+                    summary["status"] = str(exc)
             except BotFailure as exc:
                 row.status = "failed" if exc.code is not None else "delivery_unknown"
                 row.sent_at = utcnow()
@@ -312,7 +371,7 @@ def run_daily(session, settings, day, *, reader=None, bot=None, adapter=None):
                     summary["unknown"] += 1
                     summary["status"] = "api_stopped"
             session.commit()
-            if summary["status"] == "api_stopped":
+            if summary["status"] != "finished":
                 break
         session.get(AppConfig, key).value = summary
         session.commit()

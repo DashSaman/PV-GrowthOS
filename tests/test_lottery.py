@@ -260,6 +260,9 @@ def test_delivery_exact_quota_actual_proof_and_private_single_receipt(session, s
     texts = transport.sent_texts()
     assert len(texts) == 1 and "&lt;secret&gt;" in texts[0]
     assert transport.calls[0][1]["chat_id"] > 0
+    from pv_growth.database.models import Event
+
+    assert session.query(Event).filter_by(event_type="TRIAL_DELIVERED").count() == 1
 
 
 @pytest.mark.parametrize("stage", ["eligibility", "quota", "health", "unknown"])
@@ -279,6 +282,9 @@ def test_delivery_fails_closed_and_retains_budget(session, settings, monkeypatch
         transport.fail_methods.add("sendMessage")
     assert not p.deliver_winner(session, s, flags, tg, backend, allocation_id=row.id)
     assert row.traffic_bytes > 0 and session.query(FreeAllocation).count() == 1
+    from pv_growth.database.models import Event
+
+    assert session.query(Event).filter_by(event_type="TRIAL_DELIVERED").count() == 0
     if stage == "unknown":
         assert row.status == "delivery_unknown"
         assert not p.deliver_winner(session, s, flags, tg, backend, allocation_id=row.id)

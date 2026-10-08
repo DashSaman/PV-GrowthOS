@@ -39,6 +39,9 @@ def test_receipt_trigger_does_not_invent_connectivity(session, settings):
     user, rule, _ = setup(session, settings)
     ingest(session, "TRIAL_CREATED", user_id=user.id, idempotency_key="trial")
     session.flush()
+    assert not triggers.matches_trigger(session, user, rule.trigger)
+    ingest(session, "TRIAL_DELIVERED", user_id=user.id, idempotency_key="delivered")
+    session.flush()
     assert triggers.matches_trigger(session, user, rule.trigger)
     assert triggers.candidate_users(session, rule.trigger)[0][0].id == user.id
 
@@ -61,7 +64,7 @@ def test_cutoff_excludes_historical_and_bad_cutoff_fails_closed(session, setting
 
 def test_send_rechecks_cutoff_and_global_invite_cooldown(session, settings):
     user, rule, flags = setup(session, settings)
-    ingest(session, "TRIAL_CREATED", user_id=user.id, idempotency_key="trial")
+    ingest(session, "TRIAL_DELIVERED", user_id=user.id, idempotency_key="trial")
     session.add(
         MessageLog(
             user_id=user.id,
@@ -122,3 +125,106 @@ def test_reservation_survives_process_interruption_before_result(session, settin
         dedupe_key="durable",
     )
     assert not sent and row.status == "reserved"
+
+
+def test_cooldown_defers_enqueue_until_it_can_run_instead_of_consuming_job(session, settings):
+    user, rule, flags = setup(session, settings)
+    ingest(session, "TRIAL_DELIVERED", user_id=user.id, idempotency_key="trial")
+    log = MessageLog(
+        user_id=user.id,
+        template_code="old",
+        purpose="never_buyer_invite_20261008",
+        dedupe_key="old-invite",
+        status="sent",
+        sent_at=utcnow(),
+    )
+    session.add(log)
+    session.commit()
+    assert service.scan(session, settings, flags) == 0
+    log.sent_at = utcnow() - timedelta(hours=25)
+    session.commit()
+    assert service.scan(session, settings, flags) == 1
+
+
+def test_technical_trial_delivery_does_not_count_as_a_marketing_message(session, settings):
+    user, rule, flags = setup(session, settings)
+    ingest(session, "TRIAL_DELIVERED", user_id=user.id, idempotency_key="trial")
+    session.add(
+        MessageLog(
+            user_id=user.id,
+            template_code="delivery",
+            purpose="free_config",
+            dedupe_key="technical-delivery",
+            status="sent",
+            sent_at=utcnow(),
+        )
+    )
+    session.commit()
+    assert not service.marketing_cooldown(session, user.id, 24)
+
+
+def test_queued_followup_defers_same_job_when_invite_arrives_after_scan(session, settings, monkeypatch):
+    from pv_growth.database.models import Job
+    from pv_growth.jobs import runner
+
+    user, rule, flags = setup(session, settings)
+    ingest(session, "TRIAL_DELIVERED", user_id=user.id, idempotency_key="trial")
+    rule.delay_minutes = 0
+    session.commit()
+    assert service.scan(session, settings, flags) == 1
+    session.add(
+        MessageLog(
+            user_id=user.id,
+            template_code="old",
+            purpose="never_buyer_invite_20261008",
+            dedupe_key="old",
+            status="sent",
+            sent_at=utcnow(),
+        )
+    )
+    session.commit()
+    monkeypatch.setattr(service, "_telegram_or_fail", lambda *a: object())
+    monkeypatch.setattr(service, "FlagService", lambda *a: flags)
+    assert runner.run_tick(settings, batch=1) == 1
+    job = session.query(Job).execution_options(populate_existing=True).one()
+    assert job.status == "pending" and job.attempt == 0
+    assert job.scheduled_at > utcnow() + timedelta(hours=23)
+    assert job.finished_at is None and job.locked_by is None
+
+
+def test_postgres_cross_purpose_cooldown_serializes_check_and_reservation(session, settings):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    if not settings.database_url.startswith("postgresql"):
+        pytest.skip("shared user-row lock proof runs in PostgreSQL CI")
+    user, rule, flags = setup(session, settings)
+    ingest(session, "TRIAL_DELIVERED", user_id=user.id, idempotency_key="trial")
+    session.add(
+        LifecycleRule(
+            code="pv_other_offer",
+            trigger=rule.trigger,
+            template_code=rule.template_code,
+            conditions=dict(rule.conditions),
+            stop_conditions=["PAYMENT_SUCCESS"],
+        )
+    )
+    session.commit()
+    user_id = user.id
+    barrier = Barrier(2)
+
+    class Telegram:
+        def send_message(self, *args):
+            return {"message_id": 1}
+
+    def send(code):
+        with session_scope(settings) as other:
+            barrier.wait(timeout=10)
+            return service.send_followup(
+                other, settings, flags, Telegram(), {"rule_code": code, "user_id": user_id}
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(send, code) for code in [rule.code, "pv_other_offer"]]
+        assert sorted(f.result(timeout=20) for f in futures) == ["cooldown", "sent"]
+    assert session.query(MessageLog).count() == 1

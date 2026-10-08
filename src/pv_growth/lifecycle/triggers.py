@@ -17,7 +17,7 @@ TRIGGERS = {
     "started_no_trial": ("BOT_STARTED", "TRIAL_CREATED"),
     "trial_no_connect": ("TRIAL_CREATED", "TRIAL_CONNECTED"),
     "trial_no_purchase": ("TRIAL_CONNECTED", "PAYMENT_SUCCESS"),
-    "trial_received_no_purchase": ("TRIAL_CREATED", "PAYMENT_SUCCESS"),
+    "trial_received_no_purchase": ("TRIAL_DELIVERED", "PAYMENT_SUCCESS"),
     "checkout_abandoned": ("CHECKOUT_STARTED", "PAYMENT_SUCCESS"),
 }
 
