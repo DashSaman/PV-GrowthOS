@@ -34,7 +34,11 @@ def enqueue_free_growth(session, settings: Settings, now: datetime | None = None
             idempotency_key=f"acquisition_daily:{day}",
             max_attempts=1,
         )
-    if policy.get("public_shared_enabled") and now.hour in SHARED_HOURS_UTC:
+    # A UTC hour can span Tehran midnight. Keep a slot on its scheduled
+    # local day; after rollover, skip it rather than replaying yesterday or
+    # consuming tomorrow's slot 9 before its actual 23:30 schedule.
+    shared_day = local_day(now.replace(minute=0, second=0, microsecond=0)).isoformat()
+    if policy.get("public_shared_enabled") and now.hour in SHARED_HOURS_UTC and shared_day == day:
         slot = SHARED_HOURS_UTC.index(now.hour) + 1
         jobs.enqueue(
             session,

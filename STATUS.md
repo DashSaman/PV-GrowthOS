@@ -1,6 +1,22 @@
 # PV GrowthOS status
 
-Last updated: 2026-10-06
+Last updated: 2026-10-12
+
+## Current verified state
+
+Production is release `beb26044d5d8b8910cc27f28adf5b03eb772ba11`, Alembic `0012`.
+The October 12 read-only audit found health/ready good and protected smoke 7/7,
+42 owned shared posts since October 8, two receipted lottery winners on October 8,
+and seven free-channel members. The initial private invite batch is finished
+(841 accepted, 101 forbidden); it must not be replayed. Competitor, partner,
+experiment and content runtime tables are empty. No causal sales lift is proven.
+
+The current repair addresses silent bot actions, persistent lottery/eligibility
+responses, gated community web configs and the Tehran midnight slot error.
+It is a release candidate until exact-head CI, green main artifact deployment
+and a fresh protected rollout audit pass. See [repair evidence](docs/bot-repair-20261012.md).
+The sections below describe the historical October 6 candidate and its gates;
+they must not be treated as the current deployment state.
 
 ## Release candidate
 

@@ -23,16 +23,25 @@ def extract_config_uris(text: str) -> list[str]:
 
 
 def fetch_github_file(url: str, client: httpx.Client) -> list[str]:
-    resp = client.get(url)
-    resp.raise_for_status()
-    return extract_config_uris(resp.text)
+    return extract_config_uris(_bounded_text(client, url))
+
+
+def _bounded_text(client: httpx.Client, url: str, **kwargs) -> str:
+    with client.stream("GET", url, **kwargs) as resp:
+        resp.raise_for_status()
+        body = bytearray()
+        for chunk in resp.iter_bytes(chunk_size=65536):
+            if len(body) + len(chunk) > 1048576:
+                raise ValueError("source too large")
+            body.extend(chunk)
+        return body.decode(resp.encoding or "utf-8", errors="replace")
 
 
 def fetch_telegram_preview(channel: str, client: httpx.Client) -> list[str]:
     handle = channel.lstrip("@")
-    resp = client.get(f"https://t.me/s/{handle}", headers={"User-Agent": "Mozilla/5.0"})
-    resp.raise_for_status()
-    return extract_config_uris(resp.text)
+    return extract_config_uris(
+        _bounded_text(client, f"https://t.me/s/{handle}", headers={"User-Agent": "Mozilla/5.0"})
+    )
 
 
 def fetch_source(kind: str, url: str, client: httpx.Client) -> list[str]:

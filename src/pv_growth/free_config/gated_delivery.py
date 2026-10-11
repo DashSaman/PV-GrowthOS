@@ -81,6 +81,10 @@ def _panel_proof(adapter, allocation):
 
 
 def deliver_config(session, settings, flags, telegram, *, user_id: int, context: str, adapter=None) -> str:
+    if isinstance(context, str) and context.startswith("community:"):
+        from pv_growth.free_config.community import deliver
+
+        return deliver(session, settings, flags, telegram, user_id=user_id, context=context)
     if not valid_context(context) or not context.startswith("shared:") or not _enabled(session, flags):
         return "unavailable"  # old community links cannot deliver configs from another source
     _, day_text, slot = context.split(":")

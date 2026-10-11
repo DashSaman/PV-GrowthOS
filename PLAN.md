@@ -6,6 +6,11 @@ phase starts. New ideas go to `BACKLOG.md` and never interrupt the active phase.
 
 ## Phase Status
 
+The historical COMPLETE labels below record code delivery. They do not mean
+every runtime campaign is enabled or that member/sales growth is proven.
+Current active work is the [October 12 bot journey repair](docs/bot-repair-20261012.md).
+Use `STATUS.md` and live receipts for deployment and business readiness.
+
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Foundation & Safety | ✅ COMPLETE |
