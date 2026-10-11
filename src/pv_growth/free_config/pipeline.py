@@ -12,7 +12,7 @@ import html
 from datetime import date, timedelta
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import case, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -74,7 +74,7 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
                     existing.raw_uri = parsed.raw_uri
                     existing.status = "validated"
                     existing.fetched_at = utcnow()
-                elif existing.status == "validated":
+                elif existing.status in {"validated", "published"}:
                     existing.fetched_at = utcnow()
                 seen_this_run.add(parsed.uri_hash)
                 stats["duplicates"] += 1
@@ -116,11 +116,22 @@ def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
             select(RawConfig)
             .where(
                 RawConfig.valid.is_(True),
-                RawConfig.status == "validated",
+                or_(
+                    RawConfig.status == "validated",
+                    (RawConfig.status == "published")
+                    & (RawConfig.published_at <= utcnow() - timedelta(hours=6)),
+                ),
                 RawConfig.fetched_at >= utcnow() - timedelta(hours=24),
                 RawConfig.source_id.in_(active_sources) if settings.env == "production" else True,
             )
-            .order_by(RawConfig.quality_score.desc())
+            .order_by(
+                case(
+                    (RawConfig.health_ok.is_(True), 0),
+                    (RawConfig.health_checked.is_(False), 1),
+                    else_=2,
+                ),
+                RawConfig.quality_score.desc(),
+            )
             .limit(
                 min(settings.health_check_max, 6)
                 if settings.env == "production" or settings.proxy_probe_required
