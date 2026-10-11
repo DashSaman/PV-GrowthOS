@@ -9,7 +9,7 @@ PublishedPost.dedupe_key so double scheduler runs cannot double-post.
 from __future__ import annotations
 
 import html
-from datetime import date
+from datetime import date, timedelta
 
 import httpx
 from sqlalchemy import select
@@ -74,6 +74,8 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
                     existing.raw_uri = parsed.raw_uri
                     existing.status = "validated"
                     existing.fetched_at = utcnow()
+                elif existing.status == "validated":
+                    existing.fetched_at = utcnow()
                 seen_this_run.add(parsed.uri_hash)
                 stats["duplicates"] += 1
                 continue
@@ -108,13 +110,19 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
 
 def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
     """Top fresh validated configs by score; health-check only these few."""
+    active_sources = select(ConfigSource.id).where(ConfigSource.is_active.is_(True))
     candidates = (
         session.execute(
             select(RawConfig)
-            .where(RawConfig.valid.is_(True), RawConfig.status == "validated")
+            .where(
+                RawConfig.valid.is_(True),
+                RawConfig.status == "validated",
+                RawConfig.fetched_at >= utcnow() - timedelta(hours=24),
+                RawConfig.source_id.in_(active_sources) if settings.env == "production" else True,
+            )
             .order_by(RawConfig.quality_score.desc())
             .limit(
-                min(settings.health_check_max, 3)
+                min(settings.health_check_max, 6)
                 if settings.env == "production" or settings.proxy_probe_required
                 else settings.health_check_max
             )
@@ -138,7 +146,7 @@ def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
     return ranked
 
 
-def render_public_post(config: RawConfig) -> str:
+def render_public_post(config: RawConfig, *, gated: bool = False) -> str:
     from pv_growth.free_config.sales_copy import config_footer
 
     remark = config.remark or f"{config.protocol} · {config.host}"
@@ -147,8 +155,13 @@ def render_public_post(config: RawConfig) -> str:
         f"<code>{html.escape(remark)}</code>\n\n"
         f"پروتکل: <b>{config.protocol.upper()}</b>\n"
         f"{PUBLIC_LABEL_FA}\n{PUBLIC_LABEL_EN}\n\n"
-        f"<code>{html.escape(config.raw_uri)}</code>\n\n"
-        f"{config_footer()}"
+        + (
+            "📥 دریافت پس از عضویت در هر دو کانال، ۴۵ روز بدون خرید و نداشتن سرویس فعال.\n"
+            "✅ اتصال واقعی HTTPS پیش از انتشار بررسی شد؛ نتیجه روی اینترنت شما ممکن است متفاوت باشد.\n\n"
+            if gated
+            else f"<code>{html.escape(config.raw_uri)}</code>\n\n"
+        )
+        + f"{config_footer()}"
     )
 
 
@@ -163,7 +176,10 @@ def publish_public_slot(
     """Publish top configs for one day/slot. Idempotent on dedupe_key:
     a second call (crashed scheduler, double run) is a no-op."""
     if settings.env == "production":
-        return None  # owner requires every new free config from the paid tunnel plan
+        from pv_growth.free_config.community import enabled
+
+        if not enabled(session, settings, flags):
+            return None
     if not flags.enabled("FREE_CONFIG_ENABLED") or not flags.enabled("PUBLIC_CONFIG_ENABLED"):
         log.info("public config disabled by flag")
         return None
@@ -211,10 +227,29 @@ def publish_public_slot(
 
     session.commit()  # a remote result may be unknown; never roll back the effect reservation
 
+    if settings.env == "production":
+        from pv_growth.free_config.community import enabled
+
+        source = session.get(ConfigSource, ranked[0].source_id, populate_existing=True)
+        if not enabled(session, settings, flags) or source is None or not source.is_active:
+            return None
+
     result = telegram.send_channel_post(
         settings.free_channel_id,
-        render_public_post(ranked[0]),
-        InlineKeyboard([[{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}]]),
+        render_public_post(ranked[0], gated=settings.env == "production"),
+        InlineKeyboard(
+            [
+                [
+                    {
+                        "text": "📥 دریافت کانفیگ عمومی وب",
+                        "url": f"https://t.me/pvgrowthos_bot?start=freecfg_community_{ranked[0].id}",
+                    }
+                ],
+                [{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}],
+            ]
+            if settings.env == "production"
+            else [[{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}]]
+        ),
     )
     post.message_id = result.get("message_id")
     ranked[0].status = "published"

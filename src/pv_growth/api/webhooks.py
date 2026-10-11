@@ -114,6 +114,48 @@ def _purchase_keyboard(*, include_free: bool = True):
     return InlineKeyboard(rows)
 
 
+def _home_keyboard(session, settings, *, include_free: bool):
+    """Expose available actions directly; every callback still enforces the gates."""
+    from pv_growth.acquisition.entry import latest_shared_context, share_button
+    from pv_growth.core.flags import FlagService
+    from pv_growth.free_config.community import latest_context
+    from pv_growth.free_config.lottery import _enabled
+    from pv_growth.telegram.client import InlineKeyboard
+
+    rows = [[{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}]]
+    if include_free:
+        context = latest_shared_context(session, settings)
+        if context is not None:
+            rows.append([{"text": "🎁 دریافت تست ۱ گیگی سرویس اصلی", "callback_data": context}])
+        community = latest_context(session, settings)
+        if community:
+            rows.append([{"text": "🌐 دریافت کانفیگ عمومی از وب", "callback_data": community}])
+        if _enabled(session, FlagService(settings)):
+            rows.append([{"text": "🎲 ثبت‌نام قرعه‌کشی", "callback_data": "lottery:pv_daily_lottery"}])
+        rows.append([{"text": "🌐 کانال کانفیگ رایگان", "url": "https://t.me/pvnetwork_freeconfig"}])
+        rows.append([share_button()])
+    return InlineKeyboard(rows)
+
+
+def _private_result(client, user, callback_id: str, text: str, keyboard=None):
+    """A lasting private response, alongside the short Telegram callback notice."""
+    _safe_send(client, user.telegram_user_id, text, keyboard or _purchase_keyboard(include_free=True))
+    _safe_answer(client, callback_id, text[:180])
+
+
+def _denied_result(client, user, callback_id: str):
+    _private_result(
+        client,
+        user,
+        callback_id,
+        "🔎 شرایط دریافت رایگان تأیید نشد.\n"
+        "دریافت فقط با ۴۵ روز بدون خرید و نداشتن سرویس فعال ممکن است. "
+        "اگر سابقهٔ خرید یا وضعیت سرویس قابل بررسی نباشد هم کانفیگ صادر نمی‌شود.\n"
+        "🛒 برای مشاهدهٔ پلن مناسب، ربات رسمی خرید را باز کنید.",
+        _purchase_keyboard(include_free=False),
+    )
+
+
 def _free_context(start_param: str | None) -> str | None:
     from pv_growth.free_config.membership import valid_context
 
@@ -167,20 +209,28 @@ def _free_dialogue(client, session, settings, user, context: str) -> None:
     from pv_growth.telegram.client import InlineKeyboard
 
     if context.startswith("community:"):
-        _safe_send(
-            client,
-            user.telegram_user_id,
-            "این پیشنهاد دیگر در دسترس نیست.",
-            _purchase_keyboard(include_free=False),
-        )
-        return
+        from pv_growth.free_config.community import current_config, enabled
+
+        if (
+            not enabled(session, settings)
+            or current_config(session, settings, int(context.split(":")[1])) is None
+        ):
+            _safe_send(
+                client,
+                user.telegram_user_id,
+                "این کانفیگ عمومی فعلاً قابل دریافت نیست.",
+                _purchase_keyboard(include_free=True),
+            )
+            return
     if not _free_audience_verified(session, settings, user.id):
         from pv_growth.free_config.sales_copy import main_service_pitch
 
         _safe_send(
             client,
             user.telegram_user_id,
-            main_service_pitch(include_trial=False),
+            "برای پیشنهاد رایگان باید ۴۵ روز بدون خرید و بدون سرویس فعال باشید. "
+            "اگر سابقهٔ شما قابل تأیید نباشد، تحویل تا تأیید متوقف می‌شود.\n\n"
+            + main_service_pitch(include_trial=False),
             _purchase_keyboard(include_free=False),
         )
         return
@@ -306,8 +356,29 @@ def _handle_message(client, message: TgMessage) -> None:
                 client,
                 message.chat.get("id"),
                 main_service_pitch(include_trial=free_allowed),
-                _purchase_keyboard(include_free=free_allowed),
+                _home_keyboard(session, settings, include_free=free_allowed),
             )
+        elif text.split(" ", 1)[0].split("@", 1)[0] in {"/free", "/lottery", "/web"}:
+            if text.split(" ", 1)[0].split("@", 1)[0] == "/lottery":
+                _free_dialogue(client, session, settings, user, "lottery:pv_daily_lottery")
+            else:
+                from pv_growth.acquisition.entry import latest_shared_context
+                from pv_growth.free_config.community import latest_context
+
+                context = (
+                    latest_context(session, settings)
+                    if text.split(" ", 1)[0].split("@", 1)[0] == "/web"
+                    else latest_shared_context(session, settings)
+                )
+                if context:
+                    _free_dialogue(client, session, settings, user, context)
+                else:
+                    _safe_send(
+                        client,
+                        chat_id,
+                        "تست قابل دریافت فعلاً موجود نیست؛ پیشنهاد تازه را در کانال دنبال کنید.",
+                        _home_keyboard(session, settings, include_free=True),
+                    )
         elif text.split(" ", 1)[0] in {"/share", "/referral"}:
             from pv_growth.acquisition.entry import sharing_prompt
 
@@ -322,7 +393,7 @@ def _handle_message(client, message: TgMessage) -> None:
                 client,
                 message.chat.get("id"),
                 main_service_pitch(include_trial=free_allowed),
-                _purchase_keyboard(include_free=free_allowed),
+                _home_keyboard(session, settings, include_free=free_allowed),
             )
         elif text.startswith("/claim"):
             parts = text.split()
@@ -335,6 +406,16 @@ def _handle_message(client, message: TgMessage) -> None:
                 )
             else:
                 _safe_send(client, message.chat.get("id"), "استفاده: /claim <کد کمپین>")
+        else:
+            from pv_growth.free_config.audience import decision_for_user
+
+            allowed = decision_for_user(session, settings, user.id).eligible
+            _safe_send(
+                client,
+                chat_id,
+                "برای دریافت تست، کانفیگ‌های وب یا قرعه‌کشی، یکی از دکمه‌های زیر را بزنید.",
+                _home_keyboard(session, settings, include_free=allowed),
+            )
 
 
 def _handle_callback(client, callback: TgCallback) -> None:
@@ -350,6 +431,7 @@ def _handle_callback(client, callback: TgCallback) -> None:
     ):
         _safe_answer(client, callback.id, "این دکمه را در گفت‌وگوی خصوصی ربات استفاده کنید.")
         return
+    _safe_answer(client, callback.id, "در حال بررسی درخواست؛ نتیجه در همین گفت‌وگو نمایش داده می‌شود.")
     from pv_growth.core.flags import FlagService
     from pv_growth.events.service import get_or_create_user
 
@@ -383,13 +465,10 @@ def _handle_callback(client, callback: TgCallback) -> None:
             return
         if data.startswith(("shared:", "community:")):
             if not valid_context(data):
-                _safe_answer(client, callback.id, "این پیشنهاد دیگر در دسترس نیست.")
-                return
-            if data.startswith("community:"):
-                _safe_answer(client, callback.id, "این پیشنهاد دیگر در دسترس نیست.")
+                _private_result(client, user, callback.id, "این پیشنهاد دیگر در دسترس نیست.")
                 return
             if not _free_audience_verified(session, settings, user.id):
-                _safe_answer(client, callback.id, "شرایط خرید ۴۵ روز اخیر و سرویس فعال شما تأیید نشد.")
+                _denied_result(client, user, callback.id)
                 return
             if not _membership_ready(client, settings, user, data):
                 _safe_answer(client, callback.id, "عضویت در هر دو کانال باید تأیید شود.")
@@ -399,21 +478,24 @@ def _handle_callback(client, callback: TgCallback) -> None:
             try:
                 outcome = deliver_config(session, settings, flags, client, user_id=user.id, context=data)
             except ValidationError as exc:
-                _safe_answer(client, callback.id, str(exc))
+                _private_result(client, user, callback.id, str(exc))
                 return
             label = {
                 "delivered": "کانفیگ در گفت‌وگوی خصوصی ارسال شد.",
                 "already_delivered": "درخواست این کانفیگ قبلاً ثبت شده؛ دوباره ارسال نمی‌شود.",
                 "unavailable": "این کانفیگ فعلاً قابل دریافت نیست؛ کانفیگ‌های تازه را بررسی کنید.",
             }[outcome]
-            _safe_answer(client, callback.id, label)
+            if outcome == "delivered":
+                _safe_answer(client, callback.id, label)
+            else:
+                _private_result(client, user, callback.id, label)
             return
         if data.startswith(("lottery:", "claim:")):
             if not valid_context(data):
-                _safe_answer(client, callback.id, "درخواست نامعتبر است.")
+                _private_result(client, user, callback.id, "درخواست نامعتبر است.")
                 return
             if not _free_audience_verified(session, settings, user.id):
-                _safe_answer(client, callback.id, "شرایط خرید ۴۵ روز اخیر و سرویس فعال شما تأیید نشد.")
+                _denied_result(client, user, callback.id)
                 return
             if not _membership_ready(client, settings, user, data):
                 _safe_answer(client, callback.id, "عضویت در هر دو کانال باید تأیید شود.")
@@ -431,11 +513,16 @@ def _handle_callback(client, callback: TgCallback) -> None:
                 )
                 session.commit()
             except ValidationError as exc:
-                _safe_answer(client, callback.id, str(exc))
+                _private_result(client, user, callback.id, str(exc))
                 return
             label = "ثبت شد" if is_new else "قبلاً ثبت شده"
-            _safe_answer(
-                client, callback.id, f"{label}؛ قرعه‌کشی {entry.draw_date.isoformat()} ساعت ۲۳ تهران."
+            _private_result(
+                client,
+                user,
+                callback.id,
+                f"✅ ثبت‌نام شما {label}.\n"
+                f"🎲 قرعه‌کشی {entry.draw_date.isoformat()} ساعت ۲۳ تهران انجام می‌شود.\n"
+                "ثبت‌نام به معنی دریافت فوری اکانت نیست؛ در صورت برنده‌شدن، کانفیگ در همین گفت‌وگو ارسال می‌شود.",
             )
         elif data.startswith("claim:"):
             campaign_code = data.split(":", 1)[1]
