@@ -294,6 +294,21 @@ def test_stale_main_policy_cannot_publish_or_allocate(session, settings, monkeyp
     assert not transport.calls
 
 
+def test_free_username_receipt_is_current_and_expires_with_numeric_settings(session, settings, monkeypatch):
+    from pv_growth.acquisition.entry import latest_shared_context
+
+    s, flags, tg, transport = shared_setup(session, settings, monkeypatch)
+    s = s.model_copy(update={"free_channel_id": "-1004310246787"})
+    backend = Backend()
+    post = shared_public.publish_shared_slot(session, s, flags, tg, backend, day=date(2026, 10, 12), slot=7)
+    assert post.channel_id == "@pvnetwork_freeconfig"
+    assert latest_shared_context(session, s) == "shared:2026-10-12:7"
+    backend.service_state = lambda ref: {"exists": True, "enabled": True, "quota_exhausted": True}
+    assert shared_public.sweep_shared_posts(session, s, tg, backend) == 1
+    edits = [payload for method, payload in transport.calls if method == "editMessageText"]
+    assert len(edits) == 1 and edits[0]["chat_id"] == "@pvnetwork_freeconfig"
+
+
 def test_destination_change_during_probe_aborts_before_send(session, settings, monkeypatch):
     s, flags, tg, transport = shared_setup(session, settings, monkeypatch)
 

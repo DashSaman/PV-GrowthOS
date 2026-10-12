@@ -90,7 +90,7 @@ def latest_shared_context(session, settings) -> str | None:
             FreeAllocation.expires_at > now,
             PublishedPost.kind == "pv_shared",
             PublishedPost.message_id > 0,
-            PublishedPost.channel_id == str(settings.free_channel_id),
+            PublishedPost.channel_id.in_(FREE_CHANNELS),
         )
         .order_by(FreeAllocation.created_at.desc())
         .limit(30)

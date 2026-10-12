@@ -283,7 +283,7 @@ def sweep_shared_posts(session: Session, settings: Settings, telegram, adapter) 
         if reason is None:
             continue
         post = session.scalar(select(PublishedPost).where(PublishedPost.dedupe_key == allocation.id))
-        if post is None or not post.message_id or post.channel_id != str(settings.free_channel_id):
+        if post is None or not post.message_id or post.channel_id.strip().lower() not in FREE_SHARED_CHANNELS:
             continue
         allocation.status = "expiry_notice_reserved"
         allocation.payload = {**allocation.payload, "end_reason": reason}
