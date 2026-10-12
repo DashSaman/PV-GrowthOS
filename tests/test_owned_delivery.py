@@ -6,6 +6,7 @@ import pytest
 
 from pv_growth.config_quality.probe import ProbeResult
 from pv_growth.core.errors import ValidationError
+from pv_growth.free_config.branding import brand_uri
 
 
 def module():
@@ -42,14 +43,11 @@ def test_a_verified_uri_is_delivered_only_after_actual_probe(settings, monkeypat
     uri = "vless://id@8.8.8.8:443"
     monkeypatch.setattr(p, "probe_uri", lambda uri, s: ProbeResult(True, "https_via_proxy", 10))
     transport = httpx.MockTransport(lambda request: httpx.Response(200, text=uri))
-    assert (
-        p.verified_uri(
-            {"config_uri": "https://sub.example/link/id", "client_id": "id", "sub_id": "id"},
-            s,
-            transport=transport,
-        )[0]
-        == uri
-    )
+    assert p.verified_uri(
+        {"config_uri": "https://sub.example/link/id", "client_id": "id", "sub_id": "id"},
+        s,
+        transport=transport,
+    )[0] == brand_uri(uri)
 
 
 @pytest.mark.parametrize("client_id,sub_id", [(None, "id"), ("other", "id"), ("id", "other")])

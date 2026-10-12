@@ -4,9 +4,36 @@
   "purpose": "operational_contract_not_a_runtime_importer",
   "timezone": "Asia/Tehran",
   "existing_automation_id": "pv-growthos-canary",
-  "followup_times": ["07:55", "11:55", "17:55", "23:55"],
-  "owned_shared_times": ["01:30", "07:30", "09:30", "11:30", "13:30", "15:30", "17:30", "19:30", "21:30", "23:30"],
-  "community_times": ["11:30", "20:30"],
+  "followup_times": [
+    "07:55",
+    "11:55",
+    "17:55",
+    "23:55"
+  ],
+  "owned_shared_times": [
+    "01:30",
+    "07:30",
+    "09:30",
+    "11:30",
+    "13:30",
+    "15:30",
+    "17:30",
+    "19:30",
+    "21:30",
+    "23:30"
+  ],
+  "community_times": [
+    "01:30",
+    "07:30",
+    "09:30",
+    "11:30",
+    "13:30",
+    "15:30",
+    "17:30",
+    "19:30",
+    "21:30",
+    "23:30"
+  ],
   "lottery_time": "23:00",
   "daily_owned_shared_gib": 10,
   "daily_lottery_gib": 50,
@@ -30,5 +57,9 @@
   "instagram_authentication": "official_authorization_only",
   "instagram_credentials_stored_here": false,
   "night_report_time": "23:55",
-  "unchanged_state_notifications": false
+  "unchanged_state_notifications": false,
+  "daily_community_slots": 10,
+  "community_delivery": "copyable_public_uri",
+  "community_membership_purchase_gate": false,
+  "free_config_display_name": "@pvnetwork0 | جهت خرید به @pvnetwork_bot مراجعه کنید"
 }

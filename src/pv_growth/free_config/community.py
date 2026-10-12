@@ -12,6 +12,7 @@ from pv_growth.core.flags import FlagService
 from pv_growth.database.models import AppConfig, ConfigSource, MessageLog, PublishedPost, RawConfig, User
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import ingest
+from pv_growth.free_config.branding import brand_uri
 from pv_growth.free_config.gated_delivery import _audience
 from pv_growth.free_config.membership import require_membership, valid_context
 from pv_growth.free_config.sales_copy import config_footer
@@ -130,7 +131,7 @@ def deliver(session, settings, flags, telegram, *, user_id, context):
         "🌐 <b>کانفیگ رایگان عمومی از وب</b>\n"
         "این کانفیگ متعلق به PV Network نیست؛ حجم، مدت و IP آن تحت کنترل ما نیست.\n"
         "✅ اتصال HTTPS پیش از ارسال از سرور بررسی شد؛ نتیجه روی اینترنت شما ممکن است متفاوت باشد.\n\n"
-        f"<code>{html.escape(uri)}</code>\n\n{config_footer()}"
+        f"<code>{html.escape(brand_uri(uri))}</code>\n\n{config_footer()}"
     )
     try:
         result = telegram.send_message(

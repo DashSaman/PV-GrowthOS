@@ -160,16 +160,26 @@ class Scheduler:
                     continue
                 if 0 <= hour <= 23 and hour not in publish_hours:
                     publish_hours.append(hour)
-            publish_hours = publish_hours[:2]  # hard safety cap: never more than two channel slots/day
+            from pv_growth.free_config.shared_public import local_day
+            from pv_growth.free_config.web_publication import WEB_HOURS_UTC, direct_enabled
+
+            direct = direct_enabled(session)
+            publish_hours = list(WEB_HOURS_UTC) if direct else publish_hours[:2]
             now_utc = time.gmtime(time.time())
-            if now_utc.tm_hour in publish_hours:
+            from datetime import UTC
+
+            stamp = datetime.fromtimestamp(time.time(), UTC).replace(tzinfo=None)
+            same_scheduled_day = local_day(stamp) == local_day(
+                stamp.replace(minute=0, second=0, microsecond=0)
+            )
+            if now_utc.tm_hour in publish_hours and (not direct or same_scheduled_day):
                 slot = publish_hours.index(now_utc.tm_hour) + 1
-                day_key = time.strftime("%Y-%m-%d", now_utc)
+                day_key = local_day(stamp).isoformat() if direct else time.strftime("%Y-%m-%d", now_utc)
                 jobs.enqueue(
                     session,
                     "free_config.publish",
-                    {"slot": slot},
-                    idempotency_key=f"free_publish:{day_key}:{slot}",
+                    {"slot": slot, "day": day_key, "direct": direct},
+                    idempotency_key=f"{'free_direct' if direct else 'free_publish'}:{day_key}:{slot}",
                 )
 
     def start(self) -> None:
