@@ -1,0 +1,60 @@
+{
+  "verified_at_utc": "2026-10-12T01:45:11.773567+00:00",
+  "max_sources_per_cycle": 10,
+  "max_response_bytes": 1048576,
+  "interval_hours": 6,
+  "sources": [
+    {
+      "name": "وصلینو / Vaslino",
+      "url": "https://t.me/s/VaslinoVPN",
+      "kind": "http_text",
+      "fields": {
+        "channel_title": {
+          "regex": "<meta property=\"og:title\" content=\"([^\"]{1,120})\""
+        },
+        "first_preview_post": {
+          "regex": "data-post=\"[^\"/]+/(\\d{1,12})\""
+        }
+      },
+      "initial_snapshot": {
+        "channel_title": "کانال فروش فیلترشکن | وصلینو",
+        "first_preview_post": "329"
+      }
+    },
+    {
+      "name": "Account Net VPN",
+      "url": "https://t.me/s/account_network",
+      "kind": "http_text",
+      "fields": {
+        "channel_title": {
+          "regex": "<meta property=\"og:title\" content=\"([^\"]{1,120})\""
+        },
+        "first_preview_post": {
+          "regex": "data-post=\"[^\"/]+/(\\d{1,12})\""
+        }
+      },
+      "initial_snapshot": {
+        "channel_title": "Account Net VPN",
+        "first_preview_post": "1642"
+      }
+    },
+    {
+      "name": "امن‌نت / Amn Net",
+      "url": "https://t.me/s/amn_net",
+      "kind": "http_text",
+      "fields": {
+        "channel_title": {
+          "regex": "<meta property=\"og:title\" content=\"([^\"]{1,120})\""
+        },
+        "first_preview_post": {
+          "regex": "data-post=\"[^\"/]+/(\\d{1,12})\""
+        }
+      },
+      "initial_snapshot": {
+        "channel_title": "امن‌نت | فیلترشکن V2ray",
+        "first_preview_post": "808"
+      }
+    }
+  ],
+  "observation_scope": "public channel title and first post in current preview; no sales-performance inference"
+}

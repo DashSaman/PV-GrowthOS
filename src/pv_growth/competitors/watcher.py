@@ -18,6 +18,8 @@ from pv_growth.database.models import CompetitorChange, CompetitorSource
 from pv_growth.database.types import utcnow
 
 log = get_logger("competitors")
+MAX_SOURCES = 10
+MAX_RESPONSE_BYTES = 1024 * 1024
 
 
 def extract_fields(text: str, spec: dict) -> dict:
@@ -28,7 +30,7 @@ def extract_fields(text: str, spec: dict) -> dict:
         if not pattern:
             continue
         match = re.search(pattern, text, re.IGNORECASE)
-        extracted[field] = match.group(1).strip() if match else None
+        extracted[field] = match.group(1).strip()[:120] if match else None
     return extracted
 
 
@@ -46,13 +48,22 @@ def check_source(session: Session, source: CompetitorSource, client: httpx.Clien
     """Fetch one source, diff against last snapshot, persist change records."""
     source.last_checked_at = utcnow()
     try:
-        resp = client.get(
-            source.url, timeout=10.0, headers={"User-Agent": "Mozilla/5.0 (compatible; PVBot/1.0)"}
-        )
-        resp.raise_for_status()
-        snapshot = extract_fields(resp.text, source.fields)
-    except httpx.HTTPError as exc:
-        log.warning("competitor fetch failed (isolated)", source=source.name, error=str(exc))
+        with client.stream(
+            "GET",
+            source.url,
+            timeout=10.0,
+            follow_redirects=False,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; PVBot/1.0)"},
+        ) as resp:
+            resp.raise_for_status()
+            content = bytearray()
+            for chunk in resp.iter_bytes():
+                if len(content) + len(chunk) > MAX_RESPONSE_BYTES:
+                    raise ValueError("competitor response exceeds limit")
+                content.extend(chunk)
+            snapshot = extract_fields(content.decode("utf-8", errors="replace"), source.fields)
+    except (httpx.HTTPError, ValueError, re.error, IndexError, TypeError) as exc:
+        log.warning("competitor fetch failed (isolated)", source=source.name, error=type(exc).__name__)
         return -1  # failure never propagates
 
     changes = diff_snapshots(source.last_snapshot or {}, snapshot)
@@ -92,15 +103,27 @@ def run_watch(
     """One watch cycle over all active sources. Flag-gated; failures isolated."""
     if not flags.enabled("COMPETITOR_WATCH_ENABLED"):
         return {"skipped": "disabled"}
-    client = client or httpx.Client()
+    owned_client = client is None
+    client = client or httpx.Client(trust_env=False)
     sources = (
-        session.execute(select(CompetitorSource).where(CompetitorSource.is_active.is_(True))).scalars().all()
+        session.execute(
+            select(CompetitorSource)
+            .where(CompetitorSource.is_active.is_(True))
+            .order_by(CompetitorSource.id)
+            .limit(MAX_SOURCES)
+        )
+        .scalars()
+        .all()
     )
     summary = {"sources": len(sources), "changes": 0, "failures": 0}
-    for source in sources:
-        result = check_source(session, source, client)
-        if result < 0:
-            summary["failures"] += 1
-        else:
-            summary["changes"] += result
+    try:
+        for source in sources:
+            result = check_source(session, source, client)
+            if result < 0:
+                summary["failures"] += 1
+            else:
+                summary["changes"] += result
+    finally:
+        if owned_client:
+            client.close()
     return summary

@@ -284,6 +284,23 @@ def _free_dialogue(client, session, settings, user, context: str) -> None:
     )
 
 
+def _audience_notice(decision) -> str:
+    if decision.eligible:
+        return ""
+    if decision.reason == "active_or_unverified_service":
+        reason = "در سوابق حسابت سرویس فعال یا وضعیت سرویس تأییدنشده وجود دارد."
+    elif decision.reason == "recent_purchase":
+        reason = "در ۴۵ روز گذشته خرید داشته‌ای."
+    else:
+        reason = "سابقهٔ خریدت فعلاً قابل تأیید نیست؛ دریافت تا تأیید سوابق متوقف است."
+    return (
+        "ℹ️ دریافت رایگان و ثبت‌نام قرعه‌کشی برای حسابت فعلاً مجاز نیست.\n"
+        + reason
+        + "\nشرط دریافت: ۴۵ روز بدون خرید، نداشتن سرویس فعال یا نامشخص و عضویت در هر دو کانال.\n"
+        "بررسی شرایط با /start دوباره انجام می‌شود.\n\n"
+    )
+
+
 def _handle_message(client, message: TgMessage) -> None:
     settings = get_settings()
     text = (message.text or "").strip()
@@ -315,7 +332,8 @@ def _handle_message(client, message: TgMessage) -> None:
         if text.startswith("/start"):
             from pv_growth.free_config.audience import decision_for_user
 
-            free_allowed = decision_for_user(session, settings, user.id).eligible
+            decision = decision_for_user(session, settings, user.id)
+            free_allowed = decision.eligible
             start_param = text.split(" ", 1)[1].strip() if " " in text else None
             ingest(
                 session,
@@ -355,7 +373,7 @@ def _handle_message(client, message: TgMessage) -> None:
             _safe_send(
                 client,
                 message.chat.get("id"),
-                main_service_pitch(include_trial=free_allowed),
+                _audience_notice(decision) + main_service_pitch(include_trial=free_allowed),
                 _home_keyboard(session, settings, include_free=free_allowed),
             )
         elif text.split(" ", 1)[0].split("@", 1)[0] in {"/free", "/lottery", "/web"}:
@@ -388,11 +406,12 @@ def _handle_message(client, message: TgMessage) -> None:
             from pv_growth.free_config.audience import decision_for_user
             from pv_growth.free_config.sales_copy import main_service_pitch
 
-            free_allowed = decision_for_user(session, settings, user.id).eligible
+            decision = decision_for_user(session, settings, user.id)
+            free_allowed = decision.eligible
             _safe_send(
                 client,
                 message.chat.get("id"),
-                main_service_pitch(include_trial=free_allowed),
+                _audience_notice(decision) + main_service_pitch(include_trial=free_allowed),
                 _home_keyboard(session, settings, include_free=free_allowed),
             )
         elif text.startswith("/claim"):
@@ -409,11 +428,16 @@ def _handle_message(client, message: TgMessage) -> None:
         else:
             from pv_growth.free_config.audience import decision_for_user
 
-            allowed = decision_for_user(session, settings, user.id).eligible
+            decision = decision_for_user(session, settings, user.id)
+            allowed = decision.eligible
             _safe_send(
                 client,
                 chat_id,
-                "برای دریافت تست، کانفیگ‌های وب یا قرعه‌کشی، یکی از دکمه‌های زیر را بزنید.",
+                (
+                    "برای دریافت تست، کانفیگ‌های وب یا قرعه‌کشی، یکی از دکمه‌های زیر را بزنید."
+                    if allowed
+                    else _audience_notice(decision)
+                ),
                 _home_keyboard(session, settings, include_free=allowed),
             )
 

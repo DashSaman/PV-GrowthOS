@@ -4,17 +4,26 @@ Last updated: 2026-10-12
 
 ## Current verified state
 
-Production is release `beb26044d5d8b8910cc27f28adf5b03eb772ba11`, Alembic `0012`.
-The October 12 read-only audit found health/ready good and protected smoke 7/7,
-42 owned shared posts since October 8, two receipted lottery winners on October 8,
-and seven free-channel members. The initial private invite batch is finished
-(841 accepted, 101 forbidden); it must not be replayed. Competitor, partner,
-experiment and content runtime tables are empty. No causal sales lift is proven.
+Latest verified production is release `32879be4153bce788ee3cb55a7dd6a30489476bb`, Alembic `0012`.
+The October 12 audit found health/ready good, protected smoke 7/7, eight free-channel
+members and two actual private shared-config delivery receipts. The two latest
+owned accounts passed real panel/quota/identity and HTTPS-through-proxy checks.
+The initial private invite batch is finished (841 accepted, 101 forbidden) and
+must not be replayed. Two lottery winners were receipted on October 8; today's
+one registration waits for the scheduled 23:00 Tehran draw. No causal sales lift
+is proven. Owner testing confirmed both memberships but an active/unverified
+service exclusion; the owner explicitly rejected an exemption.
 
-The current repair addresses silent bot actions, persistent lottery/eligibility
-responses, gated community web configs and the Tehran midnight slot error.
-It is a release candidate until exact-head CI, green main artifact deployment
-and a fresh protected rollout audit pass. See [repair evidence](docs/bot-repair-20261012.md).
+PRs 13 and 14 repaired direct bot navigation, persistent callback results, gated
+community configs, the midnight slot guard and fresh community revalidation.
+This candidate adds an explicit home denial reason and connects bounded competitor
+observations to a six-hour durable scheduler. Three public Telegram sources were
+verified and saved in `config/competitor_watch_runtime.json`; runtime activation
+is only confirmed by dated deployment/DB receipts, not by the manifest alone.
+Partners, Instagram content and experiments remain inactive pending actual partner
+economics, official Instagram access/media and meaningful traffic respectively.
+See [current goal map](docs/goals-readiness-20261012-fa.md).
+This candidate still requires exact-head/main CI and checksum-verified image rollout.
 The sections below describe the historical October 6 candidate and its gates;
 they must not be treated as the current deployment state.
 

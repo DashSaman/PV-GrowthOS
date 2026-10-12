@@ -101,6 +101,17 @@ class Scheduler:
 
         with session_scope(self._settings) as session:
             enqueue_free_growth(session, self._settings)
+            from pv_growth.core.flags import FlagService
+
+            if FlagService(self._settings).enabled("COMPETITOR_WATCH_ENABLED"):
+                watch_bucket = int(time.time() // (6 * 3600))
+                jobs.enqueue(
+                    session,
+                    "competitors.watch",
+                    {},
+                    idempotency_key=f"competitor_watch:{watch_bucket}",
+                    max_attempts=1,
+                )
             # lifecycle scan every interval; dedupe key collapses overlapping ticks
             bucket = int(time.time() // self._settings.scheduler_interval_seconds)
             jobs.enqueue(session, "lifecycle.scan", {}, idempotency_key=f"lifecycle_scan:{bucket}")

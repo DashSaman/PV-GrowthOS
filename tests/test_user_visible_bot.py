@@ -1,11 +1,46 @@
 """Regression feedback for the user's silent private-bot journeys."""
 
+import pytest
+
 from pv_growth.api import webhooks
 from pv_growth.free_config import audience
 from pv_growth.free_config.audience import AudienceDecision
 from pv_growth.telegram.client import FakeTelegramTransport, TelegramClient
 from tests.test_acquisition_entry import offer, ready
 from tests.test_lottery import setup as lottery_setup
+
+
+@pytest.mark.parametrize("command", ["/start", "/help", "سلام"])
+@pytest.mark.parametrize(
+    ("reason", "explanation"),
+    [
+        ("active_or_unverified_service", "سرویس فعال یا وضعیت سرویس تأییدنشده"),
+        ("recent_purchase", "در ۴۵ روز گذشته خرید"),
+        ("history_unavailable", "سابقهٔ خریدت فعلاً قابل تأیید نیست"),
+    ],
+)
+def test_ineligible_home_explains_reason_without_offering_grants(
+    session, settings, monkeypatch, command, reason, explanation
+):
+    s = ready(session, settings)
+    monkeypatch.setattr(webhooks, "get_settings", lambda: s)
+    monkeypatch.setattr(audience, "decision_for_user", lambda *args: AudienceDecision(False, reason))
+    t = FakeTelegramTransport()
+    webhooks._handle_message(
+        TelegramClient(t, s),
+        webhooks.TgMessage.model_validate(
+            {"from": {"id": 123}, "chat": {"id": 123, "type": "private"}, "text": command}
+        ),
+    )
+    assert any(explanation in text for text in t.sent_texts())
+    callbacks = [
+        b.get("callback_data", "")
+        for m, p in t.calls
+        if m == "sendMessage"
+        for r in p.get("reply_markup", {}).get("inline_keyboard", [])
+        for b in r
+    ]
+    assert not any(c.startswith(("shared:", "community:", "lottery:")) for c in callbacks)
 
 
 def test_bare_start_exposes_current_test_and_lottery_directly(session, settings, monkeypatch):
