@@ -17,8 +17,9 @@ def shared_setup(session, settings, monkeypatch):
             key="pv_free_growth_policy",
             value={
                 "public_shared_enabled": True,
-                "owned_main_direct_enabled": True,
-                "owned_shared_channel": "@pvnetwork0",
+                "owned_main_direct_enabled": False,
+                "owned_shared_direct_enabled": True,
+                "owned_shared_channel": "@pvnetwork_freeconfig",
                 "weekly_member_gift_enabled": True,
             },
         )
@@ -38,12 +39,12 @@ def shared_setup(session, settings, monkeypatch):
     return s, FlagService(s), TelegramClient(transport, s), transport
 
 
-def test_owned_direct_main_is_scoped_and_does_not_replay(session, settings, monkeypatch):
+def test_owned_direct_free_is_scoped_and_does_not_replay(session, settings, monkeypatch):
     s, flags, tg, transport = shared_setup(session, settings, monkeypatch)
     p = shared_public.publish_shared_slot(session, s, flags, tg, Backend(), day=date(2026, 10, 12), slot=7)
-    assert p.channel_id == "@pvnetwork0"
+    assert p.channel_id == "@pvnetwork_freeconfig"
     sent = [v for method, v in transport.calls if method == "sendMessage"]
-    assert len(sent) == 1 and sent[0]["chat_id"] == "@pvnetwork0"
+    assert len(sent) == 1 and sent[0]["chat_id"] == "@pvnetwork_freeconfig"
     assert "<code>vless://" in sent[0]["text"] and "کیفیت سرویس اصلی" in sent[0]["text"]
     assert "۴۵" not in sent[0]["text"] and "pvnetwork_bot" in sent[0]["text"]
     assert (
@@ -277,3 +278,49 @@ def test_weekly_campaign_cannot_use_generic_unlimited_claim(session, settings, m
             session, s, flags, FakeProvisioningClient(), campaign_code="pv_weekly_gift", user_id=user.id
         )
     assert not session.query(FreeAllocation).count()
+
+
+@pytest.mark.parametrize("destination", ["@pvnetwork0", "pvnetwork0", "-1003855234264"])
+def test_stale_main_policy_cannot_publish_or_allocate(session, settings, monkeypatch, destination):
+    s, flags, tg, transport = shared_setup(session, settings, monkeypatch)
+    row = session.get(AppConfig, "pv_free_growth_policy")
+    row.value = {**row.value, "owned_main_direct_enabled": True, "owned_shared_channel": destination}
+    session.commit()
+    assert (
+        shared_public.publish_shared_slot(session, s, flags, tg, Backend(), day=date(2026, 10, 12), slot=8)
+        is None
+    )
+    assert not session.query(FreeAllocation).count()
+    assert not transport.calls
+
+
+def test_free_username_receipt_is_current_and_expires_with_numeric_settings(session, settings, monkeypatch):
+    from pv_growth.acquisition.entry import latest_shared_context
+
+    s, flags, tg, transport = shared_setup(session, settings, monkeypatch)
+    s = s.model_copy(update={"free_channel_id": "-1004310246787"})
+    backend = Backend()
+    post = shared_public.publish_shared_slot(session, s, flags, tg, backend, day=date(2026, 10, 12), slot=7)
+    assert post.channel_id == "@pvnetwork_freeconfig"
+    assert latest_shared_context(session, s) == "shared:2026-10-12:7"
+    backend.service_state = lambda ref: {"exists": True, "enabled": True, "quota_exhausted": True}
+    assert shared_public.sweep_shared_posts(session, s, tg, backend) == 1
+    edits = [payload for method, payload in transport.calls if method == "editMessageText"]
+    assert len(edits) == 1 and edits[0]["chat_id"] == "@pvnetwork_freeconfig"
+
+
+def test_destination_change_during_probe_aborts_before_send(session, settings, monkeypatch):
+    s, flags, tg, transport = shared_setup(session, settings, monkeypatch)
+
+    def probe(*args):
+        row = session.get(AppConfig, "pv_free_growth_policy")
+        row.value = {**row.value, "owned_shared_channel": "@pvnetwork0"}
+        session.commit()
+        return "vless://uuid@8.8.8.8:443#PV", 20
+
+    monkeypatch.setattr(shared_public, "verified_uri", probe)
+    assert (
+        shared_public.publish_shared_slot(session, s, flags, tg, Backend(), day=date(2026, 10, 12), slot=8)
+        is None
+    )
+    assert not transport.calls

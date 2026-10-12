@@ -44,7 +44,7 @@
   "both_memberships_required": true,
   "active_or_unverified_services_excluded": false,
   "owner_exception": false,
-  "main_channel_posts": true,
+  "main_channel_posts": false,
   "repeat_initial_invites": false,
   "expired_welcome_gift": false,
   "financial_policy_changes": false,
@@ -63,10 +63,8 @@
   "community_membership_purchase_gate": false,
   "free_config_display_name": "@pvnetwork0 | جهت خرید به @pvnetwork_bot مراجعه کنید",
   "owner_policy_corrected_at": "2026-10-12",
-  "main_channel_allowed_kinds": [
-    "pv_shared"
-  ],
-  "owned_shared_channel": "@pvnetwork0",
+  "main_channel_allowed_kinds": [],
+  "owned_shared_channel": "@pvnetwork_freeconfig",
   "owned_shared_delivery": "copyable_public_uri",
   "daily_member_gift_gib": 50,
   "member_gift_min_mib": 50,
@@ -75,5 +73,7 @@
   "member_gift_audience": "all_members_including_buyers",
   "purchase_history_gate_scope": "private_marketing_only",
   "gift_both_memberships_required": true,
-  "active_or_unverified_services_excluded_for_member_gifts": false
+  "active_or_unverified_services_excluded_for_member_gifts": false,
+  "owned_shared_direct_enabled": true,
+  "owned_main_direct_enabled": false
 }

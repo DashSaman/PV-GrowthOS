@@ -9,7 +9,7 @@ import httpx
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
-from pv_growth.acquisition.entry import latest_shared_context
+from pv_growth.acquisition.entry import FREE_CHANNELS, latest_shared_context
 from pv_growth.database.models import AppConfig, FreeAllocation, MessageLog, PublishedPost, User
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import get_or_create_user
@@ -119,8 +119,6 @@ class PurchaseBot:
 
 def two_owned_posts(session, settings, adapter):
     """Current panel truth for two independently receipted, verified publications."""
-    from pv_growth.free_config.shared_public import growth_policy
-
     if latest_shared_context(session, settings) is None:
         return False
     try:
@@ -136,16 +134,7 @@ def two_owned_posts(session, settings, adapter):
                 FreeAllocation.traffic_bytes == GIB,
                 PublishedPost.kind == "pv_shared",
                 PublishedPost.message_id > 0,
-                PublishedPost.channel_id.in_(
-                    [
-                        str(settings.free_channel_id),
-                        *(
-                            ["@pvnetwork0", "pvnetwork0", "-1003855234264"]
-                            if growth_policy(session).get("owned_main_direct_enabled") is True
-                            else []
-                        ),
-                    ]
-                ),
+                PublishedPost.channel_id.in_(FREE_CHANNELS),
             )
             .order_by(FreeAllocation.created_at.desc())
             .limit(10)
@@ -222,7 +211,7 @@ def invitation(day, *, weekly=False):
     if weekly:
         body = (
             "🎁 کانفیگ‌های آزموده‌شدهٔ PV Network را امتحان کن\n\n"
-            "💎 تست‌های ۱ گیگ مشترکِ سرویس اصلی VIP، مستقیم در @pvnetwork0.\n"
+            "💎 تست‌های ۱ گیگ مشترکِ سرویس اصلی VIP، مستقیم در @pvnetwork_freeconfig.\n"
             "🌐 کانفیگ‌های عمومی وب، قابل کپی در @pvnetwork_freeconfig.\n"
             "🎁 هدیهٔ شخصی ۵۰ تا ۱۰۰ مگی برای اعضای هر دو کانال، هر هفت روز یک‌بار؛ "
             "تا پایان بودجهٔ روزانه، با اعتبار حداکثر ۲۴ ساعت یا پایان حجم.\n"

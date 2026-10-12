@@ -265,18 +265,18 @@ def _membership_ready(client, settings, user, context: str) -> bool:
 def _free_dialogue(client, session, settings, user, context: str) -> None:
     from pv_growth.core.flags import FlagService
     from pv_growth.free_config.lottery import _enabled
-    from pv_growth.free_config.shared_public import direct_main
+    from pv_growth.free_config.shared_public import direct_shared
     from pv_growth.telegram.client import InlineKeyboard
 
     if context in {"weekly:pv_weekly_gift", "lottery:pv_daily_lottery"} and _weekly_mode(session, settings):
         _weekly_dialogue(client, session, settings, user)
         return
-    if context.startswith("shared:") and direct_main(session):
+    if context.startswith("shared:") and direct_shared(session):
         _safe_send(
             client,
             user.telegram_user_id,
-            "💎 تست‌های ۱ گیگ مشترک از سرویس اصلی VIP، مستقیم و قابل کپی در کانال اصلی هستند.",
-            InlineKeyboard([[{"text": "📋 تست‌های سرویس اصلی", "url": "https://t.me/pvnetwork0"}]]),
+            "💎 تست‌های ۱ گیگ مشترک از سرویس اصلی VIP، مستقیم و قابل کپی در کانال رایگان هستند.",
+            InlineKeyboard([[{"text": "📋 تست‌های سرویس اصلی", "url": "https://t.me/pvnetwork_freeconfig"}]]),
         )
         return
     if context.startswith("community:"):
@@ -483,7 +483,7 @@ def _handle_message(client, message: TgMessage) -> None:
                 _bot_menu(session, settings),
             )
         elif command in {"/free", "/lottery", "/web", "/gift"}:
-            from pv_growth.free_config.shared_public import direct_main
+            from pv_growth.free_config.shared_public import direct_shared
             from pv_growth.free_config.web_publication import direct_enabled
 
             if command in {"/gift", "/lottery"} and _weekly_mode(session, settings):
@@ -492,7 +492,7 @@ def _handle_message(client, message: TgMessage) -> None:
             if command == "/gift":
                 _safe_send(client, chat_id, "هدیهٔ هفتگی فعلاً فعال نیست.", _bot_menu(session, settings))
                 return
-            if command == "/free" and direct_main(session):
+            if command == "/free" and direct_shared(session):
                 _free_dialogue(client, session, settings, user, "shared:public")
                 return
             if command == "/web" and direct_enabled(session):
@@ -638,9 +638,9 @@ def _handle_callback(client, callback: TgCallback) -> None:
                 _free_dialogue(client, session, settings, user, data)
                 _safe_answer(client, callback.id, "کانفیگ وب مستقیم در کانال قابل کپی است.")
                 return
-            from pv_growth.free_config.shared_public import direct_main
+            from pv_growth.free_config.shared_public import direct_shared
 
-            if data.startswith("shared:") and direct_main(session):
+            if data.startswith("shared:") and direct_shared(session):
                 _free_dialogue(client, session, settings, user, data)
                 return
             if not _free_audience_verified(session, settings, user.id):

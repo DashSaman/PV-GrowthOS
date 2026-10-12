@@ -22,6 +22,7 @@ def ready_direct(session, settings, monkeypatch):
     fixed = datetime(2026, 10, 12, 4)
     monkeypatch.setattr(pipeline, "utcnow", lambda: fixed)
     monkeypatch.setattr("pv_growth.free_config.shared_public.utcnow", lambda: fixed)
+    monkeypatch.setattr("pv_growth.free_config.community.utcnow", lambda: fixed)
     return s, row, transport, tg
 
 
