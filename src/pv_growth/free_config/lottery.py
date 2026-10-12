@@ -329,6 +329,18 @@ def deliver_winner(
     ):
         return False
 
+    from pv_growth.free_config.weekly_gift import CAMPAIGN_CODE as WEEKLY_CODE
+    from pv_growth.free_config.weekly_gift import campaign_check, member_eligible
+
+    weekly = campaign.code == WEEKLY_CODE
+    if weekly and (
+        allocation.payload.get("grant_mode") != "weekly_member_gift"
+        or not 50 * MIB <= allocation.traffic_bytes <= 100 * MIB
+    ):
+        return False
+    campaign_guard = campaign_check if weekly else _campaign
+    eligible_guard = member_eligible if weekly else _eligible
+
     def current_day() -> bool:
         if allocation.day == _utc(utcnow()).astimezone(TEHRAN).date():
             return True
@@ -340,10 +352,10 @@ def deliver_winner(
     if not current_day():
         return False
     try:
-        _campaign(session, flags, campaign.code, utcnow())
+        campaign_guard(session, flags, campaign.code, utcnow())
     except ValidationError:
         return False
-    if not _eligible(session, settings, claim.user_id):
+    if not eligible_guard(session, settings, claim.user_id):
         allocation.status = "audience_blocked"
         claim.status = "audience_blocked"
         session.commit()
@@ -351,7 +363,7 @@ def deliver_winner(
     try:
         binding = require_tunnel_plan(session, settings)
         check_backend(session, adapter)
-        if not _eligible(session, settings, claim.user_id):
+        if not eligible_guard(session, settings, claim.user_id):
             allocation.status = "audience_blocked"
             claim.status = "audience_blocked"
             session.commit()
@@ -392,14 +404,14 @@ def deliver_winner(
             metadata={"traffic_bytes": allocation.traffic_bytes, "validity_hours": 24, "panel_proven": True},
         )
         # Lock stays held through health and receipt, preventing concurrent private sends.
-        if not _eligible(session, settings, claim.user_id):
+        if not eligible_guard(session, settings, claim.user_id):
             allocation.status = "audience_blocked"
             claim.status = "audience_blocked"
             session.commit()
             return False
         uri, latency = verified_uri(service, settings)
-        _campaign(session, flags, campaign.code, utcnow())
-        if not _eligible(session, settings, claim.user_id):
+        campaign_guard(session, flags, campaign.code, utcnow())
+        if not eligible_guard(session, settings, claim.user_id):
             allocation.status = "audience_blocked"
             claim.status = "audience_blocked"
             session.commit()
@@ -422,8 +434,12 @@ def deliver_winner(
     allocation.status = "message_reserved"
     session.commit()  # private receipt is durable BEFORE the Telegram call; unknown results never retransmit
     text = (
-        "🎲 <b>برندهٔ قرعه‌کشی تست اختصاصی PV Network شدید!</b>\n"
-        f"📦 حجم: {allocation.traffic_bytes // MIB} مگابایت · اعتبار حداکثر ۲۴ ساعت یا پایان حجم\n"
+        (
+            "🎁 <b>هدیهٔ هفتگی سرویس اصلی PV Network</b>\n"
+            if weekly
+            else "🎲 <b>برندهٔ قرعه‌کشی تست اختصاصی PV Network شدید!</b>\n"
+        )
+        + f"📦 حجم: {allocation.traffic_bytes // MIB} مگابایت · اعتبار حداکثر ۲۴ ساعت یا پایان حجم\n"
         "✅ اتصال واقعی HTTPS پیش از ارسال از سرور ما بررسی شد.\n\n"
         f"<code>{html.escape(uri)}</code>\n\n"
         f"{config_footer(owned=True)}"
@@ -446,7 +462,11 @@ def deliver_winner(
         user_id=claim.user_id,
         campaign_id=claim.campaign_id,
         idempotency_key=f"delivered:{claim.claim_key}",
-        metadata={"delivery_kind": "lottery", "owned": True, "health_method": "https_via_proxy"},
+        metadata={
+            "delivery_kind": "weekly_gift" if weekly else "lottery",
+            "owned": True,
+            "health_method": "https_via_proxy",
+        },
     )
     session.commit()
     return True

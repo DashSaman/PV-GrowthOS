@@ -34,17 +34,17 @@
     "21:30",
     "23:30"
   ],
-  "lottery_time": "23:00",
+  "lottery_time": null,
   "daily_owned_shared_gib": 10,
-  "daily_lottery_gib": 50,
+  "daily_lottery_gib": 0,
   "lottery_min_mib": 50,
   "lottery_max_mib": 1024,
   "validity_hours_max": 24,
   "dormant_days": 45,
   "both_memberships_required": true,
-  "active_or_unverified_services_excluded": true,
+  "active_or_unverified_services_excluded": false,
   "owner_exception": false,
-  "main_channel_posts": false,
+  "main_channel_posts": true,
   "repeat_initial_invites": false,
   "expired_welcome_gift": false,
   "financial_policy_changes": false,
@@ -61,5 +61,19 @@
   "daily_community_slots": 10,
   "community_delivery": "copyable_public_uri",
   "community_membership_purchase_gate": false,
-  "free_config_display_name": "@pvnetwork0 | جهت خرید به @pvnetwork_bot مراجعه کنید"
+  "free_config_display_name": "@pvnetwork0 | جهت خرید به @pvnetwork_bot مراجعه کنید",
+  "owner_policy_corrected_at": "2026-10-12",
+  "main_channel_allowed_kinds": [
+    "pv_shared"
+  ],
+  "owned_shared_channel": "@pvnetwork0",
+  "owned_shared_delivery": "copyable_public_uri",
+  "daily_member_gift_gib": 50,
+  "member_gift_min_mib": 50,
+  "member_gift_max_mib": 100,
+  "member_gift_interval_hours": 168,
+  "member_gift_audience": "all_members_including_buyers",
+  "purchase_history_gate_scope": "private_marketing_only",
+  "gift_both_memberships_required": true,
+  "active_or_unverified_services_excluded_for_member_gifts": false
 }

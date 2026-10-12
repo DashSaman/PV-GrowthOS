@@ -147,15 +147,70 @@ def _private_result(client, user, callback_id: str, text: str, keyboard=None):
 
 
 def _denied_result(client, user, callback_id: str, *, session, settings):
-    from pv_growth.telegram.navigation import menu_keyboard
 
     _private_result(
         client,
         user,
         callback_id,
         _denial_text(session, settings, user.id),
-        menu_keyboard(),
+        _bot_menu(session, settings),
     )
+
+
+def _weekly_mode(session, settings):
+    from pv_growth.core.flags import FlagService
+    from pv_growth.free_config.weekly_gift import enabled
+
+    return enabled(session, FlagService(settings))
+
+
+def _bot_menu(session, settings):
+    from pv_growth.telegram.navigation import menu_keyboard
+
+    return menu_keyboard(weekly=_weekly_mode(session, settings))
+
+
+def _weekly_dialogue(client, session, settings, user):
+    from pv_growth.telegram.client import InlineKeyboard
+
+    if not _weekly_mode(session, settings):
+        _safe_send(client, user.telegram_user_id, "هدیهٔ هفتگی فعلاً فعال نیست.", _bot_menu(session, settings))
+        return
+    if not _membership_ready(client, settings, user, "weekly:pv_weekly_gift"):
+        return
+    _safe_send(
+        client,
+        user.telegram_user_id,
+        "🎁 هدیهٔ سرویس اصلی PV Network: ۵۰ تا ۱۰۰ مگابایت\n"
+        "برای همهٔ اعضای هر دو کانال، حتی خریداران و دارندگان سرویس فعال.\n"
+        "هر هفت روز یک‌بار؛ اعتبار حداکثر ۲۴ ساعت یا پایان حجم.\n"
+        "تا پایان بودجهٔ روزانهٔ ۵۰ گیگ؛ با تأیید دریافت، حساب پس از آزمون اتصال آماده می‌شود.",
+        InlineKeyboard(
+            [
+                [{"text": "🎁 دریافت هدیهٔ این هفته", "callback_data": "weekly:pv_weekly_gift"}],
+                [{"text": "🛒 خرید سرویس اصلی", "url": "https://t.me/pvnetwork_bot"}],
+            ]
+        ),
+    )
+
+
+def _weekly_request(client, session, settings, user, callback_id):
+    from pv_growth.core.flags import FlagService
+    from pv_growth.free_config.weekly_gift import reserve_weekly
+
+    if not _membership_ready(client, settings, user, "weekly:pv_weekly_gift"):
+        return
+    try:
+        row, new = reserve_weekly(session, settings, FlagService(settings), user_id=user.id)
+        body = (
+            "✅ درخواست هدیه ثبت شد؛ پس از آزمون اتصال، کانفیگ در همین گفت‌وگو تحویل می‌شود."
+            if new
+            else "ℹ️ در هفت روز گذشته هدیه یا جایزه برایت ثبت شده است؛ دریافت اضافه ممکن نیست.\n"
+            "برای حجم بیشتر یا ادامهٔ استفاده می‌توانی از @pvnetwork_bot خرید کنی."
+        )
+    except ValidationError as exc:
+        body = str(exc)
+    _private_result(client, user, callback_id, body, _bot_menu(session, settings))
 
 
 def _free_context(start_param: str | None) -> str | None:
@@ -164,7 +219,9 @@ def _free_context(start_param: str | None) -> str | None:
     if not start_param or not start_param.startswith("freecfg_"):
         return None
     param = start_param[len("freecfg_") :]
-    if param == "pv_daily_lottery":
+    if param == "weekly_member":
+        context = "weekly:pv_weekly_gift"
+    elif param == "pv_daily_lottery":
         context = "lottery:pv_daily_lottery"
     elif param == "welcome_100":
         context = "gift:pv_welcome_100"
@@ -208,8 +265,20 @@ def _membership_ready(client, settings, user, context: str) -> bool:
 def _free_dialogue(client, session, settings, user, context: str) -> None:
     from pv_growth.core.flags import FlagService
     from pv_growth.free_config.lottery import _enabled
+    from pv_growth.free_config.shared_public import direct_main
     from pv_growth.telegram.client import InlineKeyboard
 
+    if context in {"weekly:pv_weekly_gift", "lottery:pv_daily_lottery"} and _weekly_mode(session, settings):
+        _weekly_dialogue(client, session, settings, user)
+        return
+    if context.startswith("shared:") and direct_main(session):
+        _safe_send(
+            client,
+            user.telegram_user_id,
+            "💎 تست‌های ۱ گیگ مشترک از سرویس اصلی VIP، مستقیم و قابل کپی در کانال اصلی هستند.",
+            InlineKeyboard([[{"text": "📋 تست‌های سرویس اصلی", "url": "https://t.me/pvnetwork0"}]]),
+        )
+        return
     if context.startswith("community:"):
         from pv_growth.free_config.community import current_config, enabled
 
@@ -231,20 +300,18 @@ def _free_dialogue(client, session, settings, user, context: str) -> None:
                 client,
                 user.telegram_user_id,
                 "🌐 کانفیگ‌های عمومی وب مستقیم و قابل کپی در کانال رایگان هستند.\n"
-                "شرط عضویت و سابقهٔ خرید مربوط به تست سرور اصلی و قرعه‌کشی است.",
+                "حجم، مدت و IP کانفیگ وب تحت کنترل PV نیست.",
                 InlineKeyboard(
                     [[{"text": "📋 باز کردن کانفیگ‌های وب", "url": "https://t.me/pvnetwork_freeconfig"}]]
                 ),
             )
             return
     if not _free_audience_verified(session, settings, user.id):
-        from pv_growth.telegram.navigation import menu_keyboard
-
         _safe_send(
             client,
             user.telegram_user_id,
             _denial_text(session, settings, user.id),
-            menu_keyboard(),
+            _bot_menu(session, settings),
         )
         return
     if not _membership_ready(client, settings, user, context):
@@ -297,6 +364,12 @@ def _free_dialogue(client, session, settings, user, context: str) -> None:
     )
 
 
+def _current_notice(session, settings, decision):
+    if _weekly_mode(session, settings):
+        return ""
+    return _audience_notice(decision)
+
+
 def _audience_notice(decision) -> str:
     if decision.eligible:
         return ""
@@ -330,7 +403,7 @@ def _denial_text(session, settings, user_id):
 def _handle_message(client, message: TgMessage) -> None:
     settings = get_settings()
     text = (message.text or "").strip()
-    from pv_growth.telegram.navigation import help_text, menu_command, menu_keyboard
+    from pv_growth.telegram.navigation import help_text, menu_command
 
     command = menu_command(text)
     tg_user = message.from_
@@ -401,13 +474,27 @@ def _handle_message(client, message: TgMessage) -> None:
                 client,
                 message.chat.get("id"),
                 "🏠 منوی اصلی PV Network\n\n"
-                + _audience_notice(decision)
-                + "از دکمه‌های پایین، تست اصلی، کانفیگ وب، قرعه یا خرید را انتخاب کن.",
-                menu_keyboard(),
+                + _current_notice(session, settings, decision)
+                + (
+                    "از دکمه‌های پایین، تست اصلی، کانفیگ وب، هدیهٔ هفتگی یا خرید را انتخاب کن."
+                    if _weekly_mode(session, settings)
+                    else "از دکمه‌های پایین، تست اصلی، کانفیگ وب، قرعه یا خرید را انتخاب کن."
+                ),
+                _bot_menu(session, settings),
             )
-        elif command in {"/free", "/lottery", "/web"}:
+        elif command in {"/free", "/lottery", "/web", "/gift"}:
+            from pv_growth.free_config.shared_public import direct_main
             from pv_growth.free_config.web_publication import direct_enabled
 
+            if command in {"/gift", "/lottery"} and _weekly_mode(session, settings):
+                _weekly_dialogue(client, session, settings, user)
+                return
+            if command == "/gift":
+                _safe_send(client, chat_id, "هدیهٔ هفتگی فعلاً فعال نیست.", _bot_menu(session, settings))
+                return
+            if command == "/free" and direct_main(session):
+                _free_dialogue(client, session, settings, user, "shared:public")
+                return
             if command == "/web" and direct_enabled(session):
                 _safe_send(
                     client,
@@ -435,7 +522,7 @@ def _handle_message(client, message: TgMessage) -> None:
                         client,
                         chat_id,
                         "تست قابل دریافت فعلاً موجود نیست؛ پیشنهاد تازه را در کانال دنبال کنید.",
-                        menu_keyboard(),
+                        _bot_menu(session, settings),
                     )
         elif command == "/buy":
             _safe_send(
@@ -456,10 +543,14 @@ def _handle_message(client, message: TgMessage) -> None:
             _safe_send(
                 client,
                 message.chat.get("id"),
-                (help_text() if command == "/help" else "🏠 منوی اصلی؛ یکی از دکمه‌های پایین را انتخاب کن.")
+                (
+                    help_text(weekly=_weekly_mode(session, settings))
+                    if command == "/help"
+                    else "🏠 منوی اصلی؛ یکی از دکمه‌های پایین را انتخاب کن."
+                )
                 + "\n\n"
-                + _audience_notice(decision),
-                menu_keyboard(),
+                + _current_notice(session, settings, decision),
+                _bot_menu(session, settings),
             )
         elif text.startswith("/claim"):
             parts = text.split()
@@ -482,10 +573,10 @@ def _handle_message(client, message: TgMessage) -> None:
                 chat_id,
                 (
                     "برای دریافت تست، کانفیگ‌های وب یا قرعه‌کشی، یکی از دکمه‌های زیر را بزنید."
-                    if allowed
-                    else _audience_notice(decision)
+                    if allowed or _weekly_mode(session, settings)
+                    else _current_notice(session, settings, decision)
                 ),
-                menu_keyboard(),
+                _bot_menu(session, settings),
             )
 
 
@@ -519,6 +610,9 @@ def _handle_callback(client, callback: TgCallback) -> None:
                 _free_dialogue(client, session, settings, user, context)
             _safe_answer(client, callback.id, "عضویت و شرایط دریافت دوباره بررسی شد.")
             return
+        if data in {"weekly:pv_weekly_gift", "lottery:pv_daily_lottery"} and _weekly_mode(session, settings):
+            _weekly_request(client, session, settings, user, callback.id)
+            return
         if data == "gift:pv_welcome_100":
             from pv_growth.free_config.welcome_gift import request_gift
 
@@ -543,6 +637,11 @@ def _handle_callback(client, callback: TgCallback) -> None:
             if data.startswith("community:") and direct_enabled(session):
                 _free_dialogue(client, session, settings, user, data)
                 _safe_answer(client, callback.id, "کانفیگ وب مستقیم در کانال قابل کپی است.")
+                return
+            from pv_growth.free_config.shared_public import direct_main
+
+            if data.startswith("shared:") and direct_main(session):
+                _free_dialogue(client, session, settings, user, data)
                 return
             if not _free_audience_verified(session, settings, user.id):
                 _denied_result(client, user, callback.id, session=session, settings=settings)
