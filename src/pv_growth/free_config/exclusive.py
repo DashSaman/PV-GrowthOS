@@ -251,7 +251,12 @@ def claim_exclusive(
         raise ValidationError("unknown exclusive campaign")
     if settings.env == "production":
         raise ValidationError("دریافت تست شخصی فقط از مسیر قرعه‌کشی روزانه انجام می‌شود.")
-    if (campaign.config or {}).get("lottery") or campaign.code == "pv_daily_lottery":
+    if (
+        (campaign.config or {}).get("lottery")
+        or campaign.code == "pv_daily_lottery"
+        or (campaign.config or {}).get("weekly_member_gift")
+        or campaign.code == "pv_weekly_gift"
+    ):
         raise ValidationError("lottery campaigns require an opt-in draw")
 
     from pv_growth.free_config.audience import require_free_audience

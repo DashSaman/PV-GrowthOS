@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from datetime import UTC, date, datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -37,14 +38,27 @@ def local_day(now: datetime | None = None) -> date:
     return now.replace(tzinfo=UTC).astimezone(TEHRAN).date()
 
 
+def direct_main(session: Session) -> bool:
+    policy = growth_policy(session)
+    return (
+        policy.get("owned_main_direct_enabled") is True
+        and str(policy.get("owned_shared_channel", "")).strip().lower() in FORBIDDEN_MAIN
+    )
+
+
 def publish_shared_slot(
     session: Session, settings: Settings, flags: FlagService, telegram, adapter, *, day: date, slot: int
 ) -> PublishedPost | None:
+    policy = growth_policy(session)
+    direct = direct_main(session)
+    destination = policy["owned_shared_channel"] if direct else settings.free_channel_id
+    if policy.get("owned_main_direct_enabled") is True and not direct:
+        return None
     if (
         not 1 <= slot <= 10
         or day != local_day()
-        or str(settings.free_channel_id).lower() in FORBIDDEN_MAIN
-        or not settings.free_channel_id
+        or (not direct and str(destination).lower() in FORBIDDEN_MAIN)
+        or not destination
     ):
         return None
     try:
@@ -132,7 +146,9 @@ def publish_shared_slot(
         "latency_ms": latency,
         "verified_uri": uri,
     }
-    post = PublishedPost(dedupe_key=key, channel_id=str(settings.free_channel_id), kind="pv_shared")
+    if day != local_day() or direct != direct_main(session):
+        return None
+    post = PublishedPost(dedupe_key=key, channel_id=str(destination), kind="pv_shared")
     session.add(post)
     allocation.status = "message_reserved"
     session.commit()  # no re-send after an uncertain Telegram outcome
@@ -165,8 +181,34 @@ def publish_shared_slot(
     from pv_growth.acquisition.entry import share_button
 
     keyboard.buttons.append([share_button()])
+    if direct:
+        body = (
+            "💎 <b>تست کیفیت سرویس اصلی PV Network | VIP</b>\n\n"
+            "📦 <b>۱ گیگ مشترک</b> از تونل سرورهای اصلی PV؛ حجم بین کاربران مشترک است.\n"
+            "⏳ حداکثر <b>۲۴ ساعت</b> یا پایان حجم.\n"
+            "✅ اتصال واقعی HTTPS پیش از انتشار از سرور ما بررسی شد.\n"
+            "📋 روی کد زیر بزن و کپی کن:\n\n"
+            f"<code>{html.escape(uri)}</code>\n\n"
+            "🛒 برای حجم و مدت مستقل، سرویس شخصی اصلی را از @pvnetwork_bot بخر.\n"
+            f"{config_footer(owned=True)}"
+        )
+        keyboard = InlineKeyboard(
+            [
+                [{"text": "🛒 خرید سرویس شخصی VIP", "url": "https://t.me/pvnetwork_bot"}],
+                [
+                    {
+                        "text": "🎁 هدیهٔ هفتگی ۵۰ تا ۱۰۰ مگ",
+                        "url": "https://t.me/pvgrowthos_bot?start=freecfg_weekly_member",
+                    }
+                ],
+            ]
+        )
     try:
-        result = telegram.send_channel_post(settings.free_channel_id, body, keyboard)
+        result = (
+            telegram.send_owned_shared_post(destination, body, keyboard, owner_authorized=True)
+            if direct
+            else telegram.send_channel_post(destination, body, keyboard)
+        )
         if not result.get("message_id"):
             raise TelegramDeliveryUnknownError("publication receipt unavailable")
     except Exception:
@@ -235,8 +277,10 @@ def sweep_shared_posts(session: Session, settings: Settings, telegram, adapter) 
         if (
             post is None
             or not post.message_id
-            or post.channel_id != str(settings.free_channel_id)
-            or post.channel_id.lower() in FORBIDDEN_MAIN
+            or (
+                post.channel_id != str(settings.free_channel_id)
+                and not (direct_main(session) and post.channel_id.lower() in FORBIDDEN_MAIN)
+            )
         ):
             continue
         allocation.status = "expiry_notice_reserved"
@@ -250,7 +294,7 @@ def sweep_shared_posts(session: Session, settings: Settings, telegram, adapter) 
             first_line
             + "\n\n"
             + config_footer(owned=True)
-            + "\n🤖 @pvnetwork_bot\n🎁 تست‌های تازه: @pvnetwork_freeconfig"
+            + "\n🤖 @pvnetwork_bot\n🎁 کانفیگ‌های وب: @pvnetwork_freeconfig"
         )
         try:
             telegram.edit_message_text(post.channel_id, post.message_id, body)

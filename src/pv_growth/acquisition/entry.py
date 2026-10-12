@@ -90,7 +90,16 @@ def latest_shared_context(session, settings) -> str | None:
             FreeAllocation.expires_at > now,
             PublishedPost.kind == "pv_shared",
             PublishedPost.message_id > 0,
-            PublishedPost.channel_id == str(settings.free_channel_id),
+            PublishedPost.channel_id.in_(
+                [
+                    str(settings.free_channel_id),
+                    *(
+                        ["@pvnetwork0", "pvnetwork0", "-1003855234264"]
+                        if growth_policy(session).get("owned_main_direct_enabled") is True
+                        else []
+                    ),
+                ]
+            ),
         )
         .order_by(FreeAllocation.created_at.desc())
         .limit(30)

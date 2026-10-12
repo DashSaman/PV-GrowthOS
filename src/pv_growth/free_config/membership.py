@@ -74,7 +74,7 @@ def valid_context(context: str) -> bool:
         and len(("memberships:" + context).encode()) <= 64
         and re.fullmatch(
             r"(?:shared:\d{4}-\d{2}-\d{2}:(?:[1-9]|10)|community:[1-9]\d*|"
-            r"lottery:pv_daily_lottery|gift:pv_welcome_100|claim:[A-Za-z0-9_-]{1,40})",
+            r"lottery:pv_daily_lottery|weekly:pv_weekly_gift|gift:pv_welcome_100|claim:[A-Za-z0-9_-]{1,40})",
             context,
         )
     )
@@ -88,6 +88,12 @@ def join_prompt(context: str, *, reason: str = "") -> tuple[str, InlineKeyboard]
         "فقط افراد بدون خرید در ۴۵ روز اخیر و بدون سرویس فعال واجد شرایط‌اند.\n"
         "پس از عضویت، دکمهٔ بررسی عضویت را بزنید."
     )
+    if context == "weekly:pv_weekly_gift":
+        text = (
+            "🎁 برای دریافت هدیهٔ ۵۰ تا ۱۰۰ مگی، عضو هر دو کانال شوید.\n"
+            "برای همهٔ اعضا، حتی خریداران؛ هر هفت روز یک‌بار و تا پایان سهمیهٔ روزانه.\n"
+            "پس از عضویت، دکمهٔ بررسی عضویت را بزنید."
+        )
     if reason == "verification_unavailable":
         text += "\n⚠️ امکان تأیید عضویت فعلاً وجود ندارد؛ دسترسی ربات باید بررسی شود."
     return text, InlineKeyboard(

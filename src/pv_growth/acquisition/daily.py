@@ -119,6 +119,8 @@ class PurchaseBot:
 
 def two_owned_posts(session, settings, adapter):
     """Current panel truth for two independently receipted, verified publications."""
+    from pv_growth.free_config.shared_public import growth_policy
+
     if latest_shared_context(session, settings) is None:
         return False
     try:
@@ -134,7 +136,16 @@ def two_owned_posts(session, settings, adapter):
                 FreeAllocation.traffic_bytes == GIB,
                 PublishedPost.kind == "pv_shared",
                 PublishedPost.message_id > 0,
-                PublishedPost.channel_id == str(settings.free_channel_id),
+                PublishedPost.channel_id.in_(
+                    [
+                        str(settings.free_channel_id),
+                        *(
+                            ["@pvnetwork0", "pvnetwork0", "-1003855234264"]
+                            if growth_policy(session).get("owned_main_direct_enabled") is True
+                            else []
+                        ),
+                    ]
+                ),
             )
             .order_by(FreeAllocation.created_at.desc())
             .limit(10)
@@ -180,7 +191,7 @@ def two_owned_posts(session, settings, adapter):
     return False
 
 
-def invitation(day):
+def invitation(day, *, weekly=False):
     body = (
         "🎁 تست سرویس اصلی PV Network را امتحان کن\n\n"
         "📢 در کانال رایگان، تست مشترک تازه و قرعه‌کشی روزانهٔ تست شخصی داریم.\n"
@@ -208,6 +219,19 @@ def invitation(day):
             [{"text": "🛒 خرید سرویس شخصی", "url": "https://t.me/pvnetwork_bot"}],
         ]
     }
+    if weekly:
+        body = (
+            "🎁 کانفیگ‌های آزموده‌شدهٔ PV Network را امتحان کن\n\n"
+            "💎 تست‌های ۱ گیگ مشترکِ سرویس اصلی VIP، مستقیم در @pvnetwork0.\n"
+            "🌐 کانفیگ‌های عمومی وب، قابل کپی در @pvnetwork_freeconfig.\n"
+            "🎁 هدیهٔ شخصی ۵۰ تا ۱۰۰ مگی برای اعضای هر دو کانال، هر هفت روز یک‌بار؛ "
+            "تا پایان بودجهٔ روزانه، با اعتبار حداکثر ۲۴ ساعت یا پایان حجم.\n"
+            "✅ اتصال HTTPS پیش از تحویل از سرور ما بررسی می‌شود؛ نتیجه روی اینترنت تو ممکن است متفاوت باشد.\n"
+            "🛒 برای سرویس شخصی با حجم بیشتر: @pvnetwork_bot"
+        )
+        markup["inline_keyboard"][2] = [
+            {"text": "🎁 دریافت هدیهٔ هفتگی", "url": "https://t.me/pvgrowthos_bot?start=freecfg_weekly_member"}
+        ]
     return body, markup
 
 
@@ -243,7 +267,10 @@ def run_daily(session, settings, day, *, reader=None, bot=None, adapter=None):
             return {"status": "already_attempted"}
         session.commit()  # a lost process cannot resume the daily cohort
         summary = {"status": "finished", "attempted": 0, "sent": 0, "blocked": 0, "unknown": 0}
-        body, markup = invitation(day)
+        from pv_growth.core.flags import FlagService
+        from pv_growth.free_config.weekly_gift import enabled as weekly_enabled
+
+        body, markup = invitation(day, weekly=weekly_enabled(session, FlagService(settings)))
         started = time.monotonic()
         proof_at = started
         for recipient in reader.list_private_invite_contacts(limit=5000):
