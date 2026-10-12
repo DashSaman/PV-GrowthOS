@@ -32,7 +32,33 @@ class InlineKeyboard:
     buttons: list[list[dict]]  # [[{text, url|callback_data}, ...], ...]
 
     def to_api(self) -> list[list[dict]]:
-        return self.buttons
+        return [
+            [
+                {
+                    "style": "success" if b.get("url") == "https://t.me/pvnetwork_bot" else "primary",
+                    **b,
+                }
+                for b in row
+            ]
+            for row in self.buttons
+        ]
+
+    def to_markup(self) -> dict:
+        return {"inline_keyboard": self.to_api()}
+
+
+@dataclass(frozen=True)
+class ReplyKeyboard:
+    buttons: list[list[dict]]
+
+    def to_markup(self) -> dict:
+        return {
+            "keyboard": self.buttons,
+            "is_persistent": True,
+            "resize_keyboard": True,
+            "one_time_keyboard": False,
+            "input_field_placeholder": "یک گزینه را انتخاب کن",
+        }
 
 
 class TelegramTransport(Protocol):
@@ -96,11 +122,13 @@ class TelegramClient:
     def get_chat_member(self, chat_id: int | str, user_id: int) -> dict:
         return self._t.call("getChatMember", {"chat_id": chat_id, "user_id": user_id})
 
-    def send_message(self, chat_id: int | str, text: str, keyboard: InlineKeyboard | None = None) -> dict:
+    def send_message(
+        self, chat_id: int | str, text: str, keyboard: InlineKeyboard | ReplyKeyboard | None = None
+    ) -> dict:
         refuse_main_channel(chat_id)
         payload: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
         if keyboard:
-            payload["reply_markup"] = {"inline_keyboard": keyboard.to_api()}
+            payload["reply_markup"] = keyboard.to_markup()
         return self._t.call("sendMessage", payload)
 
     def edit_message_text(self, chat_id: int | str, message_id: int, text: str) -> dict:

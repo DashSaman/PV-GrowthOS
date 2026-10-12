@@ -116,7 +116,7 @@ def test_acquisition_does_not_offer_free_to_ineligible_user(session, settings, m
         b
         for method, p in t.calls
         if method == "sendMessage"
-        for row in p["reply_markup"]["inline_keyboard"]
+        for row in p["reply_markup"].get("inline_keyboard", p["reply_markup"].get("keyboard", []))
         for b in row
     ]
     assert not any("callback_data" in b or "freeconfig" in b.get("url", "") for b in buttons)

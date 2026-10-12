@@ -255,9 +255,12 @@ def test_start_offer_checks_audience_and_keeps_complete_campaign_code(
     )
     webhooks._handle_message(telegram, message)
     payload = next(payload for method, payload in telegram._t.calls if method == "sendMessage")
-    buttons = [button for row in payload["reply_markup"]["inline_keyboard"] for button in row]
+    markup = payload["reply_markup"]
+    buttons = [button for row in markup.get("inline_keyboard", markup.get("keyboard", [])) for button in row]
     if eligible:
         assert buttons[0]["callback_data"] == "claim:complete_campaign"
     else:
-        assert buttons == [{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}]
+        assert markup["is_persistent"] is True
+        assert any(b["text"] == "🛒 خرید سرویس اصلی" for b in buttons)
+        assert not any(b.get("callback_data", "").startswith("claim:") for b in buttons)
         assert "تست رایگان" not in payload["text"]

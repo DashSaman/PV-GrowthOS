@@ -243,8 +243,9 @@ def test_plain_start_and_help_offer_purchase_cta(monkeypatch, settings):
     messages = [payload for method, payload in fake.calls if method == "sendMessage"]
     assert len(messages) == 2
     for payload in messages:
-        buttons = payload["reply_markup"]["inline_keyboard"]
-        assert any(button.get("url") == "https://t.me/pvnetwork_bot" for row in buttons for button in row)
+        buttons = payload["reply_markup"]["keyboard"]
+        assert any(button["text"] == "🛒 خرید سرویس اصلی" for row in buttons for button in row)
+        assert payload["reply_markup"]["is_persistent"] is True
 
 
 def test_telegram_webhook_unset_secret_fails_closed_without_processing(settings, monkeypatch):
