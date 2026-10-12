@@ -11,6 +11,11 @@ every runtime campaign is enabled or that member/sales growth is proven.
 Current active work is the [October 12 bot journey repair](docs/bot-repair-20261012.md).
 Use `STATUS.md` and live receipts for deployment and business readiness.
 
+The owner authorized unattended follow-up on October 12. The current execution
+contract and completion queue are in [the automation plan](docs/automation-plan-20261012-fa.md).
+Its cadence is applied to the existing chat automation, not by importing the
+policy JSON or replaying server publication jobs.
+
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Foundation & Safety | ✅ COMPLETE |
