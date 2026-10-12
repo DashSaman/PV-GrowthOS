@@ -24,6 +24,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--owned-messages", type=message_ids, default=[])
     parser.add_argument("--community-messages", type=message_ids, default=[])
+    parser.add_argument("--community-direct", action="store_true")
     args = parser.parse_args()
     requested = set(args.owned_messages + args.community_messages)
     if not requested or len(requested) > 5 or set(args.owned_messages) & set(args.community_messages):
@@ -46,19 +47,24 @@ def main():
         segment = page[match.end() : items[i + 1].start() if i + 1 < len(items) else len(page)]
         body = html.unescape(re.sub(r"<[^>]+>", " ", segment))
         owned = mid in args.owned_messages
+        direct = not owned and args.community_direct
+        raw_public = bool(re.search(r"(?:vless|vmess|trojan|ss)://", body))
         checks = {
             "real_https_test_mentioned": "HTTPS" in body,
-            "45_day_rule_mentioned": "۴۵" in body,
-            "membership_mentioned": "عضویت" in body,
             "purchase_bot_link": "https://t.me/pvnetwork_bot" in segment,
-            "delivery_bot_link": (
+            "public_raw_config_policy_correct": raw_public if direct else not raw_public,
+        }
+        if direct:
+            checks["copy_instruction_clear"] = "کپی" in body
+            checks["no_membership_purchase_gate_claim"] = "۴۵" not in body and "عضویت" not in body
+        else:
+            checks["45_day_rule_mentioned"] = "۴۵" in body
+            checks["membership_mentioned"] = "عضویت" in body
+            checks["delivery_bot_link"] = (
                 "https://t.me/pvgrowthos_bot?start=freecfg_shared_"
                 if owned
                 else "https://t.me/pvgrowthos_bot?start=freecfg_community_"
-            )
-            in segment,
-            "no_public_raw_config": not bool(re.search(r"(?:vless|vmess|trojan|ss)://", body)),
-        }
+            ) in segment
         if owned:
             checks["shared_quota_clear"] = "۱ گیگ مشترک" in body
             checks["validity_clear"] = "۲۴ ساعت" in body

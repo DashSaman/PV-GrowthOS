@@ -120,9 +120,12 @@ def _home_keyboard(session, settings, *, include_free: bool):
     from pv_growth.core.flags import FlagService
     from pv_growth.free_config.community import latest_context
     from pv_growth.free_config.lottery import _enabled
+    from pv_growth.free_config.web_publication import direct_enabled
     from pv_growth.telegram.client import InlineKeyboard
 
     rows = [[{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}]]
+    if direct_enabled(session):
+        rows.append([{"text": "🌐 کانفیگ وب قابل کپی در کانال", "url": "https://t.me/pvnetwork_freeconfig"}])
     if include_free:
         context = latest_shared_context(session, settings)
         if context is not None:
@@ -222,6 +225,19 @@ def _free_dialogue(client, session, settings, user, context: str) -> None:
                 _purchase_keyboard(include_free=True),
             )
             return
+        from pv_growth.free_config.web_publication import direct_enabled
+
+        if direct_enabled(session):
+            _safe_send(
+                client,
+                user.telegram_user_id,
+                "🌐 کانفیگ‌های عمومی وب مستقیم و قابل کپی در کانال رایگان هستند.\n"
+                "شرط عضویت و سابقهٔ خرید مربوط به تست سرور اصلی و قرعه‌کشی است.",
+                InlineKeyboard(
+                    [[{"text": "📋 باز کردن کانفیگ‌های وب", "url": "https://t.me/pvnetwork_freeconfig"}]]
+                ),
+            )
+            return
     if not _free_audience_verified(session, settings, user.id):
         from pv_growth.free_config.sales_copy import main_service_pitch
 
@@ -294,7 +310,7 @@ def _audience_notice(decision) -> str:
     else:
         reason = "سابقهٔ خریدت فعلاً قابل تأیید نیست؛ دریافت تا تأیید سوابق متوقف است."
     return (
-        "ℹ️ دریافت رایگان و ثبت‌نام قرعه‌کشی برای حسابت فعلاً مجاز نیست.\n"
+        "ℹ️ دریافت تست سرور اصلی و ثبت‌نام قرعه‌کشی برای حسابت فعلاً مجاز نیست.\n"
         + reason
         + "\nشرط دریافت: ۴۵ روز بدون خرید، نداشتن سرویس فعال یا نامشخص و عضویت در هر دو کانال.\n"
         "بررسی شرایط با /start دوباره انجام می‌شود.\n\n"
@@ -490,6 +506,12 @@ def _handle_callback(client, callback: TgCallback) -> None:
         if data.startswith(("shared:", "community:")):
             if not valid_context(data):
                 _private_result(client, user, callback.id, "این پیشنهاد دیگر در دسترس نیست.")
+                return
+            from pv_growth.free_config.web_publication import direct_enabled
+
+            if data.startswith("community:") and direct_enabled(session):
+                _free_dialogue(client, session, settings, user, data)
+                _safe_answer(client, callback.id, "کانفیگ وب مستقیم در کانال قابل کپی است.")
                 return
             if not _free_audience_verified(session, settings, user.id):
                 _denied_result(client, user, callback.id)

@@ -13,6 +13,7 @@ from pv_growth.config_quality.parsers import parse_any
 from pv_growth.config_quality.probe import probe_uri
 from pv_growth.core.config import Settings
 from pv_growth.core.errors import ValidationError
+from pv_growth.free_config.branding import brand_uri
 
 
 def require_client_identity(service: dict, state: dict) -> None:
@@ -70,5 +71,5 @@ def verified_uri(service: dict, settings: Settings, *, transport=None) -> tuple[
             continue
         result = probe_uri(uri, settings)
         if result.ok:
-            return uri, result.latency_ms
+            return brand_uri(uri), result.latency_ms
     raise ValidationError("owned config actual HTTPS check failed")

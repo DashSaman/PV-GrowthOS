@@ -124,7 +124,9 @@ def test_publish_is_idempotent_double_run(session, env, monkeypatch):
     # The channel promise is an actually usable free config, not just a label.
     published = session.query(PublishedPost).filter_by(kind="free_public").one()
     config = session.get(RawConfig, published.config_id)
-    assert config.raw_uri in sent[0]
+    from pv_growth.free_config.branding import brand_uri
+
+    assert brand_uri(config.raw_uri) in sent[0]
     payload = [p for m, p in env["telegram"]._t.calls if m == "sendMessage"][0]
     assert payload["reply_markup"]["inline_keyboard"][0][0]["url"] == "https://t.me/pvnetwork_bot"
 

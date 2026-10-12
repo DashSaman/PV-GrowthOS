@@ -25,6 +25,7 @@ from pv_growth.core.logging import get_logger
 from pv_growth.database.models import ConfigSource, PublishedPost, RawConfig
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import ingest
+from pv_growth.free_config.branding import brand_uri
 from pv_growth.telegram.client import InlineKeyboard, TelegramClient
 
 log = get_logger("pipeline")
@@ -108,7 +109,7 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
     return stats
 
 
-def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
+def rank_candidates(session: Session, settings: Settings, *, exclude_ids=()) -> list[RawConfig]:
     """Top fresh validated configs by score; health-check only these few."""
     active_sources = select(ConfigSource.id).where(ConfigSource.is_active.is_(True))
     candidates = (
@@ -116,6 +117,7 @@ def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
             select(RawConfig)
             .where(
                 RawConfig.valid.is_(True),
+                RawConfig.id.not_in(exclude_ids),
                 or_(
                     RawConfig.status == "validated",
                     (RawConfig.status == "published")
@@ -157,9 +159,22 @@ def rank_candidates(session: Session, settings: Settings) -> list[RawConfig]:
     return ranked
 
 
-def render_public_post(config: RawConfig, *, gated: bool = False) -> str:
+def render_public_post(config: RawConfig, *, gated: bool = False, https_verified: bool = False) -> str:
     from pv_growth.free_config.sales_copy import config_footer
 
+    if not gated:
+        return (
+            "🌐 <b>کانفیگ رایگان وب</b>\n\n"
+            + (f"<code>{html.escape(config.remark or '')}</code>\n" if not https_verified else "")
+            + ("✅ اتصال واقعی HTTPS پیش از انتشار از سرور ما بررسی شد.\n" if https_verified else "")
+            + (
+                "📋 کد زیر را کپی و در برنامهٔ اتصال وارد کن:\n\n"
+                f"<code>{html.escape(brand_uri(config.raw_uri))}</code>\n\n"
+                "ℹ️ منبع عمومی؛ متعلق به PV Network نیست. حجم، مدت و IP آن تحت کنترل ما نیست.\n"
+                "نتیجهٔ اتصال روی اینترنت شما ممکن است متفاوت باشد.\n\n"
+                f"{config_footer()}"
+            )
+        )
     remark = config.remark or f"{config.protocol} · {config.host}"
     return (
         f"🔓 <b>کانفیگ رایگان روز</b>\n"
@@ -194,23 +209,38 @@ def publish_public_slot(
     if not flags.enabled("FREE_CONFIG_ENABLED") or not flags.enabled("PUBLIC_CONFIG_ENABLED"):
         log.info("public config disabled by flag")
         return None
-    from pv_growth.free_config.shared_public import FORBIDDEN_MAIN
+    from pv_growth.free_config.shared_public import FORBIDDEN_MAIN, local_day
+    from pv_growth.free_config.web_publication import day_reservations, direct_enabled, lock_public_day
+
+    direct = direct_enabled(session)
 
     if (
         not settings.free_channel_id
         or str(settings.free_channel_id).lower() in FORBIDDEN_MAIN
-        or not 1 <= slot <= 2
+        or not 1 <= slot <= (10 if direct else 2)
     ):
         return None
-    day = day or date.today()
-    dedupe_key = f"free_public:{day.isoformat()}:{slot}"
+    day = day or (local_day(utcnow()) if direct else date.today())
+    if direct and day != local_day(utcnow()):
+        return None
+    exclusions = []
+    if direct:
+        lock_public_day(session, day)
+        if day != local_day(utcnow()):
+            return None  # the lock wait may cross Tehran midnight
+        reservations = day_reservations(session, settings, day)
+        if len(reservations) >= 10:
+            return None
+        exclusions = [p.config_id for p in reservations if p.config_id is not None]
+    prefix = "free_public_direct" if direct else "free_public"
+    dedupe_key = f"{prefix}:{day.isoformat()}:{slot}"
     existing = session.execute(
         select(PublishedPost).where(PublishedPost.dedupe_key == dedupe_key)
     ).scalar_one_or_none()
     if existing is not None:
         return None  # already published this slot — never duplicate
 
-    ranked = rank_candidates(session, settings)
+    ranked = rank_candidates(session, settings, exclude_ids=exclusions)
     if not ranked:
         log.info("no healthy candidates to publish", day=day.isoformat(), slot=slot)
         return None
@@ -223,11 +253,15 @@ def publish_public_slot(
             ranked[0].status = "probe_failed"
             return None
 
+    reserved_at = utcnow()
+    if direct and day != local_day(reserved_at):
+        return None  # a connection probe may cross Tehran midnight
     post = PublishedPost(
         dedupe_key=dedupe_key,
         channel_id=settings.free_channel_id,
         kind="free_public",
         config_id=ranked[0].id,
+        posted_at=reserved_at,
     )
     try:
         with session.begin_nested():
@@ -238,16 +272,28 @@ def publish_public_slot(
 
     session.commit()  # a remote result may be unknown; never roll back the effect reservation
 
+    if direct and day != local_day(utcnow()):
+        return None  # retain the reservation, but never send a stale-day post
+
     if settings.env == "production":
         from pv_growth.free_config.community import enabled
 
         source = session.get(ConfigSource, ranked[0].source_id, populate_existing=True)
-        if not enabled(session, settings, flags) or source is None or not source.is_active:
+        if (
+            not enabled(session, settings, flags)
+            or source is None
+            or not source.is_active
+            or (direct and not direct_enabled(session))
+        ):
             return None
 
     result = telegram.send_channel_post(
         settings.free_channel_id,
-        render_public_post(ranked[0], gated=settings.env == "production"),
+        render_public_post(
+            ranked[0],
+            gated=settings.env == "production" and not direct,
+            https_verified=settings.env == "production" or settings.proxy_probe_required,
+        ),
         InlineKeyboard(
             [
                 [
@@ -258,7 +304,7 @@ def publish_public_slot(
                 ],
                 [{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}],
             ]
-            if settings.env == "production"
+            if settings.env == "production" and not direct
             else [[{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}]]
         ),
     )
