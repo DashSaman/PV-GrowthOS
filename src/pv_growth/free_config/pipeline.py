@@ -34,11 +34,28 @@ PUBLIC_LABEL_FA = "🌐 منبع: عمومی/کامانیوتی (متعلق به
 PUBLIC_LABEL_EN = "community-sourced · not operated by PV Network"
 
 
+def adopt_inactive_source(existing, parsed, source, active_source_ids):
+    """Keep config identity, but require a new check under its fresh approved source."""
+    if existing.source_id in active_source_ids:
+        return False
+    if not source.is_active or source.id not in active_source_ids or existing.uri_hash != parsed.uri_hash:
+        return False
+    existing.source_id = source.id
+    existing.raw_uri = parsed.raw_uri
+    existing.remark = parsed.remark
+    existing.status = "validated"
+    existing.health_checked = False
+    existing.health_ok = None
+    existing.fetched_at = utcnow()
+    return True
+
+
 def collect_and_stage(session: Session, client: httpx.Client, settings: Settings) -> dict:
     """Fetch all active sources, parse, dedup (unique uri_hash), validate, score."""
     stats = {"sources": 0, "fetched": 0, "new": 0, "duplicates": 0, "invalid": 0}
     seen_this_run: set[str] = set()
     sources = session.execute(select(ConfigSource).where(ConfigSource.is_active.is_(True))).scalars().all()
+    active_source_ids = {source.id for source in sources}
 
     for source in sources:
         stats["sources"] += 1
@@ -71,7 +88,9 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
                 select(RawConfig).where(RawConfig.uri_hash == parsed.uri_hash)
             ).scalar_one_or_none()
             if existing is not None:
-                if existing.status == "probe_failed":
+                if adopt_inactive_source(existing, parsed, source, active_source_ids):
+                    pass
+                elif existing.status == "probe_failed":
                     existing.raw_uri = parsed.raw_uri
                     existing.status = "validated"
                     existing.fetched_at = utcnow()
