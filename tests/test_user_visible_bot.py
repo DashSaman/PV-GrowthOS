@@ -45,7 +45,7 @@ def test_ineligible_home_explains_reason_without_offering_grants(
 
 def test_bare_start_exposes_current_test_and_lottery_directly(session, settings, monkeypatch):
     s = ready(session, settings)
-    row = offer(session, s)
+    offer(session, s)
     from pv_growth.database.models import AppConfig
 
     session.get(AppConfig, "pv_free_growth_policy").value = {
@@ -65,12 +65,10 @@ def test_bare_start_exposes_current_test_and_lottery_directly(session, settings,
             {"from": {"id": 123}, "chat": {"id": 123, "type": "private"}, "text": "/start"}
         ),
     )
-    buttons = [
-        b for m, p in t.calls if m == "sendMessage" for r in p["reply_markup"]["inline_keyboard"] for b in r
-    ]
-    callbacks = [b.get("callback_data") for b in buttons]
-    assert f"shared:{row.day}:1" in callbacks, "Opening the bot must expose actual config retrieval"
-    assert "lottery:pv_daily_lottery" in callbacks, "Opening the bot must expose lottery registration"
+    buttons = [b for m, p in t.calls if m == "sendMessage" for r in p["reply_markup"]["keyboard"] for b in r]
+    labels = [b["text"] for b in buttons]
+    assert "🎁 تست اصلی ۱ گیگی" in labels, "Opening the bot must expose actual config retrieval"
+    assert "🎲 ثبت‌نام قرعه‌کشی" in labels, "Opening the bot must expose lottery registration"
 
 
 def test_lottery_success_leaves_persistent_private_receipt(session, settings, monkeypatch):

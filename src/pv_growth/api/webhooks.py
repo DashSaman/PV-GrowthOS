@@ -146,16 +146,15 @@ def _private_result(client, user, callback_id: str, text: str, keyboard=None):
     _safe_answer(client, callback_id, text[:180])
 
 
-def _denied_result(client, user, callback_id: str):
+def _denied_result(client, user, callback_id: str, *, session, settings):
+    from pv_growth.telegram.navigation import menu_keyboard
+
     _private_result(
         client,
         user,
         callback_id,
-        "🔎 شرایط دریافت رایگان تأیید نشد.\n"
-        "دریافت فقط با ۴۵ روز بدون خرید و نداشتن سرویس فعال ممکن است. "
-        "اگر سابقهٔ خرید یا وضعیت سرویس قابل بررسی نباشد هم کانفیگ صادر نمی‌شود.\n"
-        "🛒 برای مشاهدهٔ پلن مناسب، ربات رسمی خرید را باز کنید.",
-        _purchase_keyboard(include_free=False),
+        _denial_text(session, settings, user.id),
+        menu_keyboard(),
     )
 
 
@@ -239,15 +238,13 @@ def _free_dialogue(client, session, settings, user, context: str) -> None:
             )
             return
     if not _free_audience_verified(session, settings, user.id):
-        from pv_growth.free_config.sales_copy import main_service_pitch
+        from pv_growth.telegram.navigation import menu_keyboard
 
         _safe_send(
             client,
             user.telegram_user_id,
-            "برای پیشنهاد رایگان باید ۴۵ روز بدون خرید و بدون سرویس فعال باشید. "
-            "اگر سابقهٔ شما قابل تأیید نباشد، تحویل تا تأیید متوقف می‌شود.\n\n"
-            + main_service_pitch(include_trial=False),
-            _purchase_keyboard(include_free=False),
+            _denial_text(session, settings, user.id),
+            menu_keyboard(),
         )
         return
     if not _membership_ready(client, settings, user, context):
@@ -317,9 +314,25 @@ def _audience_notice(decision) -> str:
     )
 
 
+def _denial_text(session, settings, user_id):
+    from pv_growth.free_config.audience import decision_for_user
+
+    try:
+        notice = _audience_notice(decision_for_user(session, settings, user_id))
+    except Exception:
+        notice = "ℹ️ سابقهٔ خرید و وضعیت سرویس فعلاً قابل تأیید نیست؛ تست اصلی و ثبت‌نام متوقف است.\n"
+    return (notice or "ℹ️ سیاست دریافت تست اصلی و قرعه فعلاً قابل تأیید نیست.\n") + (
+        "🌐 کانفیگ‌های وب عمومی در کانال قابل کپی هستند.\n"
+        "برای بررسی دوباره یا انتخاب مسیر دیگر از دکمه‌های پایین استفاده کن."
+    )
+
+
 def _handle_message(client, message: TgMessage) -> None:
     settings = get_settings()
     text = (message.text or "").strip()
+    from pv_growth.telegram.navigation import help_text, menu_command, menu_keyboard
+
+    command = menu_command(text)
     tg_user = message.from_
     chat_id = message.chat.get("id")
     if (
@@ -345,7 +358,7 @@ def _handle_message(client, message: TgMessage) -> None:
             language_code=tg_user.language_code,
             telegram_chat_id=message.chat.get("id"),
         )
-        if text.startswith("/start"):
+        if command == "/start":
             from pv_growth.free_config.audience import decision_for_user
 
             decision = decision_for_user(session, settings, user.id)
@@ -384,16 +397,27 @@ def _handle_message(client, message: TgMessage) -> None:
                     client, chat_id, "این پیشنهاد دیگر در دسترس نیست.", _purchase_keyboard(include_free=False)
                 )
                 return
-            from pv_growth.free_config.sales_copy import main_service_pitch
-
             _safe_send(
                 client,
                 message.chat.get("id"),
-                _audience_notice(decision) + main_service_pitch(include_trial=free_allowed),
-                _home_keyboard(session, settings, include_free=free_allowed),
+                "🏠 منوی اصلی PV Network\n\n"
+                + _audience_notice(decision)
+                + "از دکمه‌های پایین، تست اصلی، کانفیگ وب، قرعه یا خرید را انتخاب کن.",
+                menu_keyboard(),
             )
-        elif text.split(" ", 1)[0].split("@", 1)[0] in {"/free", "/lottery", "/web"}:
-            if text.split(" ", 1)[0].split("@", 1)[0] == "/lottery":
+        elif command in {"/free", "/lottery", "/web"}:
+            from pv_growth.free_config.web_publication import direct_enabled
+
+            if command == "/web" and direct_enabled(session):
+                _safe_send(
+                    client,
+                    chat_id,
+                    "🌐 کانفیگ‌های وب مستقیم و قابل کپی در کانال رایگان هستند.\n"
+                    "منبع عمومی است؛ حجم، مدت و IP تحت کنترل PV نیست.",
+                    _purchase_keyboard(include_free=True),
+                )
+                return
+            if command == "/lottery":
                 _free_dialogue(client, session, settings, user, "lottery:pv_daily_lottery")
             else:
                 from pv_growth.acquisition.entry import latest_shared_context
@@ -401,7 +425,7 @@ def _handle_message(client, message: TgMessage) -> None:
 
                 context = (
                     latest_context(session, settings)
-                    if text.split(" ", 1)[0].split("@", 1)[0] == "/web"
+                    if command == "/web"
                     else latest_shared_context(session, settings)
                 )
                 if context:
@@ -411,24 +435,31 @@ def _handle_message(client, message: TgMessage) -> None:
                         client,
                         chat_id,
                         "تست قابل دریافت فعلاً موجود نیست؛ پیشنهاد تازه را در کانال دنبال کنید.",
-                        _home_keyboard(session, settings, include_free=True),
+                        menu_keyboard(),
                     )
-        elif text.split(" ", 1)[0] in {"/share", "/referral"}:
+        elif command == "/buy":
+            _safe_send(
+                client,
+                chat_id,
+                "🛒 خرید سرویس شخصی و مشاهدهٔ تعرفه‌ها از ربات رسمی PV Network:",
+                _purchase_keyboard(include_free=True),
+            )
+        elif command in {"/share", "/referral"}:
             from pv_growth.acquisition.entry import sharing_prompt
 
             body, keyboard = sharing_prompt()
             _safe_send(client, chat_id, body, keyboard)
-        elif text.startswith("/help"):
+        elif command in {"/help", "/menu", "/status"}:
             from pv_growth.free_config.audience import decision_for_user
-            from pv_growth.free_config.sales_copy import main_service_pitch
 
             decision = decision_for_user(session, settings, user.id)
-            free_allowed = decision.eligible
             _safe_send(
                 client,
                 message.chat.get("id"),
-                _audience_notice(decision) + main_service_pitch(include_trial=free_allowed),
-                _home_keyboard(session, settings, include_free=free_allowed),
+                (help_text() if command == "/help" else "🏠 منوی اصلی؛ یکی از دکمه‌های پایین را انتخاب کن.")
+                + "\n\n"
+                + _audience_notice(decision),
+                menu_keyboard(),
             )
         elif text.startswith("/claim"):
             parts = text.split()
@@ -454,7 +485,7 @@ def _handle_message(client, message: TgMessage) -> None:
                     if allowed
                     else _audience_notice(decision)
                 ),
-                _home_keyboard(session, settings, include_free=allowed),
+                menu_keyboard(),
             )
 
 
@@ -514,7 +545,7 @@ def _handle_callback(client, callback: TgCallback) -> None:
                 _safe_answer(client, callback.id, "کانفیگ وب مستقیم در کانال قابل کپی است.")
                 return
             if not _free_audience_verified(session, settings, user.id):
-                _denied_result(client, user, callback.id)
+                _denied_result(client, user, callback.id, session=session, settings=settings)
                 return
             if not _membership_ready(client, settings, user, data):
                 _safe_answer(client, callback.id, "عضویت در هر دو کانال باید تأیید شود.")
@@ -541,7 +572,7 @@ def _handle_callback(client, callback: TgCallback) -> None:
                 _private_result(client, user, callback.id, "درخواست نامعتبر است.")
                 return
             if not _free_audience_verified(session, settings, user.id):
-                _denied_result(client, user, callback.id)
+                _denied_result(client, user, callback.id, session=session, settings=settings)
                 return
             if not _membership_ready(client, settings, user, data):
                 _safe_answer(client, callback.id, "عضویت در هر دو کانال باید تأیید شود.")
