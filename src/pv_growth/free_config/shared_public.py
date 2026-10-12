@@ -38,11 +38,15 @@ def local_day(now: datetime | None = None) -> date:
     return now.replace(tzinfo=UTC).astimezone(TEHRAN).date()
 
 
-def direct_main(session: Session) -> bool:
+FREE_SHARED_CHANNELS = {"-1004310246787", "@pvnetwork_freeconfig", "pvnetwork_freeconfig"}
+
+
+def direct_shared(session: Session) -> bool:
     policy = growth_policy(session)
     return (
-        policy.get("owned_main_direct_enabled") is True
-        and str(policy.get("owned_shared_channel", "")).strip().lower() in FORBIDDEN_MAIN
+        policy.get("owned_shared_direct_enabled") is True
+        and policy.get("owned_main_direct_enabled") is not True
+        and str(policy.get("owned_shared_channel", "")).strip().lower() in FREE_SHARED_CHANNELS
     )
 
 
@@ -50,14 +54,16 @@ def publish_shared_slot(
     session: Session, settings: Settings, flags: FlagService, telegram, adapter, *, day: date, slot: int
 ) -> PublishedPost | None:
     policy = growth_policy(session)
-    direct = direct_main(session)
-    destination = policy["owned_shared_channel"] if direct else settings.free_channel_id
-    if policy.get("owned_main_direct_enabled") is True and not direct:
+    direct = direct_shared(session)
+    destination = policy.get("owned_shared_channel", settings.free_channel_id)
+    if policy.get("owned_main_direct_enabled") is True or (
+        policy.get("owned_shared_direct_enabled") is True and not direct
+    ):
         return None
     if (
         not 1 <= slot <= 10
         or day != local_day()
-        or (not direct and str(destination).lower() in FORBIDDEN_MAIN)
+        or str(destination).strip().lower() in FORBIDDEN_MAIN
         or not destination
     ):
         return None
@@ -146,7 +152,14 @@ def publish_shared_slot(
         "latency_ms": latency,
         "verified_uri": uri,
     }
-    if day != local_day() or direct != direct_main(session):
+    current = growth_policy(session)
+    if (
+        day != local_day()
+        or direct != direct_shared(session)
+        or current.get("public_shared_enabled") is not True
+        or current.get("owned_main_direct_enabled") is True
+        or current.get("owned_shared_channel", settings.free_channel_id) != destination
+    ):
         return None
     post = PublishedPost(dedupe_key=key, channel_id=str(destination), kind="pv_shared")
     session.add(post)
@@ -204,11 +217,7 @@ def publish_shared_slot(
             ]
         )
     try:
-        result = (
-            telegram.send_owned_shared_post(destination, body, keyboard, owner_authorized=True)
-            if direct
-            else telegram.send_channel_post(destination, body, keyboard)
-        )
+        result = telegram.send_channel_post(destination, body, keyboard)
         if not result.get("message_id"):
             raise TelegramDeliveryUnknownError("publication receipt unavailable")
     except Exception:
@@ -274,14 +283,7 @@ def sweep_shared_posts(session: Session, settings: Settings, telegram, adapter) 
         if reason is None:
             continue
         post = session.scalar(select(PublishedPost).where(PublishedPost.dedupe_key == allocation.id))
-        if (
-            post is None
-            or not post.message_id
-            or (
-                post.channel_id != str(settings.free_channel_id)
-                and not (direct_main(session) and post.channel_id.lower() in FORBIDDEN_MAIN)
-            )
-        ):
+        if post is None or not post.message_id or post.channel_id != str(settings.free_channel_id):
             continue
         allocation.status = "expiry_notice_reserved"
         allocation.payload = {**allocation.payload, "end_reason": reason}

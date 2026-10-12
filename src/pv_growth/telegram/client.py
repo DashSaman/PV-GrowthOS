@@ -12,7 +12,7 @@ from typing import Any, Protocol
 import httpx
 
 from pv_growth.core.config import Settings
-from pv_growth.core.errors import ExternalServiceError, NotConfigured, ValidationError
+from pv_growth.core.errors import ExternalServiceError, NotConfigured
 from pv_growth.core.logging import get_logger
 from pv_growth.core.publication_policy import refuse_main_channel
 
@@ -162,16 +162,6 @@ class TelegramClient:
 
     def set_webhook(self, url: str, secret_token: str) -> dict:
         return self._t.call("setWebhook", {"url": url, "secret_token": secret_token})
-
-    def send_owned_shared_post(self, channel_id, text, keyboard=None, *, owner_authorized=False):
-        from pv_growth.core.publication_policy import FORBIDDEN_MAIN
-
-        if owner_authorized is not True or str(channel_id).strip().lower() not in FORBIDDEN_MAIN:
-            raise ValidationError("only explicitly authorized main-channel owned shared tests")
-        payload = {"chat_id": channel_id, "text": text, "parse_mode": "HTML"}
-        if keyboard:
-            payload["reply_markup"] = keyboard.to_markup()
-        return self._t.call("sendMessage", payload)
 
 
 def get_telegram(settings: Settings) -> TelegramClient:

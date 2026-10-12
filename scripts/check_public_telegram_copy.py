@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--owned-messages", type=message_ids, default=[])
     parser.add_argument("--community-messages", type=message_ids, default=[])
     parser.add_argument("--community-direct", action="store_true")
+    parser.add_argument("--owned-direct", action="store_true")
     args = parser.parse_args()
     requested = set(args.owned_messages + args.community_messages)
     if not requested or len(requested) > 5 or set(args.owned_messages) & set(args.community_messages):
@@ -47,7 +48,7 @@ def main():
         segment = page[match.end() : items[i + 1].start() if i + 1 < len(items) else len(page)]
         body = html.unescape(re.sub(r"<[^>]+>", " ", segment))
         owned = mid in args.owned_messages
-        direct = not owned and args.community_direct
+        direct = (owned and args.owned_direct) or (not owned and args.community_direct)
         raw_public = bool(re.search(r"(?:vless|vmess|trojan|ss)://", body))
         checks = {
             "real_https_test_mentioned": "HTTPS" in body,
