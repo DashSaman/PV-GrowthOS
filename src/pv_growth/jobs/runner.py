@@ -54,6 +54,7 @@ def register_builtin_handlers() -> None:
     import pv_growth.competitors.jobs  # noqa: F401
     import pv_growth.content.jobs  # noqa: F401
     import pv_growth.conversions.service  # noqa: F401
+    import pv_growth.free_config.autonomous  # noqa: F401
     import pv_growth.free_config.jobs  # noqa: F401
     import pv_growth.free_config.lottery  # noqa: F401
     import pv_growth.free_config.shared_public  # noqa: F401
@@ -61,6 +62,7 @@ def register_builtin_handlers() -> None:
     import pv_growth.lifecycle.service  # noqa: F401
     import pv_growth.mirza_adapter.sync_job  # noqa: F401
     import pv_growth.provisioning.lifecycle_job  # noqa: F401
+    import pv_growth.telegram.management  # noqa: F401
 
 
 def dispatch(session: Session, settings: Settings, job_type: str, payload: dict) -> None:

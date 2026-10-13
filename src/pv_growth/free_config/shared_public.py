@@ -54,6 +54,8 @@ def publish_shared_slot(
     session: Session, settings: Settings, flags: FlagService, telegram, adapter, *, day: date, slot: int
 ) -> PublishedPost | None:
     policy = growth_policy(session)
+    if policy.get("operational_pause") is True:
+        return None
     direct = direct_shared(session)
     destination = policy.get("owned_shared_channel", settings.free_channel_id)
     if policy.get("owned_main_direct_enabled") is True or (
@@ -79,10 +81,32 @@ def publish_shared_slot(
     key = f"pv_shared:{day.isoformat()}:{slot}"
     if session.scalar(select(PublishedPost).where(PublishedPost.dedupe_key == key)) is not None:
         return None
-    allocation = reserve(session, key=key, day=day, bucket="public", traffic_bytes=GIB)
-    if allocation.status in {"delivery_unknown", "published", "expired", "provision_failed"}:
+    old = session.get(FreeAllocation, key, populate_existing=True)
+    if (
+        policy.get("server_autonomy_enabled") is True
+        and old is not None
+        and not old.service_ref
+        and "provision_attempted" not in old.payload
+    ):
+        return None  # legacy effect state cannot be proved; never replay or relabel it
+    from pv_growth.free_config.shared_capacity import has_capacity
+
+    if not has_capacity(session, policy, adapter, current_key=key):
         return None
-    session.commit()  # reservation survives ambiguous remote effects
+    allocation = reserve(session, key=key, day=day, bucket="public", traffic_bytes=GIB)
+    session.refresh(allocation)
+    if allocation.status in {
+        "delivery_unknown",
+        "published",
+        "expired",
+        "provision_failed",
+        "provision_unknown",
+        "provision_reserved",
+    }:
+        return None
+    allocation.status = "provision_reserved"
+    allocation.payload = {"provision_attempted": False, **allocation.payload}
+    session.commit()  # atomic ownership before even the read-only preflight; other workers must stop
     try:
         check_backend(session, adapter)
         if not allocation.payload.get("service"):
@@ -90,6 +114,9 @@ def publish_shared_slot(
                 allocation.status = "stale"
                 session.commit()
                 return None
+            allocation.status = "provision_reserved"
+            allocation.payload = {**allocation.payload, "provision_attempted": True}
+            session.commit()  # committed capacity survives an ambiguous remote create
             service = adapter.create_temp_service(
                 location="auto",
                 traffic_gb=1,
@@ -141,7 +168,13 @@ def publish_shared_slot(
             raise ValidationError("owned quota ended during health check")
     except Exception as exc:  # sanitized evidence; never a URI or upstream token
         allocation.payload = {**allocation.payload, "last_failure": type(exc).__name__}
-        allocation.status = "health_pending" if allocation.service_ref else "pending_provision"
+        allocation.status = (
+            "health_pending"
+            if allocation.service_ref
+            else "provision_unknown"
+            if allocation.payload.get("provision_attempted")
+            else "pending_provision"
+        )
         session.commit()
         return None
     checked = utcnow()

@@ -162,6 +162,9 @@ def rank_candidates(session: Session, settings: Settings, *, exclude_ids=()) -> 
         .scalars()
         .all()
     )
+    from pv_growth.free_config.autonomous import probe_allowance
+
+    candidates = candidates[: probe_allowance(session, len(candidates))]
     results = check_top_candidates([(c.id, c.host, c.port) for c in candidates], settings)
     for candidate in candidates:
         candidate.health_checked = True
@@ -217,6 +220,7 @@ def publish_public_slot(
     telegram: TelegramClient,
     day: date | None = None,
     slot: int = 1,
+    fulfillment_ceiling: int | None = None,
 ) -> PublishedPost | None:
     """Publish top configs for one day/slot. Idempotent on dedupe_key:
     a second call (crashed scheduler, double run) is a no-op."""
@@ -228,10 +232,14 @@ def publish_public_slot(
     if not flags.enabled("FREE_CONFIG_ENABLED") or not flags.enabled("PUBLIC_CONFIG_ENABLED"):
         log.info("public config disabled by flag")
         return None
-    from pv_growth.free_config.shared_public import FORBIDDEN_MAIN, local_day
+    from pv_growth.free_config.shared_public import FORBIDDEN_MAIN, growth_policy, local_day
     from pv_growth.free_config.web_publication import day_reservations, direct_enabled, lock_public_day
 
     direct = direct_enabled(session)
+    if fulfillment_ceiling is not None and (
+        type(fulfillment_ceiling) is not int or not 1 <= fulfillment_ceiling <= 10
+    ):
+        return None
 
     if (
         not settings.free_channel_id
@@ -248,9 +256,13 @@ def publish_public_slot(
         if day != local_day(utcnow()):
             return None  # the lock wait may cross Tehran midnight
         reservations = day_reservations(session, settings, day)
-        if len(reservations) >= 10:
+        ceiling = min(10, growth_policy(session).get("community_daily_slots", 10), fulfillment_ceiling or 10)
+        if len(reservations) >= ceiling:
             return None
         exclusions = [p.config_id for p in reservations if p.config_id is not None]
+        from pv_growth.free_config.web_publication import config_alias_exclusions
+
+        exclusions = config_alias_exclusions(session, exclusions)
     prefix = "free_public_direct" if direct else "free_public"
     dedupe_key = f"{prefix}:{day.isoformat()}:{slot}"
     existing = session.execute(
@@ -260,6 +272,12 @@ def publish_public_slot(
         return None  # already published this slot — never duplicate
 
     ranked = rank_candidates(session, settings, exclude_ids=exclusions)
+    if direct:
+        old_uris = {
+            brand_uri(raw.raw_uri)
+            for raw in session.scalars(select(RawConfig).where(RawConfig.id.in_(exclusions)))
+        }
+        ranked = [r for r in ranked if brand_uri(r.raw_uri) not in old_uris]
     if not ranked:
         log.info("no healthy candidates to publish", day=day.isoformat(), slot=slot)
         return None

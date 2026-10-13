@@ -4,6 +4,7 @@ traffic when the bot token is not configured."""
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import re
 
@@ -422,6 +423,33 @@ def _handle_message(client, message: TgMessage) -> None:
     from pv_growth.partners import service as partners
     from pv_growth.referrals import service as referrals
 
+    raw_command, _, argument = text.partition(" ")
+    management_action = {
+        "/manage": "menu",
+        "/hours": "hours:" + argument.strip(),
+        "/web_count": "web:" + argument.strip(),
+        "/active": "active:" + argument.strip(),
+    }.get(raw_command.split("@")[0])
+    if management_action is not None:
+        from pv_growth.telegram.management import handle_action
+
+        with session_scope(settings) as session:
+            handle_action(
+                session,
+                settings,
+                client,
+                user_id=tg_user.id,
+                chat_id=chat_id,
+                chat_type="private",
+                action=management_action,
+                request_key=(
+                    "m:" + hashlib.sha256(f"{tg_user.id}:{message.message_id}".encode()).hexdigest()[:40]
+                    if message.message_id > 0
+                    else None
+                ),
+            )
+        return
+
     with session_scope(settings) as session:
         user, created = get_or_create_user(
             session,
@@ -592,6 +620,22 @@ def _handle_callback(client, callback: TgCallback) -> None:
         or chat.get("type", "private") != "private"
     ):
         _safe_answer(client, callback.id, "این دکمه را در گفت‌وگوی خصوصی ربات استفاده کنید.")
+        return
+    if data.startswith("manage:"):
+        from pv_growth.telegram.management import handle_action
+
+        with session_scope(settings) as session:
+            handle_action(
+                session,
+                settings,
+                client,
+                user_id=callback.from_.id,
+                chat_id=chat["id"],
+                chat_type="private",
+                action=data[7:],
+                request_key="c:" + hashlib.sha256(callback.id.encode()).hexdigest()[:40],
+            )
+        _safe_answer(client, callback.id, "نتیجه در همین گفت‌وگو نمایش داده شد.")
         return
     _safe_answer(client, callback.id, "در حال بررسی درخواست؛ نتیجه در همین گفت‌وگو نمایش داده می‌شود.")
     from pv_growth.core.flags import FlagService

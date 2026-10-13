@@ -101,5 +101,18 @@
     "target_completion_tehran": "2026-10-13T17:00:00+03:30",
     "single_sender": true,
     "skip_full_batch_idle_only_with_due_intro_backlog": true
-  }
+  },
+  "owned_shared_max_active": 2,
+  "owned_shared_replacement": "only_when_capacity_ended_at_normal_schedule",
+  "daily_owned_shared_gib_mandatory": false,
+  "codex_required_for_routine_execution": false,
+  "execution_owner": "docker_scheduler_and_bot",
+  "bot_manager_command": "/manage",
+  "bot_manager_authority": "owner_of_at_least_one_and_administrator_of_both_pv_channels",
+  "community_fulfillment_interval_minutes": 5,
+  "community_candidate_checks_per_day": 600,
+  "approved_public_source_refresh_hours": 1,
+  "community_failed_jobs_reset": false,
+  "native_bot_daily_report_time": "23:55",
+  "native_bot_daily_report_after_owner_manage": true
 }
