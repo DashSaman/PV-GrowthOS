@@ -462,3 +462,135 @@ def test_intro_checks_all_existing_user_steps_without_relaxing_history(session, 
     monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 14, 4))
     assert p.followup(session, s, row.id, reader=all_steps, bot=bot)
     assert calls and not any(calls)
+
+
+def test_deadline_pace_stays_ordered_and_keeps_twenty_pending_cap(session, settings, monkeypatch):
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    policy = session.get(AppConfig, "pv_intro_policy")
+    policy.value = {**policy.value, "batch_cap": 20, "pace_mode": "continuous_sequential"}
+    session.add(
+        AppConfig(
+            key="pv_intro_cohort_20261013",
+            value={"contacts": list(range(100, 150)), "cursor": 0, "status": "running"},
+        )
+    )
+    session.commit()
+    monkeypatch.setattr(p, "MirzaMySQLReader", lambda s: reader)
+    p.plan_job(session, s, {})
+    assert session.query(FreeAllocation).count() == 20
+    assert session.get(AppConfig, "pv_intro_cohort_20261013").value["cursor"] == 20
+    monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 13, 4, 1))
+    p.plan_job(session, s, {})
+    assert session.query(FreeAllocation).count() == 20
+    assert session.get(AppConfig, "pv_intro_cohort_20261013").value["cursor"] == 20
+
+
+def test_definite_bot_rejection_is_not_an_ambiguous_delivery(session, settings, monkeypatch):
+    from pv_growth.acquisition.daily import BotFailure
+
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    row = p.reserve_intro(session, s, user_id=user.id, reader=reader)
+    original = bot.call
+
+    def reject(method, payload, **kwargs):
+        if method == "sendMessage":
+            raise BotFailure(403)
+        return original(method, payload, **kwargs)
+
+    bot.call = reject
+    assert not p.deliver_intro(session, s, row.id, reader=reader, bot=bot, adapter=adapter)
+    assert row.status == "delivery_rejected" and row.payload["send_failure_code"] == 403
+    assert not p.deliver_intro(session, s, row.id, reader=reader, bot=bot, adapter=adapter)
+    assert len(adapter.created) == 1
+
+
+def test_provision_failure_saves_only_safe_stage_and_hint(session, settings, monkeypatch):
+    from pv_growth.provisioning.xui import ProvisioningError
+
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    row = p.reserve_intro(session, s, user_id=user.id, reader=reader)
+
+    def timeout(**kwargs):
+        raise ProvisioningError("xui transport: ReadTimeout")
+
+    adapter.create_temp_service = timeout
+    assert not p.deliver_intro(session, s, row.id, reader=reader, bot=bot, adapter=adapter)
+    assert row.status == "provision_unknown"
+    assert row.payload["failure_stage"] == "create" and row.payload["failure_hint"] == "upstream_read_timeout"
+
+
+def test_full_batch_only_skips_idle_when_intro_has_due_backlog(settings, monkeypatch):
+    from pv_growth.jobs import runner
+    from pv_growth.jobs.scheduler import Scheduler
+
+    for backlog, expected in ((True, []), (False, [15.0])):
+        scheduler = Scheduler(settings)
+
+        class Stop:
+            checks = 0
+            waits = []
+
+            def is_set(self):
+                self.checks += 1
+                return self.checks > 1
+
+            def wait(self, seconds):
+                self.waits.append(seconds)
+
+        stop = Stop()
+        scheduler._stop = stop
+        monkeypatch.setattr(scheduler, "_enqueue_periodic", lambda: None)
+        monkeypatch.setattr(scheduler, "_intro_backlog", lambda value=backlog: value, raising=False)
+        monkeypatch.setattr(runner, "run_tick", lambda *a, **kw: settings.job_batch_size)
+        scheduler._loop()
+        assert stop.waits == expected
+
+
+def test_sequential_worker_reuses_paced_connections_without_repeating_effects(settings, monkeypatch):
+    from pv_growth.acquisition import intro as p
+
+    created = []
+    effects = []
+
+    class Resource:
+        client = None
+
+    monkeypatch.setattr(p, "PurchaseBot", lambda token: created.append("bot") or Resource())
+    monkeypatch.setattr(p, "get_provisioning", lambda cfg: created.append("adapter") or Resource())
+    monkeypatch.setattr(p, "deliver_intro", lambda db, cfg, key, **kw: effects.append(key))
+    p.close_worker_resources()
+    try:
+        p.deliver_job(None, settings, {"allocation_id": "first"})
+        p.deliver_job(None, settings, {"allocation_id": "second"})
+        assert created == ["bot", "adapter"] and effects == ["first", "second"]
+    finally:
+        p.close_worker_resources()
+
+
+def test_continuous_backlog_requires_live_today_due_attemptable_intro(session, settings, monkeypatch):
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    cfg = session.get(AppConfig, "pv_intro_policy")
+    cfg.value = {**cfg.value, "pace_mode": "continuous_sequential"}
+    cohort = AppConfig(
+        key="pv_intro_cohort_20261013", value={"status": "running", "contacts": [12345], "cursor": 0}
+    )
+    job = Job(
+        job_type="acquisition.intro_deliver",
+        payload={},
+        scheduled_at=datetime(2026, 10, 13, 4),
+        max_attempts=1,
+    )
+    session.add_all([cohort, job])
+    session.commit()
+    assert p.continuous_backlog(session, s)
+    job.attempt = 1
+    session.commit()
+    assert not p.continuous_backlog(session, s)
+    job.attempt = 0
+    job.scheduled_at = datetime(2026, 10, 13, 5)
+    session.commit()
+    assert not p.continuous_backlog(session, s)
+    job.scheduled_at = datetime(2026, 10, 13, 4)
+    cohort.value = {**cohort.value, "status": "paused_release"}
+    session.commit()
+    assert not p.continuous_backlog(session, s)

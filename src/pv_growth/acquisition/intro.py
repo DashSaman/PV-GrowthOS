@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from sqlalchemy import func, or_, select
 
-from pv_growth.acquisition.daily import PurchaseBot, private_chat, verified_receipt
+from pv_growth.acquisition.daily import BotFailure, PurchaseBot, private_chat, verified_receipt
 from pv_growth.core.flags import FlagService
 from pv_growth.database.models import (
     AppConfig,
@@ -40,6 +40,41 @@ POLICY = "pv_intro_policy"
 CODE = "pv_intro_5g_20261013"
 TRAFFIC = 5 * GIB
 TOTAL = 10000 * GIB
+_worker_key = None
+_worker_bot = None
+_worker_adapter = None
+
+
+def close_worker_resources():
+    global _worker_key, _worker_bot, _worker_adapter
+    for resource in (_worker_bot, _worker_adapter):
+        client = getattr(resource, "client", None) or getattr(resource, "_client", None)
+        if client is not None:
+            client.close()
+    _worker_key = _worker_bot = _worker_adapter = None
+
+
+def worker_resources(settings):
+    global _worker_key, _worker_bot, _worker_adapter
+    key = tuple(
+        getattr(settings, name)
+        for name in (
+            "purchase_bot_token",
+            "provisioning_base_url",
+            "provisioning_token",
+            "provisioning_inbound_ids",
+            "provisioning_sublink",
+            "provisioning_ca_bundle",
+            "provisioning_tls_verify",
+            "provisioning_timeout_seconds",
+        )
+    )
+    if key != _worker_key:
+        close_worker_resources()
+        _worker_bot = PurchaseBot(settings.purchase_bot_token)
+        _worker_adapter = get_provisioning(settings)
+        _worker_key = key
+    return _worker_bot, _worker_adapter
 
 
 def valid_user(user):
@@ -91,7 +126,7 @@ def policy(session, settings):
         or cfg.get("channel_followup_hours") != 48
         or cfg.get("planning_day") != "2026-10-13"
         or type(cfg.get("batch_cap")) is not int
-        or not 1 <= cfg["batch_cap"] <= 5
+        or not 1 <= cfg["batch_cap"] <= 20
         or not flags.enabled("FREE_CONFIG_ENABLED")
         or not flags.enabled("PV_EXCLUSIVE_CONFIG_ENABLED")
     ):
@@ -121,6 +156,46 @@ def decision(reader, recipient):
         )
     except Exception:
         return AudienceDecision(False, "history_unavailable")
+
+
+def continuous_backlog(session, settings):
+    current = policy(session, settings)
+    if not current or current[0].get("pace_mode") != "continuous_sequential":
+        return False
+    if local_day(utcnow()).isoformat() != current[0]["planning_day"]:
+        return False
+    cohort = session.get(AppConfig, "pv_intro_cohort_20261013", populate_existing=True)
+    if not cohort or cohort.value.get("status") != "running":
+        return False
+    return (
+        session.scalar(
+            select(Job.id)
+            .where(
+                Job.job_type == "acquisition.intro_deliver",
+                Job.status == "pending",
+                Job.scheduled_at <= utcnow(),
+                Job.attempt < Job.max_attempts,
+                Job.attempt < settings.job_max_attempts_default,
+                or_(Job.retry_after.is_(None), Job.retry_after <= utcnow()),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def failure_hint(exc):
+    return {
+        "xui transport: ReadTimeout": "upstream_read_timeout",
+        "xui transport: ConnectTimeout": "upstream_connect_timeout",
+        "panel client lookup unavailable": "client_lookup_unavailable",
+        "panel traffic usage unavailable": "traffic_usage_unavailable",
+        "idempotent client quota mismatch": "quota_mismatch",
+    }.get(str(exc), "unclassified")
+
+
+class ReceiptMismatch(Exception):
+    pass
 
 
 def eligible(reader, recipient):
@@ -239,7 +314,9 @@ def _send(bot, user, body, markup, guard):
         guard=guard,
     )
     plain = html.unescape(re.sub(r"<[^>]+>", "", body))
-    return result if verified_receipt(result, user.telegram_user_id, plain, markup) else None
+    if not verified_receipt(result, user.telegram_user_id, plain, markup):
+        raise ReceiptMismatch("purchase bot receipt mismatch")
+    return result
 
 
 def deliver_intro(session, settings, allocation_id, *, reader=None, bot=None, adapter=None):
@@ -285,6 +362,7 @@ def deliver_intro(session, settings, allocation_id, *, reader=None, bot=None, ad
         row.status = "provision_reserved"
         claim.provision_attempts = 1
         session.commit()  # consume reservation before the first possibly ambiguous panel call
+        stage = "create"
         try:
             service = adapter.create_temp_service(
                 location="auto",
@@ -294,13 +372,22 @@ def deliver_intro(session, settings, allocation_id, *, reader=None, bot=None, ad
                 protocol="vless",
                 idempotency_key=row.id,
             )
+            stage = "panel_before_probe"
             expires = _panel_proof(adapter, service, row, claim)
+            stage = "https_probe"
             uri, latency = verified_uri(service, settings)
+            stage = "panel_after_probe"
             _panel_proof(adapter, service, row, claim)
+            stage = "binding_recheck"
             require_tunnel_plan(session, settings)
         except Exception as exc:
             row.status = "provision_unknown"
-            row.payload = {**row.payload, "failure_class": type(exc).__name__}
+            row.payload = {
+                **row.payload,
+                "failure_class": type(exc).__name__,
+                "failure_stage": stage,
+                "failure_hint": failure_hint(exc),
+            }
             session.commit()
             return False
         row, user = _locked(session, allocation_id)
@@ -350,13 +437,21 @@ def deliver_intro(session, settings, allocation_id, *, reader=None, bot=None, ad
                 [{"text": "🛒 خرید و تعرفه‌های سرویس اصلی", "url": "https://t.me/pvnetwork_bot"}]
             ]
         }
+        rejected = False
         try:
             result = _send(bot, user, _body(uri), markup, guard)
-        except Exception:
+        except Exception as exc:
+            code = exc.code if isinstance(exc, BotFailure) else None
+            rejected = code in (400, 403, 404)
+            row.payload = {**row.payload, "send_failure_class": type(exc).__name__, "send_failure_code": code}
             result = None
         if not result:
-            row.status = "delivery_unknown"
-            receipt.status = "delivery_unknown"
+            row.status = "delivery_rejected" if rejected else "delivery_unknown"
+            receipt.status = "failed" if rejected else "delivery_unknown"
+            receipt.meta = {
+                "failure_class": row.payload.get("send_failure_class"),
+                "failure_code": row.payload.get("send_failure_code"),
+            }
             session.commit()
             return False
         delivered = utcnow()  # followup is anchored to the confirmed send, never account creation
@@ -534,7 +629,8 @@ def followup(session, settings, allocation_id, *, stage=24, reader=None, bot=Non
 
 @handler("acquisition.intro_deliver")
 def deliver_job(session, settings, payload):
-    deliver_intro(session, settings, payload["allocation_id"])
+    bot, adapter = worker_resources(settings)
+    deliver_intro(session, settings, payload["allocation_id"], bot=bot, adapter=adapter)
 
 
 @handler("acquisition.intro_followup")

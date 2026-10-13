@@ -87,11 +87,20 @@ class Scheduler:
         while not self._stop.is_set():
             try:
                 self._enqueue_periodic()
-                run_tick(settings, worker_id="scheduler")
+                executed = run_tick(settings, worker_id="scheduler")
+                if executed >= settings.job_batch_size and self._intro_backlog():
+                    continue
             except Exception as exc:  # noqa: BLE001 — the loop itself must never die
                 log.error("scheduler tick failed", error=str(exc))
             self._stop.wait(settings.scheduler_interval_seconds)
         log.info("scheduler loop stopped")
+
+    def _intro_backlog(self) -> bool:
+        from pv_growth.acquisition.intro import continuous_backlog
+        from pv_growth.database.base import session_scope
+
+        with session_scope(self._settings) as session:
+            return continuous_backlog(session, self._settings)
 
     def _poll_loop(self) -> None:
         from pv_growth.api.webhooks import process_update
@@ -215,9 +224,15 @@ class Scheduler:
 
     def stop(self) -> None:
         self._stop.set()
+        worker_stopped = True
         if self._thread is not None:
             self._thread.join(timeout=10)
+            worker_stopped = not self._thread.is_alive()
             self._thread = None
         if self._poll_thread is not None:
             self._poll_thread.join(timeout=35)
             self._poll_thread = None
+        from pv_growth.acquisition.intro import close_worker_resources
+
+        if worker_stopped:
+            close_worker_resources()

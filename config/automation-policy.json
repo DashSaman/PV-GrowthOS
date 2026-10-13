@@ -86,7 +86,7 @@
     "active_or_unknown_service_excluded": true,
     "followup_after_confirmed_delivery_hours": 24,
     "stop_followup_after_purchase": true,
-    "batch_cap": 5,
+    "batch_cap": 20,
     "scan_cap": 30,
     "budget_includes_failures_and_unknowns": true,
     "private_sender": "pvnetwork_bot",
@@ -96,6 +96,10 @@
     "planning_day": "2026-10-13",
     "batch_interval_minutes": 1,
     "pending_deliveries_cap": 20,
-    "channel_followup_after_confirmed_delivery_hours": 48
+    "channel_followup_after_confirmed_delivery_hours": 48,
+    "pace_mode": "continuous_sequential",
+    "target_completion_tehran": "2026-10-13T17:00:00+03:30",
+    "single_sender": true,
+    "skip_full_batch_idle_only_with_due_intro_backlog": true
   }
 }
