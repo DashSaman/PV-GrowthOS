@@ -1,4 +1,4 @@
-"""Finite, once-per-person owned 5-GiB intro and a single nonbuyer followup."""
+"""Finite, once-per-person owned 5-GiB intro and purchase at 24h and channel at 48h."""
 
 from __future__ import annotations
 
@@ -11,7 +11,15 @@ from sqlalchemy import func, or_, select
 
 from pv_growth.acquisition.daily import PurchaseBot, private_chat, verified_receipt
 from pv_growth.core.flags import FlagService
-from pv_growth.database.models import AppConfig, Campaign, ExclusiveClaim, FreeAllocation, MessageLog, User
+from pv_growth.database.models import (
+    AppConfig,
+    Campaign,
+    ExclusiveClaim,
+    FreeAllocation,
+    Job,
+    MessageLog,
+    User,
+)
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import get_or_create_user
 from pv_growth.free_config.audience import AudienceDecision, evaluate_history
@@ -31,7 +39,7 @@ from pv_growth.provisioning.xui import get_provisioning
 POLICY = "pv_intro_policy"
 CODE = "pv_intro_5g_20261013"
 TRAFFIC = 5 * GIB
-TOTAL = 1000 * GIB
+TOTAL = 10000 * GIB
 
 
 def valid_user(user):
@@ -52,7 +60,11 @@ def other_message(session, user_id, delivered, allocation_id):
                 MessageLog.user_id == user_id,
                 MessageLog.status.in_(["reserved", "sent", "delivery_unknown"]),
                 MessageLog.dedupe_key.not_in(
-                    [f"intro-send:{allocation_id}", f"intro-followup-send:{allocation_id}"]
+                    [
+                        f"intro-send:{allocation_id}",
+                        f"intro-followup-send:{allocation_id}",
+                        f"intro-channel-send:{allocation_id}",
+                    ]
                 ),
                 or_(MessageLog.sent_at.is_(None), MessageLog.sent_at > delivered),
             )
@@ -76,8 +88,10 @@ def policy(session, settings):
         or cfg.get("validity_hours") != 24
         or cfg.get("dormant_days") != 30
         or cfg.get("followup_hours") != 24
+        or cfg.get("channel_followup_hours") != 48
+        or cfg.get("planning_day") != "2026-10-13"
         or type(cfg.get("batch_cap")) is not int
-        or not 1 <= cfg["batch_cap"] <= 10
+        or not 1 <= cfg["batch_cap"] <= 5
         or not flags.enabled("FREE_CONFIG_ENABLED")
         or not flags.enabled("PV_EXCLUSIVE_CONFIG_ENABLED")
     ):
@@ -130,8 +144,10 @@ def reserve_intro(session, settings, *, user_id, reader):
     if current is None:
         return None
     cfg, campaign = current
+    if local_day(utcnow()).isoformat() != cfg["planning_day"]:
+        return None
     require_tunnel_plan(session, settings)
-    lock_day(session, local_day())
+    lock_day(session, local_day(utcnow()))
     # Existing global quota lock serializes reservations across Tehran days.
     user = session.scalar(
         select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True)
@@ -146,14 +162,14 @@ def reserve_intro(session, settings, *, user_id, reader):
         return None  # includes old failed/unknown gifts; no fresh campaign can replay one
     if remaining(session, campaign) < TRAFFIC or not eligible(reader, user.telegram_user_id):
         return None
-    if policy(session, settings) is None:
+    if policy(session, settings) is None or local_day(utcnow()).isoformat() != cfg["planning_day"]:
         return None
     key = f"pv-intro-once:{user_id}"
     claim = ExclusiveClaim(
         claim_key=key,
         campaign_id=campaign.id,
         user_id=user_id,
-        claim_date=local_day(),
+        claim_date=local_day(utcnow()),
         traffic_gb=5,
         traffic_bytes=TRAFFIC,
         validity_hours=24,
@@ -164,7 +180,7 @@ def reserve_intro(session, settings, *, user_id, reader):
     session.flush()
     row = FreeAllocation(
         id=key,
-        day=local_day(),
+        day=local_day(utcnow()),
         bucket="acq_intro",
         traffic_bytes=TRAFFIC,
         user_id=user_id,
@@ -207,6 +223,7 @@ def _body(uri):
     return (
         "🎁 <b>۵ گیگ تست شخصی سرویس اصلی PV Network | VIP</b>\n\n"
         "📦 حجم مخصوص شما: ۵ گیگ · ⏳ حداکثر ۲۴ ساعت یا پایان حجم\n"
+        "⚠️ این اشانتیون فقط ۲۴ ساعت معتبر است و تمدید خودکار ندارد.\n"
         "✅ اتصال واقعی HTTPS پیش از تحویل از سرور ما بررسی شد؛ نتیجهٔ اینترنت‌ها ممکن است متفاوت باشد.\n"
         "📋 کد زیر را کپی و در برنامهٔ اتصال وارد کنید:\n\n"
         f"<code>{html.escape(uri)}</code>\n\n"
@@ -238,6 +255,7 @@ def deliver_intro(session, settings, allocation_id, *, reader=None, bot=None, ad
         current = policy(session, settings)
         if (
             not current
+            or local_day(utcnow()).isoformat() != current[0]["planning_day"]
             or row.campaign_id != current[1].id
             or not claim
             or claim.claim_key != row.id
@@ -318,6 +336,7 @@ def deliver_intro(session, settings, allocation_id, *, reader=None, bot=None, ad
             live_user = session.get(User, user.id, populate_existing=True)
             if (
                 not latest
+                or local_day(utcnow()).isoformat() != latest[0]["planning_day"]
                 or latest[1].id != row.campaign_id
                 or not valid_user(live_user)
                 or not eligible(reader, user.telegram_user_id)
@@ -350,6 +369,7 @@ def deliver_intro(session, settings, allocation_id, *, reader=None, bot=None, ad
             "message_id": result["message_id"],
             "delivered_at_utc": delivered.isoformat(),
             "followup_status": "pending",
+            "channel_followup_status": "pending",
         }
         receipt.status = "sent"
         receipt.sent_at = delivered
@@ -359,14 +379,8 @@ def deliver_intro(session, settings, allocation_id, *, reader=None, bot=None, ad
             "delivery_kind": "acquisition_intro_5g",
             "message_id": result["message_id"],
         }
-        enqueue(
-            session,
-            "acquisition.intro_followup",
-            {"allocation_id": row.id},
-            scheduled_at=delivered + timedelta(hours=24),
-            idempotency_key=f"intro-followup:{row.id}",
-            max_attempts=1,
-        )
+        schedule_followups(session, row)
+
         session.commit()
         return True
     finally:
@@ -374,7 +388,27 @@ def deliver_intro(session, settings, allocation_id, *, reader=None, bot=None, ad
             bot.client.close()
 
 
-def followup(session, settings, allocation_id, *, reader=None, bot=None):
+def schedule_followups(session, row):
+    """Preserve the old 24h job/key; add only the separately deduped 48h stage."""
+    from datetime import datetime
+
+    assert row.bucket == "acq_intro" and row.status == "delivered"
+    delivered = datetime.fromisoformat(row.payload["delivered_at_utc"])
+    for hours, key in ((24, "intro-followup"), (48, "intro-channel")):
+        enqueue(
+            session,
+            "acquisition.intro_followup",
+            {"allocation_id": row.id, "stage": hours},
+            scheduled_at=delivered + timedelta(hours=hours),
+            idempotency_key=f"{key}:{row.id}",
+            max_attempts=1,
+        )
+
+
+def followup(session, settings, allocation_id, *, stage=24, reader=None, bot=None):
+    if stage not in (24, 48):
+        return False
+    field = "followup_status" if stage == 24 else "channel_followup_status"
     reader = reader or MirzaMySQLReader(settings)
     own_bot = bot is None
     bot = bot or PurchaseBot(settings.purchase_bot_token)
@@ -384,46 +418,52 @@ def followup(session, settings, allocation_id, *, reader=None, bot=None):
             not row
             or row.bucket != "acq_intro"
             or row.status != "delivered"
-            or row.payload.get("followup_status") != "pending"
+            or row.payload.get(field, "pending") != "pending"
             or not valid_user(user)
         ):
             return False
         from datetime import datetime
 
         delivered = datetime.fromisoformat(row.payload["delivered_at_utc"])
-        due = delivered + timedelta(hours=24)
+        due = delivered + timedelta(hours=stage)
         if utcnow() < due:
             return False
         if policy(session, settings) is None:
             return False
+        if stage == 48 and row.payload.get("followup_status") != "sent":
+            row.payload = {**row.payload, field: "purchase_stage_incomplete"}
+            session.commit()
+            return False
         if other_message(session, user.id, delivered, row.id):
-            row.payload = {**row.payload, "followup_status": "other_message_suppressed"}
+            row.payload = {**row.payload, field: "other_message_suppressed"}
             session.commit()
             return False
         audience = decision(reader, user.telegram_user_id)
         if not audience.eligible:
             row.payload = {
                 **row.payload,
-                "followup_status": (
+                field: (
                     "stopped_after_purchase" if audience.reason == "recent_purchase" else "history_blocked"
                 ),
-                "followup_block_reason": audience.reason,
+                f"{field}_block_reason": audience.reason,
             }
             session.commit()
             return False
         if not _bot_identity(bot, settings):
             return False
+        purpose = "pv_intro_buy24" if stage == 24 else "pv_intro_channel48"
+        send_key = "intro-followup-send" if stage == 24 else "intro-channel-send"
         receipt, created = record_send(
             session,
             user_id=user.id,
-            template_code="pv_intro_followup",
-            purpose="pv_intro_followup",
-            dedupe_key=f"intro-followup-send:{row.id}",
+            template_code=purpose,
+            purpose=purpose,
+            dedupe_key=f"{send_key}:{row.id}",
         )
         if not created:
             return False
         receipt.attempts = 1
-        row.payload = {**row.payload, "followup_status": "message_reserved"}
+        row.payload = {**row.payload, field: "message_reserved"}
         session.commit()
         body = (
             "🌐 ادامهٔ اتصال رایگان در کانال PV Network\n\n"
@@ -445,6 +485,18 @@ def followup(session, settings, allocation_id, *, reader=None, bot=None):
             ]
         }
 
+        if stage == 24:
+            body = (
+                "⏳ <b>مهلت ۲۴ ساعت اشانتیون ۵ گیگی پایان یافت</b>\n\n"
+                "این تست فقط ۲۴ ساعت اعتبار داشت و تمدید خودکار ندارد.\n"
+                "💎 برای ادامهٔ استفاده، سرویس شخصی همان تونل اصلی PV Network را انتخاب کنید؛ "
+                "حجم و مدت دلخواه، راهنمای اتصال و پشتیبانی از ربات رسمی خرید.\n"
+                "🛒 مشاهدهٔ پلن‌ها و خرید: @pvnetwork_bot"
+            )
+            markup = {
+                "inline_keyboard": [[{"text": "🛒 خرید سرویس اصلی PV", "url": "https://t.me/pvnetwork_bot"}]]
+            }
+
         def guard():
             live_user = session.scalar(
                 select(User)
@@ -464,11 +516,15 @@ def followup(session, settings, allocation_id, *, reader=None, bot=None):
             result = _send(bot, user, body, markup, guard)
         except Exception:
             result = None
-        row.payload = {**row.payload, "followup_status": "sent" if result else "delivery_unknown"}
+        row.payload = {**row.payload, field: "sent" if result else "delivery_unknown"}
         receipt.status = "sent" if result else "delivery_unknown"
         if result:
             receipt.sent_at = utcnow()
-            receipt.meta = {"source": "channel:acq_intro_20261013", "message_id": result["message_id"]}
+            receipt.meta = {
+                "source": "channel:acq_intro_20261013",
+                "message_id": result["message_id"],
+                "stage_hours": stage,
+            }
         session.commit()
         return bool(result)
     finally:
@@ -483,14 +539,18 @@ def deliver_job(session, settings, payload):
 
 @handler("acquisition.intro_followup")
 def followup_job(session, settings, payload):
+    stage = payload.get("stage", 24)  # existing jobs become purchase-only, never the old channel offer
+    if stage not in (24, 48):
+        return
     row = session.get(FreeAllocation, payload["allocation_id"])
-    if row and row.status == "delivered" and row.payload.get("followup_status") == "pending":
+    field = "followup_status" if stage == 24 else "channel_followup_status"
+    if row and row.status == "delivered" and row.payload.get(field, "pending") == "pending":
         from datetime import datetime
 
-        due = datetime.fromisoformat(row.payload["delivered_at_utc"]) + timedelta(hours=24)
+        due = datetime.fromisoformat(row.payload["delivered_at_utc"]) + timedelta(hours=stage)
         if utcnow() < due:
             raise DeferredJobError(due)
-    followup(session, settings, payload["allocation_id"])
+    followup(session, settings, payload["allocation_id"], stage=stage)
 
 
 @handler("acquisition.intro_plan")
@@ -499,6 +559,8 @@ def plan_job(session, settings, payload):
     if current is None:
         return
     cfg, campaign = current
+    if local_day(utcnow()).isoformat() != cfg["planning_day"]:
+        return
     key = "pv_intro_cohort_20261013"
     cohort = session.scalar(
         select(AppConfig)
@@ -508,6 +570,22 @@ def plan_job(session, settings, payload):
     )
     if cohort is None or cohort.value.get("status") != "running":
         return
+    minute = utcnow().isoformat()[:16]
+    if cohort.value.get("last_plan_minute") == minute:
+        return
+    pending = (
+        session.scalar(
+            select(func.count())
+            .select_from(Job)
+            .where(Job.job_type == "acquisition.intro_deliver", Job.status.in_(["pending", "running"]))
+        )
+        or 0
+    )
+    capacity = min(cfg["batch_cap"], max(0, 20 - pending))
+    if not capacity:
+        return  # no cursor movement while the delivery queue is backed up
+    cohort.value = {**cohort.value, "last_plan_minute": minute}
+    session.commit()
     contacts = cohort.value["contacts"]
     cursor = cohort.value.get("cursor", 0)
     reader = MirzaMySQLReader(settings)
@@ -517,7 +595,7 @@ def plan_job(session, settings, payload):
     # Freeze/progress the authorized existing-mainbot cohort; no unbounded discovery loop.
     while (
         cursor < len(contacts)
-        and planned < cfg["batch_cap"]
+        and planned < capacity
         and scanned < 30
         and time.monotonic() - started < 30
         and remaining(session, campaign) >= TRAFFIC

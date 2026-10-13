@@ -91,12 +91,14 @@ def ready(session, settings, monkeypatch):
             value={
                 "enabled": True,
                 "campaign_code": "pv_intro_5g_20261013",
-                "total_bytes": 1000 * GIB,
+                "total_bytes": 10000 * GIB,
                 "traffic_bytes": 5 * GIB,
                 "validity_hours": 24,
                 "dormant_days": 30,
                 "followup_hours": 24,
-                "batch_cap": 10,
+                "channel_followup_hours": 48,
+                "planning_day": "2026-10-13",
+                "batch_cap": 5,
             },
         )
     )
@@ -123,7 +125,7 @@ def test_gift_is_exact_main_five_gib_and_followup_starts_at_confirmed_delivery(
     assert len(adapter.created) == 1 and adapter.created[0]["traffic_bytes"] == 5 * GIB
     assert adapter.created[0]["validity_hours"] == 24
     jobs = session.query(Job).filter_by(job_type="acquisition.intro_followup").all()
-    assert len(jobs) == 1 and jobs[0].scheduled_at == datetime(2026, 10, 14, 4)
+    assert sorted(j.scheduled_at for j in jobs) == [datetime(2026, 10, 14, 4), datetime(2026, 10, 15, 4)]
     assert row.payload["tunnel_plan"]
     assert p.reserve_intro(session, s, user_id=user.id, reader=reader) is None
     assert not p.deliver_intro(session, s, row.id, reader=reader, bot=bot, adapter=adapter)
@@ -148,7 +150,7 @@ def test_concurrent_last_five_gib_reserves_once_in_postgres(session, settings, m
             day=datetime(2026, 10, 12).date(),
             bucket="acq_intro",
             campaign_id=campaign.id,
-            traffic_bytes=995 * GIB,
+            traffic_bytes=9995 * GIB,
             status="delivery_unknown",
         )
     )
@@ -165,7 +167,7 @@ def test_concurrent_last_five_gib_reserves_once_in_postgres(session, settings, m
         results = list(executor.map(attempt, ids))
     assert sum(results) == 1
     session.expire_all()
-    assert sum(r.traffic_bytes for r in session.query(FreeAllocation).all()) == 1000 * GIB
+    assert sum(r.traffic_bytes for r in session.query(FreeAllocation).all()) == 10000 * GIB
 
 
 def test_purchase_during_probe_prevents_send_and_followup(session, settings, monkeypatch):
@@ -258,8 +260,8 @@ def test_scheduler_and_registry_plan_only_authorized_frozen_cohort(session, sett
     session.commit()
     enqueue_free_growth(session, s, now=datetime(2026, 10, 13, 4, 1))
     enqueue_free_growth(session, s, now=datetime(2026, 10, 13, 4, 2))
-    assert session.query(Job).filter_by(job_type="acquisition.intro_plan").count() == 1
-    assert session.query(Job).filter_by(job_type="acquisition.intro_plan").one().max_attempts == 1
+    assert session.query(Job).filter_by(job_type="acquisition.intro_plan").count() == 2
+    assert session.query(Job).filter_by(job_type="acquisition.intro_plan").first().max_attempts == 1
     register_builtin_handlers()
     assert all(
         k in _HANDLERS
@@ -297,7 +299,7 @@ def test_campaign_budget_is_total_across_days_and_unknowns_count(session, settin
             day=datetime(2026, 10, 12).date(),
             bucket="acq_intro",
             campaign_id=campaign.id,
-            traffic_bytes=996 * GIB,
+            traffic_bytes=9996 * GIB,
             status="delivery_unknown",
         )
     )
@@ -338,5 +340,107 @@ def test_followup_sends_one_clean_channel_offer_without_another_grant(session, s
     assert p.followup(session, s, row.id, reader=reader, bot=bot)
     assert not p.followup(session, s, row.id, reader=reader, bot=bot)
     sends = [v for m, v in bot.calls if m == "sendMessage"]
-    assert len(sends) == 2 and "pvnetwork_freeconfig" in sends[-1]["text"]
+    assert len(sends) == 2 and "pvnetwork_freeconfig" not in sends[-1]["text"]
+    assert "۲۴ ساعت" in sends[-1]["text"]
+    monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 15, 4))
+    assert p.followup(session, s, row.id, stage=48, reader=reader, bot=bot)
+    assert not p.followup(session, s, row.id, stage=48, reader=reader, bot=bot)
+    sends = [v for m, v in bot.calls if m == "sendMessage"]
+    assert len(sends) == 3 and "pvnetwork_freeconfig" in sends[-1]["text"]
     assert len(adapter.created) == 1
+
+
+def test_today_only_reservation_and_early_channel_block(session, settings, monkeypatch):
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    row = p.reserve_intro(session, s, user_id=user.id, reader=reader)
+    assert p.deliver_intro(session, s, row.id, reader=reader, bot=bot, adapter=adapter)
+    monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 14, 4))
+    assert not p.followup(session, s, row.id, stage=48, reader=reader, bot=bot)
+    other = User(telegram_user_id=54321, telegram_chat_id=54321)
+    session.add(other)
+    session.commit()
+
+    assert p.reserve_intro(session, s, user_id=other.id, reader=reader) is None
+    assert p.followup(session, s, row.id, reader=reader, bot=bot)
+
+
+def test_purchase_after_buy_offer_stops_channel_offer(session, settings, monkeypatch):
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    row = p.reserve_intro(session, s, user_id=user.id, reader=reader)
+    assert p.deliver_intro(session, s, row.id, reader=reader, bot=bot, adapter=adapter)
+    monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 14, 4))
+    assert p.followup(session, s, row.id, reader=reader, bot=bot)
+    monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 15, 4))
+    reader.history = ([], [], [{"payment_Status": "paid", "price": 100, "time": "2026-10-14 15:30:00"}])
+    assert not p.followup(session, s, row.id, stage=48, reader=reader, bot=bot)
+    assert row.payload["channel_followup_status"] == "stopped_after_purchase"
+    assert len([v for m, v in bot.calls if m == "sendMessage"]) == 2
+
+
+def test_unknown_purchase_offer_prevents_channel_followup(session, settings, monkeypatch):
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    row = p.reserve_intro(session, s, user_id=user.id, reader=reader)
+    assert p.deliver_intro(session, s, row.id, reader=reader, bot=bot, adapter=adapter)
+    monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 14, 4))
+    bot.fail = True
+    assert not p.followup(session, s, row.id, reader=reader, bot=bot)
+    bot.fail = False
+    monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 15, 4))
+    assert not p.followup(session, s, row.id, stage=48, reader=reader, bot=bot)
+    assert row.payload["channel_followup_status"] == "purchase_stage_incomplete"
+
+
+def test_delivery_backpressure_preserves_cohort_cursor(session, settings, monkeypatch):
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    session.add(
+        AppConfig(
+            key="pv_intro_cohort_20261013", value={"contacts": [12345], "cursor": 0, "status": "running"}
+        )
+    )
+    for i in range(20):
+        session.add(
+            Job(
+                job_type="acquisition.intro_deliver",
+                payload={},
+                idempotency_key=f"pending-{i}",
+                max_attempts=1,
+            )
+        )
+    session.commit()
+    p.plan_job(session, s, {})
+    assert session.get(AppConfig, "pv_intro_cohort_20261013").value["cursor"] == 0
+    assert not session.query(FreeAllocation).count()
+
+
+def test_legacy_followup_job_maps_to_purchase_and_migration_is_idempotent(session, settings, monkeypatch):
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    row = p.reserve_intro(session, s, user_id=user.id, reader=reader)
+    assert p.deliver_intro(session, s, row.id, reader=reader, bot=bot, adapter=adapter)
+    original = session.query(Job).filter_by(idempotency_key=f"intro-followup:{row.id}").one()
+    original.payload = {"allocation_id": row.id}
+    session.commit()
+    p.schedule_followups(session, row)
+    p.schedule_followups(session, row)
+    session.commit()
+    assert session.query(Job).filter_by(job_type="acquisition.intro_followup").count() == 2
+    calls = []
+    monkeypatch.setattr(p, "followup", lambda *a, **kw: calls.append(kw["stage"]))
+    monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 14, 4))
+    p.followup_job(session, s, original.payload)
+    assert calls == [24]
+
+
+def test_duplicate_planner_in_one_minute_cannot_exceed_five(session, settings, monkeypatch):
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    monkeypatch.setattr(p, "MirzaMySQLReader", lambda s: reader)
+    session.add(
+        AppConfig(
+            key="pv_intro_cohort_20261013",
+            value={"contacts": list(range(100, 120)), "cursor": 0, "status": "running"},
+        )
+    )
+    session.commit()
+    p.plan_job(session, s, {})
+    p.plan_job(session, s, {})
+    assert session.query(FreeAllocation).count() == 5
+    assert session.get(AppConfig, "pv_intro_cohort_20261013").value["cursor"] == 5
