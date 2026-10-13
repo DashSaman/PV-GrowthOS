@@ -24,6 +24,19 @@ def enqueue_free_growth(session, settings: Settings, now: datetime | None = None
     now = now or utcnow()
     day = local_day(now).isoformat()
     policy = growth_policy(session)
+    from pv_growth.acquisition.intro import policy as intro_policy
+    from pv_growth.database.models import AppConfig
+
+    cohort = session.get(AppConfig, "pv_intro_cohort_20261013")
+    if intro_policy(session, settings) and cohort and cohort.value.get("status") == "running":
+        jobs.enqueue(
+            session,
+            "acquisition.intro_plan",
+            {},
+            idempotency_key=f"intro_plan:{now.isoformat()[:15]}:{now.minute // 5}",
+            max_attempts=1,
+            priority=-5,
+        )
     from pv_growth.acquisition.daily import enabled_policy
 
     if enabled_policy(session) is not None and now.hour == 6 and 15 <= now.minute < 30:

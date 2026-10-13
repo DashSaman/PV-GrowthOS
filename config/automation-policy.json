@@ -75,5 +75,21 @@
   "gift_both_memberships_required": true,
   "active_or_unverified_services_excluded_for_member_gifts": false,
   "owned_shared_direct_enabled": true,
-  "owned_main_direct_enabled": false
+  "owned_main_direct_enabled": false,
+  "intro_funnel": {
+    "traffic_gib": 5,
+    "validity_hours_max": 24,
+    "campaign_total_gib": 1000,
+    "maximum_reservations": 200,
+    "dormant_days": 30,
+    "before_channel_membership": true,
+    "active_or_unknown_service_excluded": true,
+    "followup_after_confirmed_delivery_hours": 24,
+    "stop_followup_after_purchase": true,
+    "batch_cap": 10,
+    "scan_cap": 30,
+    "budget_includes_failures_and_unknowns": true,
+    "private_sender": "pvnetwork_bot",
+    "historical_invites_replayed": false
+  }
 }
