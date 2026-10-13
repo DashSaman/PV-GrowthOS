@@ -24,6 +24,12 @@ def enqueue_free_growth(session, settings: Settings, now: datetime | None = None
     now = now or utcnow()
     day = local_day(now).isoformat()
     policy = growth_policy(session)
+    from pv_growth.free_config.autonomous import enqueue_native, hours_for
+
+    enqueue_native(session, settings, now)
+    shared_hours = (
+        hours_for(session, local_day(now)) if policy.get("server_autonomy_enabled") else SHARED_HOURS_UTC
+    )
     from pv_growth.acquisition.intro import policy as intro_policy
     from pv_growth.database.models import AppConfig
 
@@ -52,8 +58,8 @@ def enqueue_free_growth(session, settings: Settings, now: datetime | None = None
     # local day; after rollover, skip it rather than replaying yesterday or
     # consuming tomorrow's slot 9 before its actual 23:30 schedule.
     shared_day = local_day(now.replace(minute=0, second=0, microsecond=0)).isoformat()
-    if policy.get("public_shared_enabled") and now.hour in SHARED_HOURS_UTC and shared_day == day:
-        slot = SHARED_HOURS_UTC.index(now.hour) + 1
+    if policy.get("public_shared_enabled") and now.hour in shared_hours and shared_day == day:
+        slot = shared_hours.index(now.hour) + 1
         jobs.enqueue(
             session,
             "free_config.shared_publish",
@@ -168,6 +174,11 @@ class Scheduler:
             # a bounded cadence, and publish at most one post per configured
             # UTC hour. Effect-level post dedupe is a second guard.
             collect_seconds = max(1, self._settings.free_collect_interval_hours) * 3600
+            from pv_growth.free_config.shared_public import growth_policy
+
+            autonomous = growth_policy(session).get("server_autonomy_enabled") is True
+            if autonomous:
+                collect_seconds = 3600  # refresh only approved sources; bounded fetchers still apply
             cbucket = int(time.time() // collect_seconds)
             jobs.enqueue(
                 session,
@@ -195,7 +206,7 @@ class Scheduler:
             same_scheduled_day = local_day(stamp) == local_day(
                 stamp.replace(minute=0, second=0, microsecond=0)
             )
-            if now_utc.tm_hour in publish_hours and (not direct or same_scheduled_day):
+            if not autonomous and now_utc.tm_hour in publish_hours and (not direct or same_scheduled_day):
                 slot = publish_hours.index(now_utc.tm_hour) + 1
                 day_key = local_day(stamp).isoformat() if direct else time.strftime("%Y-%m-%d", now_utc)
                 jobs.enqueue(
