@@ -73,16 +73,24 @@ class MirzaMySQLReader:
             cur.execute("SELECT id_invoice FROM invoice")
             return [str(r["id_invoice"]) for r in cur.fetchall()]
 
-    def list_private_invite_contacts(self, *, limit=5000):
+    def list_private_invite_contacts(self, *, limit=5000, require_home=True):
         """Existing active ordinary private-bot users only; bounded readonly discovery."""
-        if type(limit) is not int or not 1 <= limit <= 5000:
+        if type(limit) is not int or not 1 <= limit <= 5000 or type(require_home) is not bool:
             raise ValueError("invalid contact limit")
         with self.connect() as conn, conn.cursor() as cur:
             try:
                 cur.execute("START TRANSACTION READ ONLY")
-                cur.execute(
+                query = (
                     "SELECT id FROM user WHERE User_Status='Active' AND agent='f' "
-                    "AND step='home' ORDER BY id DESC LIMIT %s",
+                    "AND step='home' ORDER BY id DESC LIMIT %s"
+                    if require_home
+                    else (
+                        "SELECT id FROM user WHERE User_Status='Active' AND agent='f' "
+                        "ORDER BY id DESC LIMIT %s"
+                    )
+                )
+                cur.execute(
+                    query,
                     (limit,),
                 )
                 rows = cur.fetchall()
@@ -94,7 +102,9 @@ class MirzaMySQLReader:
             finally:
                 conn.rollback()
 
-    def fetch_private_invite_history(self, recipient):
+    def fetch_private_invite_history(self, recipient, *, require_home=True):
+        if type(require_home) is not bool:
+            raise ValueError("invalid contact scope")
         with self.connect() as conn, conn.cursor() as cur:
             try:
                 cur.execute("START TRANSACTION READ ONLY")
@@ -105,7 +115,7 @@ class MirzaMySQLReader:
                     or str(row["id"]) != str(recipient)
                     or row["User_Status"] != "Active"
                     or row["agent"] != "f"
-                    or row["step"] != "home"
+                    or (require_home and row["step"] != "home")
                 ):
                     return None
                 results = []

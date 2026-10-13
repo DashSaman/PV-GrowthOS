@@ -13,7 +13,7 @@ class Reader:
     def __init__(self):
         self.history = ([], [], [])
 
-    def fetch_private_invite_history(self, recipient):
+    def fetch_private_invite_history(self, recipient, *, require_home=True):
         return self.history
 
 
@@ -206,7 +206,7 @@ def test_planner_is_bounded_and_does_not_serialize_unbounded_contacts(session, s
     class CountingReader(Reader):
         calls = 0
 
-        def fetch_private_invite_history(self, recipient):
+        def fetch_private_invite_history(self, recipient, *, require_home=True):
             self.calls += 1
             return None
 
@@ -444,3 +444,21 @@ def test_duplicate_planner_in_one_minute_cannot_exceed_five(session, settings, m
     p.plan_job(session, s, {})
     assert session.query(FreeAllocation).count() == 5
     assert session.get(AppConfig, "pv_intro_cohort_20261013").value["cursor"] == 5
+
+
+def test_intro_checks_all_existing_user_steps_without_relaxing_history(session, settings, monkeypatch):
+    p, s, user, reader, bot, adapter = ready(session, settings, monkeypatch)
+    calls = []
+
+    class AnyStepReader(Reader):
+        def fetch_private_invite_history(self, recipient, *, require_home=True):
+            calls.append(require_home)
+            return None if require_home else ([], [], [])
+
+    all_steps = AnyStepReader()
+    row = p.reserve_intro(session, s, user_id=user.id, reader=all_steps)
+    assert row and calls == [False]
+    assert p.deliver_intro(session, s, row.id, reader=all_steps, bot=bot, adapter=adapter)
+    monkeypatch.setattr(p, "utcnow", lambda: datetime(2026, 10, 14, 4))
+    assert p.followup(session, s, row.id, reader=all_steps, bot=bot)
+    assert calls and not any(calls)

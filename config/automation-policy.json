@@ -91,6 +91,8 @@
     "budget_includes_failures_and_unknowns": true,
     "private_sender": "pvnetwork_bot",
     "historical_invites_replayed": false,
+    "recipient_scope": "existing_active_ordinary_mainbot_users_all_steps",
+    "recipient_home_screen_required": false,
     "planning_day": "2026-10-13",
     "batch_interval_minutes": 1,
     "pending_deliveries_cap": 20,
