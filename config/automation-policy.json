@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "owner_authorized_at": "2026-10-12",
+  "owner_authorized_at": "2026-10-13",
   "purpose": "operational_contract_not_a_runtime_importer",
   "timezone": "Asia/Tehran",
   "existing_automation_id": "pv-growthos-canary",
@@ -79,17 +79,21 @@
   "intro_funnel": {
     "traffic_gib": 5,
     "validity_hours_max": 24,
-    "campaign_total_gib": 1000,
-    "maximum_reservations": 200,
+    "campaign_total_gib": 10000,
+    "maximum_reservations": 2000,
     "dormant_days": 30,
     "before_channel_membership": true,
     "active_or_unknown_service_excluded": true,
     "followup_after_confirmed_delivery_hours": 24,
     "stop_followup_after_purchase": true,
-    "batch_cap": 10,
+    "batch_cap": 5,
     "scan_cap": 30,
     "budget_includes_failures_and_unknowns": true,
     "private_sender": "pvnetwork_bot",
-    "historical_invites_replayed": false
+    "historical_invites_replayed": false,
+    "planning_day": "2026-10-13",
+    "batch_interval_minutes": 1,
+    "pending_deliveries_cap": 20,
+    "channel_followup_after_confirmed_delivery_hours": 48
   }
 }
