@@ -113,7 +113,7 @@ def policy(session, settings):
 
 def decision(reader, recipient):
     try:
-        history = reader.fetch_private_invite_history(recipient)
+        history = reader.fetch_private_invite_history(recipient, require_home=False)
         return (
             evaluate_history(*history, now=utcnow(), dormant_days=30)
             if history is not None
