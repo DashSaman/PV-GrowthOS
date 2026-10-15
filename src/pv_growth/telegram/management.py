@@ -37,6 +37,7 @@ def keyboard():
     return InlineKeyboard(
         [
             [{"text": "📊 وضعیت و گزارش", "callback_data": "manage:status"}],
+            [{"text": "📈 فروش عادی و همکاری", "callback_data": "manage:sales"}],
             [
                 {"text": "🌐 روزانه ۱۰ وب", "callback_data": "manage:web:10"},
                 {"text": "⏸ توقف وب", "callback_data": "manage:web:off"},
@@ -169,6 +170,14 @@ def handle_action(session, settings, client, *, user_id, chat_id, chat_type, act
             return True
         session.add(AppConfig(key=key, value={"processed_at_utc": utcnow().isoformat()}))
         session.flush()
+    if action == "sales":
+        from pv_growth.mirza_adapter.retail_sales import collect_report, render_report
+
+        cutoff = utcnow().replace(minute=0, second=0, microsecond=0)
+        report = collect_report(session, settings, key=f"retail-sales:hour:{cutoff:%Y%m%d%H}", end=cutoff)
+        session.commit()
+        client.send_message(chat_id, render_report(report), keyboard())
+        return True
     locked_policy = session.scalar(
         select(AppConfig)
         .where(AppConfig.key == "pv_free_growth_policy")
@@ -264,6 +273,14 @@ def daily_report(session, settings, payload):
     day = local_day(utcnow()).isoformat()
     if payload.get("day") != day:
         return
+    from datetime import datetime
+
+    from pv_growth.mirza_adapter.retail_sales import collect_report, render_report
+
+    cutoff = datetime.fromisoformat(day).replace(hour=20, minute=25)
+    if utcnow() < cutoff:
+        return
+    sales = collect_report(session, settings, key=f"retail-sales:daily:{day}", end=cutoff)
     manager = session.get(AppConfig, "pv_bot_manager")
     if not manager or manager.value.get("reports_enabled") is not True:
         return
@@ -289,7 +306,9 @@ def daily_report(session, settings, payload):
     receipt.attempts = 1
     session.commit()
     try:
-        result = client.send_message(chat, status_text(session, settings), keyboard())
+        result = client.send_message(
+            chat, status_text(session, settings) + "\n\n" + render_report(sales), keyboard()
+        )
         confirmed = (
             type(result.get("message_id")) is int
             and result["message_id"] > 0
@@ -301,3 +320,4 @@ def daily_report(session, settings, payload):
     receipt.status = "sent" if confirmed else "delivery_unknown"
     receipt.sent_at = utcnow() if confirmed else None
     session.commit()
+

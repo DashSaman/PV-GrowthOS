@@ -114,5 +114,28 @@
   "approved_public_source_refresh_hours": 1,
   "community_failed_jobs_reset": false,
   "native_bot_daily_report_time": "23:55",
-  "native_bot_daily_report_after_owner_manage": true
+  "native_bot_daily_report_after_owner_manage": true,
+  "retail_sales_report": {
+    "execution_owner": "existing_docker_daily_report",
+    "time_tehran": "23:55",
+    "save_aggregate_without_registered_manager": true,
+    "owner_command": "/sales",
+    "role_basis": "current_mirza_agent",
+    "period_hours": 24,
+    "wallet_added_to_service_value": false,
+    "ingestion_time_is_sale_time": false
+  },
+  "purchase_guidance": {
+    "user_requested_only": true,
+    "direct_purchase_button_preserved": true,
+    "source_values": [
+      "menu",
+      "owned",
+      "web",
+      "share"
+    ],
+    "new_campaign_or_budget": false,
+    "price_catalog_verified": false
+  }
 }
+

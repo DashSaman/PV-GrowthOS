@@ -73,6 +73,28 @@ class MirzaMySQLReader:
             cur.execute("SELECT id_invoice FROM invoice")
             return [str(r["id_invoice"]) for r in cur.fetchall()]
 
+    def fetch_retail_sales_snapshot(self) -> dict:
+        """Existing SELECT grants only; never persist individual reporting rows."""
+        queries = {
+            "users": ("SELECT id,agent FROM user LIMIT 10001", 10000),
+            "orders": ("SELECT id_user,price_product,Status,time_sell FROM invoice LIMIT 20001", 20000),
+            "operations": ("SELECT id_user,type,status,price,time FROM service_other LIMIT 20001", 20000),
+            "wallet": ("SELECT id_user,payment_Status,price,time FROM Payment_report LIMIT 20001", 20000),
+        }
+        result = {}
+        with self.connect() as conn, conn.cursor() as cur:
+            try:
+                cur.execute("START TRANSACTION READ ONLY")
+                for key, (query, bound) in queries.items():
+                    cur.execute(query)
+                    rows = list(cur.fetchall())
+                    if len(rows) > bound:
+                        raise ValueError("reporting row bound exceeded")
+                    result[key] = rows
+                return result
+            finally:
+                conn.rollback()
+
     def list_private_invite_contacts(self, *, limit=5000, require_home=True):
         """Existing active ordinary private-bot users only; bounded readonly discovery."""
         if type(limit) is not int or not 1 <= limit <= 5000 or type(require_home) is not bool:
@@ -444,3 +466,4 @@ class FakeMirzaMySQL:
 
     def fetch_statuses(self) -> dict[str, str]:
         return {str(i["id_invoice"]): str(i["Status"]).strip().lower() for i in self.invoices}
+
