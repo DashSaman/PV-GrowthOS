@@ -225,3 +225,45 @@ def test_over_bound_reader_fails_instead_of_returning_partial_sales(settings):
     with pytest.raises(ValueError, match="bound"):
         reader.fetch_retail_sales_snapshot()
     assert conn.rolled
+
+
+def test_test_database_name_allowed_but_production_guard_stays_exact(session, settings, monkeypatch):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from pv_growth.database import base
+    from pv_growth.mirza_adapter.mysql_reader import MirzaMySQLReader
+
+    statements = []
+
+    class ReadOnlyDB:
+        bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+        def execute(self, query):
+            statements.append(str(query))
+            return SimpleNamespace(all=lambda: [])
+
+        def scalar(self, query):
+            return "pv_growth_test"
+
+    @contextmanager
+    def read_scope(cfg):
+        yield ReadOnlyDB()
+
+    monkeypatch.setattr(base, "session_scope", read_scope)
+    monkeypatch.setattr(MirzaMySQLReader, "fetch_retail_sales_snapshot", lambda self: snapshot())
+    cfg = settings.model_copy(
+        update={"env": "development", "database_url": "postgresql://localhost/pv_growth_test"}
+    )
+    m = module()
+    report = m.collect_report(
+        session, cfg, key="retail-sales:fake-test-db", end=datetime(2026, 10, 15, tzinfo=UTC)
+    )
+    assert report["status"] == "ok" and statements[0] == "SET TRANSACTION READ ONLY"
+    report = m.collect_report(
+        session,
+        cfg.model_copy(update={"env": "production"}),
+        key="retail-sales:fake-wrong-prod",
+        end=datetime(2026, 10, 15, tzinfo=UTC),
+    )
+    assert report["status"] == "unavailable"

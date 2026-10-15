@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 
 from pv_growth.database.models import AppConfig, Event, MessageLog, User
@@ -121,7 +122,10 @@ def collect_report(session, settings, *, key, end):
         with session_scope(settings) as db:
             if db.bind.dialect.name == "postgresql":
                 db.execute(text("SET TRANSACTION READ ONLY"))
-                if db.scalar(text("SELECT current_database()")) != "pv_growth":
+                expected_database = (
+                    "pv_growth" if settings.env == "production" else make_url(settings.database_url).database
+                )
+                if db.scalar(text("SELECT current_database()")) != expected_database:
                     raise ValueError("unexpected reporting database")
             recipients = dict(
                 db.execute(
