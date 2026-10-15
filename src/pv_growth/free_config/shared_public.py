@@ -225,8 +225,10 @@ def publish_shared_slot(
         ]
     )
     from pv_growth.acquisition.entry import share_button
+    from pv_growth.acquisition.retail_offer import guide_button
 
     keyboard.buttons.append([share_button()])
+    keyboard.buttons.append([guide_button("owned")])
     if direct:
         body = (
             "💎 <b>تست کیفیت سرویس اصلی PV Network | VIP</b>\n\n"
@@ -241,12 +243,14 @@ def publish_shared_slot(
         keyboard = InlineKeyboard(
             [
                 [{"text": "🛒 خرید سرویس شخصی VIP", "url": "https://t.me/pvnetwork_bot"}],
+                [guide_button("owned")],
                 [
                     {
                         "text": "🎁 هدیهٔ هفتگی ۵۰ تا ۱۰۰ مگ",
                         "url": "https://t.me/pvgrowthos_bot?start=freecfg_weekly_member",
                     }
                 ],
+                [share_button()],
             ]
         )
     try:

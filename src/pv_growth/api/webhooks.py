@@ -429,6 +429,7 @@ def _handle_message(client, message: TgMessage) -> None:
         "/hours": "hours:" + argument.strip(),
         "/web_count": "web:" + argument.strip(),
         "/active": "active:" + argument.strip(),
+        "/sales": "sales",
     }.get(raw_command.split("@")[0])
     if management_action is not None:
         from pv_growth.telegram.management import handle_action
@@ -460,6 +461,21 @@ def _handle_message(client, message: TgMessage) -> None:
             telegram_chat_id=message.chat.get("id"),
         )
         if command == "/start":
+            from pv_growth.acquisition.retail_offer import SOURCES, record_request
+
+            guide_source = (
+                argument.strip().removeprefix("buy_") if argument.strip().startswith("buy_") else None
+            )
+            if guide_source in SOURCES:
+                result = record_request(
+                    session,
+                    user,
+                    source=guide_source,
+                    request_id=f"m:{message.message_id}" if message.message_id else None,
+                )
+                if result:
+                    _safe_send(client, chat_id, *result)
+                return
             from pv_growth.free_config.audience import decision_for_user
 
             decision = decision_for_user(session, settings, user.id)
@@ -553,12 +569,16 @@ def _handle_message(client, message: TgMessage) -> None:
                         _bot_menu(session, settings),
                     )
         elif command == "/buy":
-            _safe_send(
-                client,
-                chat_id,
-                "🛒 خرید سرویس شخصی و مشاهدهٔ تعرفه‌ها از ربات رسمی PV Network:",
-                _purchase_keyboard(include_free=True),
+            from pv_growth.acquisition.retail_offer import record_request
+
+            result = record_request(
+                session,
+                user,
+                source="menu",
+                request_id=f"m:{message.message_id}" if message.message_id else None,
             )
+            if result:
+                _safe_send(client, chat_id, *result)
         elif command in {"/share", "/referral"}:
             from pv_growth.acquisition.entry import sharing_prompt
 
@@ -648,6 +668,13 @@ def _handle_callback(client, callback: TgCallback) -> None:
         )
         from pv_growth.free_config.membership import valid_context
 
+        if data.startswith("retail:"):
+            from pv_growth.acquisition.retail_offer import selected_need
+
+            result = selected_need(session, user, need=data[7:], request_id="c:" + callback.id)
+            if result:
+                _safe_send(client, user.telegram_user_id, *result)
+            return
         if data.startswith("memberships:"):
             context = data[len("memberships:") :]
             if valid_context(context):

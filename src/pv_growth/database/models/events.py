@@ -19,6 +19,8 @@ EVENT_TYPES = frozenset(
         "TRIAL_DELIVERED",
         "TRIAL_CONNECTED",
         "PRICING_VIEWED",
+        "RETAIL_OFFER_REQUESTED",
+        "RETAIL_NEED_SELECTED",
         "CHECKOUT_STARTED",
         "PAYMENT_SUCCESS",
         "SERVICE_CREATED",

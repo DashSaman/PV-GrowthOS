@@ -339,6 +339,8 @@ def publish_public_slot(
         ):
             return None
 
+    from pv_growth.acquisition.retail_offer import guide_button
+
     result = telegram.send_channel_post(
         settings.free_channel_id,
         render_public_post(
@@ -355,9 +357,13 @@ def publish_public_slot(
                     }
                 ],
                 [{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}],
+                [guide_button("web")],
             ]
             if settings.env == "production" and not direct
-            else [[{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}]]
+            else [
+                [{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}],
+                [guide_button("web")],
+            ]
         ),
     )
     post.message_id = result.get("message_id")
