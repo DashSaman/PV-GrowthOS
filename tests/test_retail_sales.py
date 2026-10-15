@@ -225,4 +225,3 @@ def test_over_bound_reader_fails_instead_of_returning_partial_sales(settings):
     with pytest.raises(ValueError, match="bound"):
         reader.fetch_retail_sales_snapshot()
     assert conn.rolled
-

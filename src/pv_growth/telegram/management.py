@@ -320,4 +320,3 @@ def daily_report(session, settings, payload):
     receipt.status = "sent" if confirmed else "delivery_unknown"
     receipt.sent_at = utcnow() if confirmed else None
     session.commit()
-

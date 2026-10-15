@@ -58,4 +58,3 @@ class Event(Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     metadata_json: Mapped[dict] = mapped_column("metadata", Json, nullable=False, default=dict)
     note: Mapped[str | None] = mapped_column(Text)
-

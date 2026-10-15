@@ -114,4 +114,3 @@ def latest_shared_context(session, settings) -> str | None:
             continue
         return f"shared:{match[1]}:{match[2]}"
     return None
-

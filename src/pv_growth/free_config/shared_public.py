@@ -343,4 +343,3 @@ def sweep_shared_posts(session: Session, settings: Settings, telegram, adapter) 
             allocation.status = "expiry_notice_unknown"
         session.commit()
     return edited
-

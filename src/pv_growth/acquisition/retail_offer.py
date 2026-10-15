@@ -88,4 +88,3 @@ def selected_need(session, user, *, need, request_id):
     )
     source = last.metadata_json.get("source", "menu") if last else "menu"
     return record_request(session, user, source=source, request_id=request_id, need=need)
-

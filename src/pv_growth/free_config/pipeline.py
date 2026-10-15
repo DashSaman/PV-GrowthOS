@@ -388,4 +388,3 @@ def publish_public_slot(
     )
     log.info("public config published", dedupe_key=dedupe_key, message_id=post.message_id)
     return post
-

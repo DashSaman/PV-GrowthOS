@@ -78,4 +78,3 @@ def test_voluntary_share_copy_matches_current_public_and_weekly_policy():
     text = parse_qs(urlparse(share_url()).query)["text"][0]
     assert "۴۵" not in text and "نداشتن سرویس فعال" not in text
     assert "قابل کپی" in text and "هفت" in text and "۵۰" in text
-

@@ -191,4 +191,3 @@ def render_report(report):
     if not report["data_complete"]:
         body += "\n⚠️ دادهٔ تاریخ/مبلغ ناقص است؛ جمع فقط ردیف‌های معتبر است."
     return body
-

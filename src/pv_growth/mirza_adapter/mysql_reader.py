@@ -466,4 +466,3 @@ class FakeMirzaMySQL:
 
     def fetch_statuses(self) -> dict[str, str]:
         return {str(i["id_invoice"]): str(i["Status"]).strip().lower() for i in self.invoices}
-
