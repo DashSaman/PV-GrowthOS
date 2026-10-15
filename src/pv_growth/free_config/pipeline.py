@@ -12,7 +12,7 @@ import html
 from datetime import date, timedelta
 
 import httpx
-from sqlalchemy import case, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -131,27 +131,42 @@ def collect_and_stage(session: Session, client: httpx.Client, settings: Settings
 def rank_candidates(session: Session, settings: Settings, *, exclude_ids=()) -> list[RawConfig]:
     """Top fresh validated configs by score; health-check only these few."""
     active_sources = select(ConfigSource.id).where(ConfigSource.is_active.is_(True))
+    health_priority = case(
+        (RawConfig.health_ok.is_(True), 0),
+        (RawConfig.health_checked.is_(False), 1),
+        else_=2,
+    )
+    eligible = (
+        select(
+            RawConfig.id.label("config_id"),
+            func.row_number()
+            .over(
+                partition_by=RawConfig.source_id,
+                order_by=(health_priority, RawConfig.quality_score.desc(), RawConfig.id.asc()),
+            )
+            .label("source_rank"),
+        )
+        .where(
+            RawConfig.valid.is_(True),
+            RawConfig.id.not_in(exclude_ids),
+            or_(
+                RawConfig.status == "validated",
+                (RawConfig.status == "published") & (RawConfig.published_at <= utcnow() - timedelta(hours=6)),
+            ),
+            RawConfig.fetched_at >= utcnow() - timedelta(hours=24),
+            RawConfig.source_id.in_(active_sources) if settings.env == "production" else True,
+        )
+        .subquery()
+    )
     candidates = (
         session.execute(
             select(RawConfig)
-            .where(
-                RawConfig.valid.is_(True),
-                RawConfig.id.not_in(exclude_ids),
-                or_(
-                    RawConfig.status == "validated",
-                    (RawConfig.status == "published")
-                    & (RawConfig.published_at <= utcnow() - timedelta(hours=6)),
-                ),
-                RawConfig.fetched_at >= utcnow() - timedelta(hours=24),
-                RawConfig.source_id.in_(active_sources) if settings.env == "production" else True,
-            )
+            .join(eligible, RawConfig.id == eligible.c.config_id)
             .order_by(
-                case(
-                    (RawConfig.health_ok.is_(True), 0),
-                    (RawConfig.health_checked.is_(False), 1),
-                    else_=2,
-                ),
+                health_priority,
+                eligible.c.source_rank,
                 RawConfig.quality_score.desc(),
+                RawConfig.id.asc(),
             )
             .limit(
                 min(settings.health_check_max, 6)
