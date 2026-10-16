@@ -136,5 +136,21 @@
     ],
     "new_campaign_or_budget": false,
     "price_catalog_verified": false
+  },
+  "growth_research": {
+    "execution_owner": "existing_docker_scheduler",
+    "daily_time_tehran": "07:55",
+    "catch_up_same_day": true,
+    "fixed_public_directory_requests_max": 4,
+    "response_bytes_max": 1048576,
+    "retries": 0,
+    "recommendations_saved_max": 20,
+    "retention_days": 30,
+    "private_owner_control": "manage:research",
+    "live_explore_authorization_ready": false,
+    "automated_cold_dm_enabled": false,
+    "browser_session_exported": false,
+    "followers_unknown_are_qualified": false,
+    "new_partnership_grants_automated": false
   }
 }

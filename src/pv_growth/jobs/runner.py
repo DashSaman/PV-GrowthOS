@@ -59,6 +59,7 @@ def register_builtin_handlers() -> None:
     import pv_growth.free_config.lottery  # noqa: F401
     import pv_growth.free_config.shared_public  # noqa: F401
     import pv_growth.free_config.weekly_gift  # noqa: F401
+    import pv_growth.growth_research  # noqa: F401
     import pv_growth.lifecycle.service  # noqa: F401
     import pv_growth.mirza_adapter.sync_job  # noqa: F401
     import pv_growth.provisioning.lifecycle_job  # noqa: F401
