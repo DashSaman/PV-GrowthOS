@@ -130,6 +130,10 @@ class Scheduler:
 
         with session_scope(self._settings) as session:
             enqueue_free_growth(session, self._settings)
+            from pv_growth.database.types import utcnow
+            from pv_growth.growth_research import enqueue_daily
+
+            enqueue_daily(session, utcnow())
             from pv_growth.core.flags import FlagService
 
             if FlagService(self._settings).enabled("COMPETITOR_WATCH_ENABLED"):

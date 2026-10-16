@@ -38,6 +38,11 @@ def keyboard():
         [
             [{"text": "📊 وضعیت و گزارش", "callback_data": "manage:status"}],
             [{"text": "📈 فروش عادی و همکاری", "callback_data": "manage:sales"}],
+            [{"text": "🔎 تحقیق و پیشنهاد رشد", "callback_data": "manage:research"}],
+            [
+                {"text": "تحقیق روزانه روشن", "callback_data": "manage:research:on"},
+                {"text": "توقف تحقیق", "callback_data": "manage:research:off"},
+            ],
             [
                 {"text": "🌐 روزانه ۱۰ وب", "callback_data": "manage:web:10"},
                 {"text": "⏸ توقف وب", "callback_data": "manage:web:off"},
@@ -170,6 +175,26 @@ def handle_action(session, settings, client, *, user_id, chat_id, chat_type, act
             return True
         session.add(AppConfig(key=key, value={"processed_at_utc": utcnow().isoformat()}))
         session.flush()
+    if action in {"research", "research:on", "research:off"}:
+        from pv_growth.growth_research import report_text
+
+        paused = session.get(AppConfig, "pv_free_growth_policy")
+        if action != "research" and paused and paused.value.get("operational_pause") is True:
+            session.commit()
+            client.send_message(chat_id, "تغییر تنظیم تحقیق تا پایان نصب متوقف است.", keyboard())
+            return True
+        if action != "research":
+            control = session.get(AppConfig, "growth_research_control")
+            value = {"enabled": action == "research:on"}
+            if control:
+                control.value = value
+            else:
+                session.add(AppConfig(key="growth_research_control", value=value))
+        session.commit()
+        control = session.get(AppConfig, "growth_research_control")
+        state = "خاموش" if control and control.value.get("enabled") is False else "روشن"
+        client.send_message(chat_id, f"تحقیق روزانه: {state}\n\n" + report_text(session), keyboard())
+        return True
     if action == "sales":
         from pv_growth.mirza_adapter.retail_sales import collect_report, render_report
 
@@ -275,6 +300,7 @@ def daily_report(session, settings, payload):
         return
     from datetime import datetime
 
+    from pv_growth.growth_research import nightly_summary
     from pv_growth.mirza_adapter.retail_sales import collect_report, render_report
 
     cutoff = datetime.fromisoformat(day).replace(hour=20, minute=25)
@@ -307,7 +333,13 @@ def daily_report(session, settings, payload):
     session.commit()
     try:
         result = client.send_message(
-            chat, status_text(session, settings) + "\n\n" + render_report(sales), keyboard()
+            chat,
+            status_text(session, settings)
+            + "\n\n"
+            + render_report(sales)
+            + "\n\n"
+            + nightly_summary(session, day),
+            keyboard(),
         )
         confirmed = (
             type(result.get("message_id")) is int
