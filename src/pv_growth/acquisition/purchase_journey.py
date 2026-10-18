@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from sqlalchemy import select, text
 
+from pv_growth.acquisition.retail_catalogue import current_catalogue, payment_text
 from pv_growth.acquisition.retail_offer import current_offer, keyboard, purchase_button
 from pv_growth.database.models import AppConfig, Event
 from pv_growth.database.types import utcnow
@@ -152,16 +153,7 @@ def action(session, settings, user, *, code, request_id):
     if code == "status":
         return _status(session, settings, user), keyboard()
     if code == "payment":
-        return (
-            "💳 پرداخت روشن، مرحله‌به‌مرحله\n\n"
-            "۱. «انتخاب پلن و خرید» را بزن؛ پلن و مبلغ فاکتور را در ربات اصلی ببین.\n"
-            "۲. فقط روش پرداخت نمایش‌داده‌شده در همان ربات را استفاده کن. "
-            "اگر لازم بود کیف پول را شارژ کنی، بعد از شارژ به خرید سرویس برگرد.\n"
-            "۳. پس از ثبت خرید، سرویس باید در بخش «سرویس‌های من» دیده شود.\n\n"
-            "⚠️ اگر وجه کم شد و نتیجه مشخص نیست، دوباره پرداخت نکن؛ با پشتیبانی ربات اصلی "
-            "وضعیت را بررسی کن. رمز، کد ورود و اطلاعات کارت را اینجا نفرست.",
-            keyboard(),
-        )
+        return payment_text(current_catalogue(session)), keyboard()
     if code == "connected":
         return (
             "✅ گزارش اتصال روی اینترنت خودت ثبت شد. برای ادامهٔ استفاده، شرایط پلن شخصی را ببین.",
@@ -225,17 +217,21 @@ def monitor(session, settings, payload):
             if settings.env == "production" and db.scalar(text("SELECT current_database()")) != "pv_growth":
                 raise ValueError("unexpected retail reporting database")
         offer = current_offer(db, now=now)
+        catalogue = current_catalogue(db, now=now)
     session.add(
         AppConfig(
             key=key,
             value={
                 "status": report["status"],
                 "end_utc": report.get("current", {}).get("end_utc", report.get("end_utc")),
-                "offer_state": "verified" if offer else "unavailable",
+                "offer_state": "verified" if offer or catalogue else "unavailable",
+                "catalogue_observed_at_utc": catalogue["observed_at_utc"] if catalogue else None,
                 "ordinary": report.get("current", {}).get("segments", {}).get("ordinary"),
                 "previous_ordinary": report.get("previous", {}).get("segments", {}).get("ordinary"),
                 "data_complete": report.get("data_complete", False),
                 "attribution": "temporal_observation_not_incremental_revenue",
+                "customer_quality": report.get("current", {}).get("customer_quality", {}),
+                "external_retail_verified": False,
                 "customer_messages": 0,
             },
         )
