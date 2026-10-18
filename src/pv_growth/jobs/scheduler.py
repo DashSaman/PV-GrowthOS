@@ -134,6 +134,9 @@ class Scheduler:
             from pv_growth.growth_research import enqueue_daily
 
             enqueue_daily(session, utcnow())
+            from pv_growth.acquisition.purchase_journey import enqueue_monitor
+
+            enqueue_monitor(session, utcnow())
             from pv_growth.core.flags import FlagService
 
             if FlagService(self._settings).enabled("COMPETITOR_WATCH_ENABLED"):

@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from pv_growth.acquisition.retail_offer import PURCHASE_URL
 from pv_growth.core.config import Settings
 from pv_growth.core.errors import ValidationError
 from pv_growth.core.flags import FlagService
@@ -215,7 +216,7 @@ def publish_shared_slot(
                     "url": f"https://t.me/pvgrowthos_bot?start=freecfg_shared_{day.isoformat()}_{slot}",
                 }
             ],
-            [{"text": "🛒 خرید سرویس شخصی PV", "url": "https://t.me/pvnetwork_bot"}],
+            [{"text": "🛒 خرید سرویس شخصی PV", "url": PURCHASE_URL}],
             [
                 {
                     "text": "🎲 شرکت در قرعه‌کشی تست شخصی",
@@ -242,7 +243,7 @@ def publish_shared_slot(
         )
         keyboard = InlineKeyboard(
             [
-                [{"text": "🛒 خرید سرویس شخصی VIP", "url": "https://t.me/pvnetwork_bot"}],
+                [{"text": "🛒 خرید سرویس شخصی VIP", "url": PURCHASE_URL}],
                 [guide_button("owned")],
                 [
                     {

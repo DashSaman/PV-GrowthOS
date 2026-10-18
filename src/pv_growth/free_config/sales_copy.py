@@ -1,6 +1,6 @@
 """Original PV copy inspired by documented public funnels, with factual CTAs."""
 
-PURCHASE_URL = "https://t.me/pvnetwork_bot"
+from pv_growth.acquisition.retail_offer import PURCHASE_URL  # noqa: F401
 
 
 def config_footer(*, owned: bool = False) -> str:

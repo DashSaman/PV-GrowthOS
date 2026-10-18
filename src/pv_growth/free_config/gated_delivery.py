@@ -6,6 +6,7 @@ from datetime import UTC, date
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from pv_growth.acquisition.retail_offer import PURCHASE_URL
 from pv_growth.core.errors import ValidationError
 from pv_growth.database.models import AppConfig, FreeAllocation, MessageLog, PublishedPost, User
 from pv_growth.database.types import utcnow
@@ -173,7 +174,7 @@ def deliver_config(session, settings, flags, telegram, *, user_id: int, context:
         "✅ اتصال واقعی HTTPS پیش از ارسال بررسی شد.\n\n"
         f"<code>{html.escape(uri)}</code>\n\n{config_footer(owned=True)}"
     )
-    keyboard = InlineKeyboard([[{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}]])
+    keyboard = InlineKeyboard([[{"text": "🛒 خرید و تعرفه‌ها", "url": PURCHASE_URL}]])
     try:
         result = telegram.send_message(user.telegram_user_id, text, keyboard)
         if not result.get("message_id"):

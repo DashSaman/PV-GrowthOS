@@ -11,6 +11,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from pv_growth.acquisition.retail_offer import PURCHASE_URL
 from pv_growth.api.deps import rate_limit_webhook
 from pv_growth.core.config import get_settings
 from pv_growth.core.errors import NotConfigured, ValidationError
@@ -108,7 +109,7 @@ def _purchase_keyboard(*, include_free: bool = True):
     from pv_growth.acquisition.entry import share_button
     from pv_growth.telegram.client import InlineKeyboard
 
-    rows = [[{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}]]
+    rows = [[{"text": "🛒 خرید و تعرفه‌ها", "url": PURCHASE_URL}]]
     if include_free:
         rows.append([{"text": "🎁 کانفیگ رایگان", "url": "https://t.me/pvnetwork_freeconfig"}])
         rows.append([share_button()])
@@ -124,7 +125,7 @@ def _home_keyboard(session, settings, *, include_free: bool):
     from pv_growth.free_config.web_publication import direct_enabled
     from pv_growth.telegram.client import InlineKeyboard
 
-    rows = [[{"text": "🛒 خرید و تعرفه‌ها", "url": "https://t.me/pvnetwork_bot"}]]
+    rows = [[{"text": "🛒 خرید و تعرفه‌ها", "url": PURCHASE_URL}]]
     if direct_enabled(session):
         rows.append([{"text": "🌐 کانفیگ وب قابل کپی در کانال", "url": "https://t.me/pvnetwork_freeconfig"}])
     if include_free:
@@ -189,7 +190,7 @@ def _weekly_dialogue(client, session, settings, user):
         InlineKeyboard(
             [
                 [{"text": "🎁 دریافت هدیهٔ این هفته", "callback_data": "weekly:pv_weekly_gift"}],
-                [{"text": "🛒 خرید سرویس اصلی", "url": "https://t.me/pvnetwork_bot"}],
+                [{"text": "🛒 خرید سرویس اصلی", "url": PURCHASE_URL}],
             ]
         ),
     )
@@ -669,7 +670,14 @@ def _handle_callback(client, callback: TgCallback) -> None:
         from pv_growth.free_config.membership import valid_context
 
         if data.startswith("retail:"):
-            from pv_growth.acquisition.retail_offer import selected_need
+            from pv_growth.acquisition.purchase_journey import action
+            from pv_growth.acquisition.retail_offer import NEEDS, selected_need
+
+            if data[7:] not in NEEDS:
+                result = action(session, settings, user, code=data[7:], request_id="c:" + callback.id)
+                if result:
+                    _safe_send(client, user.telegram_user_id, *result)
+                return
 
             result = selected_need(session, user, need=data[7:], request_id="c:" + callback.id)
             if result:

@@ -73,6 +73,37 @@ class MirzaMySQLReader:
             cur.execute("SELECT id_invoice FROM invoice")
             return [str(r["id_invoice"]) for r in cur.fetchall()]
 
+    def fetch_customer_checkout(self, recipient):
+        """One requesting customer's status, using existing SELECT grants only."""
+        if type(recipient) is not int or not 0 < recipient < 2**52:
+            raise ValueError("invalid requesting customer")
+        with self.connect() as conn, conn.cursor() as cur:
+            try:
+                cur.execute("START TRANSACTION READ ONLY")
+                cur.execute("SELECT id,agent,User_Status FROM user WHERE id=%s LIMIT 2", (recipient,))
+                user = cur.fetchone()
+                if not user or str(user["id"]) != str(recipient):
+                    return {"user": None, "orders": [], "operations": []}
+                result = {"user": user}
+                for key, query in (
+                    (
+                        "orders",
+                        "SELECT Status,price_product,time_sell FROM invoice WHERE id_user=%s LIMIT 1001",
+                    ),
+                    (
+                        "operations",
+                        "SELECT type,status,price,time FROM service_other WHERE id_user=%s LIMIT 1001",
+                    ),
+                ):
+                    cur.execute(query, (recipient,))
+                    rows = list(cur.fetchall())
+                    if len(rows) > 1000:
+                        raise ValueError("customer history row bound exceeded")
+                    result[key] = rows
+                return result
+            finally:
+                conn.rollback()
+
     def fetch_retail_sales_snapshot(self) -> dict:
         """Existing SELECT grants only; never persist individual reporting rows."""
         queries = {
