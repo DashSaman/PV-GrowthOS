@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
+from pv_growth.acquisition.retail_catalogue import catalogue_text, current_catalogue
 from pv_growth.database.models import AppConfig, Event
 from pv_growth.database.types import utcnow
 from pv_growth.events.service import ingest
@@ -60,7 +61,7 @@ def guide_button(source):
     return {"text": "💡 راهنمای انتخاب و خرید", "url": f"https://t.me/pvgrowthos_bot?start=buy_{source}"}
 
 
-def body(variant, need=None, offer=None):
+def body(variant, need=None, offer=None, catalogue=None):
     opening = (
         "تست را روی اینترنت خودت پسندیدی؟ برای ادامه، اشتراک شخصی با حجم و مدت مستقل بگیر."
         if variant == "continuity"
@@ -80,6 +81,8 @@ def body(variant, need=None, offer=None):
         else "📦 حجم، مدت، تعداد دستگاه و قیمت جاری را در فهرست پلن‌های ربات اصلی ببین. "
         "قیمت تأییدشده‌ای برای نمایش در این راهنما موجود نیست.\n\n"
     )
+    if catalogue is not None:
+        plan = catalogue_text(catalogue) + "\n"
     return (
         "🛒 سرویس اصلی PV Network · اشتراک شخصی تانل\n\n"
         f"{opening}\n\n{plan}{tip}\n\n"
@@ -133,7 +136,11 @@ def record_request(session, user, *, source, request_id, need=None):
         },
     )
     session.commit()
-    return (body(variant, need, current_offer(session)), keyboard()) if created else None
+    return (
+        (body(variant, need, current_offer(session), current_catalogue(session)), keyboard())
+        if created
+        else None
+    )
 
 
 def selected_need(session, user, *, need, request_id):

@@ -189,10 +189,10 @@ def test_sales_command_requires_channel_owner_and_keeps_report_private(session, 
         {"from": {"id": 42}, "chat": {"id": 42, "type": "private"}, "text": "/sales"}
     )
     webhooks._handle_message(client, message)
-    assert not any("فروش ثبت‌شده" in text for text in client.sent)
+    assert not any("ارزش سرویس ثبت‌شده" in text for text in client.sent)
     client.owner = True
     webhooks._handle_message(client, message)
-    assert "فروش ثبت‌شده" in client.sent[-1]
+    assert "ارزش سرویس ثبت‌شده" in client.sent[-1]
     assert "عادی" in client.sent[-1] and "همکاری" in client.sent[-1]
     assert len(client.sent[-1]) < 4096
 
