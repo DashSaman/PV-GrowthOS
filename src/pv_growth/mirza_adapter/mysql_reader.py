@@ -108,7 +108,10 @@ class MirzaMySQLReader:
         """Existing SELECT grants only; never persist individual reporting rows."""
         queries = {
             "users": ("SELECT id,agent FROM user LIMIT 10001", 10000),
-            "orders": ("SELECT id_user,price_product,Status,time_sell FROM invoice LIMIT 20001", 20000),
+            "orders": (
+                "SELECT id_invoice,id_user,price_product,Status,time_sell FROM invoice LIMIT 20001",
+                20000,
+            ),
             "operations": ("SELECT id_user,type,status,price,time FROM service_other LIMIT 20001", 20000),
             "wallet": ("SELECT id_user,payment_Status,price,time FROM Payment_report LIMIT 20001", 20000),
         }

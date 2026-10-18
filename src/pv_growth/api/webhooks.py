@@ -462,6 +462,13 @@ def _handle_message(client, message: TgMessage) -> None:
             telegram_chat_id=message.chat.get("id"),
         )
         if command == "/start":
+            from pv_growth.acquisition.post_report import START_PARAMETER, record_entry
+
+            if argument.strip() == START_PARAMETER:
+                result = record_entry(session, user, request_id=f"m:{message.message_id}")
+                if result:
+                    _safe_send(client, chat_id, *result)
+                return
             from pv_growth.acquisition.retail_offer import SOURCES, record_request
 
             guide_source = (
