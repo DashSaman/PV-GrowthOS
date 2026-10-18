@@ -152,5 +152,16 @@
     "browser_session_exported": false,
     "followers_unknown_are_qualified": false,
     "new_partnership_grants_automated": false
+  },
+  "retail_post_measurement": {
+    "post": "https://t.me/pvnetwork0/308",
+    "owner_authorized_at": "2026-10-18",
+    "execution_owner": "existing_docker_scheduler",
+    "interval_hours": 1,
+    "attribution_window_days": 7,
+    "test_exclusion": "explicit_owner_confirmed_all_time_accounts",
+    "payment_confirmation": "manual_support",
+    "retroactive_attribution": false,
+    "new_publication_authorized": false
   }
 }

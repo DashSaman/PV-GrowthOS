@@ -201,7 +201,9 @@ def handle_action(session, settings, client, *, user_id, chat_id, chat_type, act
         cutoff = utcnow().replace(minute=0, second=0, microsecond=0)
         report = collect_report(session, settings, key=f"retail-sales:hour:{cutoff:%Y%m%d%H}", end=cutoff)
         session.commit()
-        client.send_message(chat_id, render_report(report), keyboard())
+        from pv_growth.acquisition.post_report import report_text as post_report_text
+
+        client.send_message(chat_id, render_report(report) + post_report_text(session), keyboard())
         return True
     locked_policy = session.scalar(
         select(AppConfig)
