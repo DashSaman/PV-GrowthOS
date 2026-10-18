@@ -6,6 +6,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from pv_growth.acquisition.retail_offer import PURCHASE_URL
 from pv_growth.config_quality import probe
 from pv_growth.core.errors import ValidationError
 from pv_growth.core.flags import FlagService
@@ -137,7 +138,7 @@ def deliver(session, settings, flags, telegram, *, user_id, context):
         result = telegram.send_message(
             user.telegram_user_id,
             body,
-            InlineKeyboard([[{"text": "🛒 خرید سرویس شخصی PV", "url": "https://t.me/pvnetwork_bot"}]]),
+            InlineKeyboard([[{"text": "🛒 خرید سرویس شخصی PV", "url": PURCHASE_URL}]]),
         )
         if not result.get("message_id"):
             raise ValidationError("receipt unavailable")

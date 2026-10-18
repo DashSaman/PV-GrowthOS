@@ -16,6 +16,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from pv_growth.acquisition.retail_offer import PURCHASE_URL
 from pv_growth.config_quality.health import check_top_candidates
 from pv_growth.config_quality.parsers import parse_any, score, validate
 from pv_growth.config_sources.fetchers import fetch_source
@@ -356,12 +357,12 @@ def publish_public_slot(
                         "url": f"https://t.me/pvgrowthos_bot?start=freecfg_community_{ranked[0].id}",
                     }
                 ],
-                [{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}],
+                [{"text": "🛒 خرید سرویس PV Network", "url": PURCHASE_URL}],
                 [guide_button("web")],
             ]
             if settings.env == "production" and not direct
             else [
-                [{"text": "🛒 خرید سرویس PV Network", "url": "https://t.me/pvnetwork_bot"}],
+                [{"text": "🛒 خرید سرویس PV Network", "url": PURCHASE_URL}],
                 [guide_button("web")],
             ]
         ),

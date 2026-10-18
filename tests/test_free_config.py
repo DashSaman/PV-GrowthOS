@@ -128,7 +128,7 @@ def test_publish_is_idempotent_double_run(session, env, monkeypatch):
 
     assert brand_uri(config.raw_uri) in sent[0]
     payload = [p for m, p in env["telegram"]._t.calls if m == "sendMessage"][0]
-    assert payload["reply_markup"]["inline_keyboard"][0][0]["url"] == "https://t.me/pvnetwork_bot"
+    assert payload["reply_markup"]["inline_keyboard"][0][0]["url"] == "https://t.me/pvnetwork_bot?start=buy"
 
 
 def test_public_post_escapes_untrusted_remark():

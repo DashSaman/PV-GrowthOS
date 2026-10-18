@@ -11,6 +11,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from pv_growth.acquisition.retail_offer import PURCHASE_URL
 from pv_growth.core.config import Settings
 from pv_growth.core.logging import get_logger
 from pv_growth.database.models import ExclusiveClaim, Job
@@ -214,7 +215,7 @@ def trial_end_job(session: Session, settings: Settings, payload: dict) -> None:
         result = get_telegram(settings).send_message(
             user.telegram_chat_id,
             body,
-            InlineKeyboard([[{"text": "🛒 مشاهده پلن‌ها و خرید PV", "url": "https://t.me/pvnetwork_bot"}]]),
+            InlineKeyboard([[{"text": "🛒 مشاهده پلن‌ها و خرید PV", "url": PURCHASE_URL}]]),
         )
         if not result.get("message_id"):
             raise RuntimeError("receipt unavailable")
