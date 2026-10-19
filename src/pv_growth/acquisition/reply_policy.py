@@ -53,9 +53,10 @@ def reply_decision(message: dict, *, recipient: str, owner: str) -> str:
     if (
         sender != [recipient]
         or len(values.get("from", [])) != 1
-        or ("reply-to" in values and (
-            len(values["reply-to"]) != 1 or _addresses(headers["reply-to"]) != [recipient]
-        ))
+        or (
+            "reply-to" in values
+            and (len(values["reply-to"]) != 1 or _addresses(headers["reply-to"]) != [recipient])
+        )
     ):
         return "hold_identity"
     auth = headers.get("authentication-results", "")
@@ -72,7 +73,8 @@ def reply_decision(message: dict, *, recipient: str, owner: str) -> str:
         return "hold_intent"
     if re.search(
         r"تمایل ندار|علاقه ندار|نمی\s*خوا|پیگیری نکن|پیام نفرست|ارسال نکن|لغو|حذف|"
-        r"not interested|unsubscribe|no thanks|^نه(?:\s|$)", body
+        r"not interested|unsubscribe|no thanks|^نه(?:\s|$)",
+        body,
     ):
         return "stop"
     if re.search(r"شاید|بعدا|بعداً|فعلا|فعلاً|الان نه|maybe|later|not now", body):

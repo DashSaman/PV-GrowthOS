@@ -17,21 +17,27 @@ def _message_id(value):
     return isinstance(value, str) and re.fullmatch(r"<[^\s<>@]{1,160}@[^\s<>@]{1,90}>", value)
 
 
-def build_reply(*, route, recipient, name, subject, intent, inbound_id, in_reply_to, references,
-                catalogue, now):
+def build_reply(
+    *, route, recipient, name, subject, intent, inbound_id, in_reply_to, references, catalogue, now
+):
     """Build a single-recipient reply from verified public facts and fixed copy."""
     live = validate_catalogue(catalogue, now=now)
     if (
-        route not in ROUTES or intent not in INTENTS or live is None
+        route not in ROUTES
+        or intent not in INTENTS
+        or live is None
         or not isinstance(recipient, str)
         or not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9][A-Za-z0-9.-]+", recipient)
-        or not isinstance(subject, str) or not 1 <= len(subject) <= 200
+        or not isinstance(subject, str)
+        or not 1 <= len(subject) <= 200
         or any(ord(c) < 32 or ord(c) == 127 for c in subject)
         or not _message_id(in_reply_to)
-        or not isinstance(references, list) or len(references) > 10
+        or not isinstance(references, list)
+        or len(references) > 10
         or any(not _message_id(value) for value in references)
         or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", inbound_id)
-        or not isinstance(name, str) or len(name) > 160
+        or not isinstance(name, str)
+        or len(name) > 160
     ):
         raise ValueError("unsafe or unavailable reply inputs")
     guide = payment_text(live)
@@ -96,7 +102,11 @@ def build_reply(*, route, recipient, name, subject, intent, inbound_id, in_reply
     mail.set_content(greeting + "\n\n" + answer + "\n\n" + step + "\n\n" + source_url)
     mail.add_alternative(body, subtype="html")
     mail.get_payload()[-1].add_related(
-        (ASSETS / "pvnetwork-logo.png").read_bytes(), maintype="image", subtype="png",
-        cid="<pvnetwork-logo>", disposition="inline", filename="pvnetwork-logo.png",
+        (ASSETS / "pvnetwork-logo.png").read_bytes(),
+        maintype="image",
+        subtype="png",
+        cid="<pvnetwork-logo>",
+        disposition="inline",
+        filename="pvnetwork-logo.png",
     )
     return mail

@@ -10,19 +10,40 @@ NOW = datetime(2026, 10, 19, 18, tzinfo=UTC)
 
 def catalogue():
     return {
-        "source": "mirza_local_readonly", "observed_at_utc": NOW.isoformat(),
-        "plans": [{"code": "public", "name": "۲۰ گیگ", "volume_gb": 20,
-                   "duration_days": 31, "price_toman": 100000, "location": "تانل"}],
-        "payment": {"direct_buy": False, "minimum_wallet_toman": 100000,
-                    "card_to_support": True, "support_handle": "PVNetwork1"},
+        "source": "mirza_local_readonly",
+        "observed_at_utc": NOW.isoformat(),
+        "plans": [
+            {
+                "code": "public",
+                "name": "۲۰ گیگ",
+                "volume_gb": 20,
+                "duration_days": 31,
+                "price_toman": 100000,
+                "location": "تانل",
+            }
+        ],
+        "payment": {
+            "direct_buy": False,
+            "minimum_wallet_toman": 100000,
+            "card_to_support": True,
+            "support_handle": "PVNetwork1",
+        },
     }
 
 
 def build(**updates):
-    values = {"route": "a01", "recipient": "shop@example.org", "name": "فروشگاه",
-              "subject": "پیشنهاد | A01-261019", "intent": "price", "inbound_id": "gmail-001",
-              "in_reply_to": "<human@example.org>", "references": ["<original@mail.gmail.com>"],
-              "catalogue": catalogue(), "now": NOW}
+    values = {
+        "route": "a01",
+        "recipient": "shop@example.org",
+        "name": "فروشگاه",
+        "subject": "پیشنهاد | A01-261019",
+        "intent": "price",
+        "inbound_id": "gmail-001",
+        "in_reply_to": "<human@example.org>",
+        "references": ["<original@mail.gmail.com>"],
+        "catalogue": catalogue(),
+        "now": NOW,
+    }
     return build_reply(**{**values, **updates})
 
 
@@ -61,18 +82,21 @@ def test_header_and_html_boundaries_are_escaped_and_reply_is_single_recipient():
     assert mail["References"] == "<original@mail.gmail.com> <human@example.org>"
 
 
-@pytest.mark.parametrize("updates", [
-    {"recipient": "shop@example.org\nBcc:other@example.org"},
-    {"recipient": "shop@example.org, other@example.org"},
-    {"subject": "hello\r\nBcc:other@example.org"},
-    {"in_reply_to": "bad\nheader"},
-    {"references": ["bad\nheader"]},
-    {"route": "s21"},
-    {"intent": "hold_terms"},
-    {"intent": "ignore_automatic"},
-    {"catalogue": None},
-    {"now": NOW + timedelta(minutes=91)},
-])
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"recipient": "shop@example.org\nBcc:other@example.org"},
+        {"recipient": "shop@example.org, other@example.org"},
+        {"subject": "hello\r\nBcc:other@example.org"},
+        {"in_reply_to": "bad\nheader"},
+        {"references": ["bad\nheader"]},
+        {"route": "s21"},
+        {"intent": "hold_terms"},
+        {"intent": "ignore_automatic"},
+        {"catalogue": None},
+        {"now": NOW + timedelta(minutes=91)},
+    ],
+)
 def test_unsafe_or_unverified_input_cannot_become_outbound_mime(updates):
     with pytest.raises(ValueError):
         build(**updates)

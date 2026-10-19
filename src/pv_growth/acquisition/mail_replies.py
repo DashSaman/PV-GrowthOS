@@ -38,13 +38,21 @@ def validate_config(value, now):
         until = datetime.fromisoformat(value["authorized_until_utc"])
         rows = value["recipients"]
         if (
-            value["campaign"] != CAMPAIGN or value["owner"] != OWNER
-            or until.tzinfo is None or not START <= aware(now) < until <= END
-            or not isinstance(rows, list) or len(rows) != 30
+            value["campaign"] != CAMPAIGN
+            or value["owner"] != OWNER
+            or until.tzinfo is None
+            or not START <= aware(now) < until <= END
+            or not isinstance(rows, list)
+            or len(rows) != 30
             or {row["route"] for row in rows} != ROUTES
-            or any(not isinstance(row["name"], str) or len(row["name"]) > 160
-                   or not isinstance(row["subject"], str) or not 1 <= len(row["subject"]) <= 180
-                   or any(ord(c) < 32 or ord(c) == 127 for c in row["subject"]) for row in rows)
+            or any(
+                not isinstance(row["name"], str)
+                or len(row["name"]) > 160
+                or not isinstance(row["subject"], str)
+                or not 1 <= len(row["subject"]) <= 180
+                or any(ord(c) < 32 or ord(c) == 127 for c in row["subject"])
+                for row in rows
+            )
             or set(value["credentials"]) != {"client_id", "client_secret", "refresh_token"}
         ):
             raise ValueError
@@ -108,8 +116,10 @@ def _ordered(thread, tid, now):
     for row in rows:
         mid, stamp = row.get("id"), int(row.get("internalDate", "0"))
         if (
-            not isinstance(mid, str) or not re.fullmatch(r"[A-Fa-f0-9]{1,128}", mid)
-            or mid in seen or row.get("threadId") != tid
+            not isinstance(mid, str)
+            or not re.fullmatch(r"[A-Fa-f0-9]{1,128}", mid)
+            or mid in seen
+            or row.get("threadId") != tid
             or not int(START.timestamp() * 1000) <= stamp <= int(aware(now).timestamp() * 1000)
         ):
             raise ValueError("thread identity unavailable")
@@ -123,12 +133,15 @@ def _original(rows, route):
     for row in rows:
         headers = _headers(row)
         if (
-            "SENT" in row.get("labelIds", []) and _address(headers, "from") == [OWNER]
+            "SENT" in row.get("labelIds", [])
+            and _address(headers, "from") == [OWNER]
             and _address(headers, "to") == [route["email"].lower()]
-            and not headers.get("cc") and not headers.get("bcc")
+            and not headers.get("cc")
+            and not headers.get("bcc")
             and _one(headers, "subject") == route["subject"]
-            and re.search(re.escape(source) + r'''(?=$|[\s<>"'])''',
-                          html.unescape(_body(row["payload"], original=True)))
+            and re.search(
+                re.escape(source) + r"""(?=$|[\s<>"'])""", html.unescape(_body(row["payload"], original=True))
+            )
         ):
             return row
     return None
@@ -139,8 +152,13 @@ def _decision(message, recipient):
     if _address(headers, "to") != [OWNER]:
         return "hold_recipient"
     return reply_decision(
-        {"headers": message["payload"]["headers"], "labels": message.get("labelIds", []),
-         "text": _body(message["payload"])}, recipient=recipient, owner=OWNER,
+        {
+            "headers": message["payload"]["headers"],
+            "labels": message.get("labelIds", []),
+            "text": _body(message["payload"]),
+        },
+        recipient=recipient,
+        owner=OWNER,
     )
 
 
@@ -149,7 +167,7 @@ def _inspect(thread, tid, route, now):
     original = _original(rows, route)
     if original is None:
         return "held_original", None
-    after = rows[rows.index(original) + 1:]
+    after = rows[rows.index(original) + 1 :]
     for row in after:
         if _decision(row, route["email"]) == "stop":
             return "stopped", None
@@ -170,11 +188,18 @@ def process(settings, api, *, config, catalogue, classification, now, lock_held=
         raise ValueError("catalogue or confirmed test classification unavailable")
     started = time.monotonic()
     deadline = started + 120
-    result = {"campaign": CAMPAIGN, "observed_at_utc": aware(now).isoformat(),
-              "status": "ok", "data_complete": True, "routes": {},
-              "payment_confirmation": "manual_support", "execution_owner": "docker_scheduler",
-              "sales_report_key": "retail-outreach:20261019:latest",
-              "confirmed_internal_test_account_count": len(tests), "reminders_sent": 0}
+    result = {
+        "campaign": CAMPAIGN,
+        "observed_at_utc": aware(now).isoformat(),
+        "status": "ok",
+        "data_complete": True,
+        "routes": {},
+        "payment_confirmation": "manual_support",
+        "execution_owner": "docker_scheduler",
+        "sales_report_key": "retail-outreach:20261019:latest",
+        "confirmed_internal_test_account_count": len(tests),
+        "reminders_sent": 0,
+    }
     for key, route in sorted(routes.items()):
         if time.monotonic() >= deadline:
             result.update(status="partial", data_complete=False)
@@ -197,9 +222,16 @@ def process(settings, api, *, config, catalogue, classification, now, lock_held=
             references = _one(headers, "references").split()
             current = aware(now) + timedelta(seconds=time.monotonic() - started)
             mail = build_reply(
-                route=key, recipient=route["email"], name=route["name"], subject=route["subject"],
-                intent=decision, inbound_id=incoming["id"], in_reply_to=_one(headers, "message-id"),
-                references=references[-9:], catalogue=catalogue, now=current,
+                route=key,
+                recipient=route["email"],
+                name=route["name"],
+                subject=route["subject"],
+                intent=decision,
+                inbound_id=incoming["id"],
+                in_reply_to=_one(headers, "message-id"),
+                references=references[-9:],
+                catalogue=catalogue,
+                now=current,
             )
             claim = claim_reply(settings, key, incoming["id"], decision)
             if claim is None:

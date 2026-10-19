@@ -17,10 +17,12 @@ import httpx
 from pv_growth.acquisition.reply_ledger import ROUTES
 
 OWNER = "pvnetwork8@gmail.com"
-SCOPES = frozenset({
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.send",
-})
+SCOPES = frozenset(
+    {
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.send",
+    }
+)
 ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
 
 
@@ -44,21 +46,38 @@ def _addresses(mail, header):
 class GmailTransport:
     def __init__(self, *, client_id, client_secret, refresh_token, recipients, http_transport=None):
         if (
-            not isinstance(recipients, dict) or set(recipients) != ROUTES
+            not isinstance(recipients, dict)
+            or set(recipients) != ROUTES
             or len(set(recipients.values())) != 30
-            or any(not isinstance(v, str) or not re.fullmatch(
-                r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9][A-Za-z0-9.-]+", v,
-            ) or v.lower() == OWNER for v in recipients.values())
-            or any(not isinstance(v, str) or not v or len(v) > 4096
-                   or any(ord(c) < 32 or ord(c) == 127 for c in v)
-                   for v in (client_id, client_secret, refresh_token))
+            or any(
+                not isinstance(v, str)
+                or not re.fullmatch(
+                    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9][A-Za-z0-9.-]+",
+                    v,
+                )
+                or v.lower() == OWNER
+                for v in recipients.values()
+            )
+            or any(
+                not isinstance(v, str)
+                or not v
+                or len(v) > 4096
+                or any(ord(c) < 32 or ord(c) == 127 for c in v)
+                for v in (client_id, client_secret, refresh_token)
+            )
         ):
             raise ValueError("invalid private pilot configuration")
         self._recipients = dict(recipients)
-        self._credentials = {"client_id": client_id, "client_secret": client_secret,
-                             "refresh_token": refresh_token, "grant_type": "refresh_token"}
+        self._credentials = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }
         self._http = httpx.Client(
-            transport=http_transport, timeout=httpx.Timeout(10.0), follow_redirects=False,
+            transport=http_transport,
+            timeout=httpx.Timeout(10.0),
+            follow_redirects=False,
         )
         self._attempted = False
         self._ready = False
@@ -109,9 +128,11 @@ class GmailTransport:
         access = token.get("access_token")
         expires = token.get("expires_in")
         if (
-            not isinstance(access, str) or not re.fullmatch(r"[A-Za-z0-9._~+/-]{1,4096}", access)
+            not isinstance(access, str)
+            or not re.fullmatch(r"[A-Za-z0-9._~+/-]{1,4096}", access)
             or token.get("token_type", "").lower() != "bearer"
-            or type(expires) is not int or not 60 <= expires <= 86400
+            or type(expires) is not int
+            or not 60 <= expires <= 86400
         ):
             raise MailUnavailable("invalid_access_token_response")
         self._token = access
@@ -129,14 +150,16 @@ class GmailTransport:
             raise ValueError("route outside original pilot")
         query = "in:sent to:" + self._recipients[route] + " after:2026/10/18 before:2026/10/21"
         self._connect()
-        return self._json("GET", ROOT + "/threads", headers=self._headers(),
-                          params={"q": query, "maxResults": 5})
+        return self._json(
+            "GET", ROOT + "/threads", headers=self._headers(), params={"q": query, "maxResults": 5}
+        )
 
     def thread(self, thread_id):
         _thread_id(thread_id)
         self._connect()
-        value = self._json("GET", ROOT + "/threads/" + thread_id, headers=self._headers(),
-                           params={"format": "full"})
+        value = self._json(
+            "GET", ROOT + "/threads/" + thread_id, headers=self._headers(), params={"format": "full"}
+        )
         if value.get("id") != thread_id or not isinstance(value.get("messages"), list):
             raise MailUnavailable("invalid_thread_response")
         return value
@@ -150,7 +173,8 @@ class GmailTransport:
             or any(mail.get_all(header) for header in ("Cc", "Bcc", "Resent-To", "Resent-Cc", "Resent-Bcc"))
             or len(mail.get_all("In-Reply-To", [])) != 1
             or not re.fullmatch(r"<[^\s<>@]{1,160}@[^\s<>@]{1,90}>", mail["In-Reply-To"])
-            or not mail.get("References") or mail.get("Auto-Submitted") != "auto-replied"
+            or not mail.get("References")
+            or mail.get("Auto-Submitted") != "auto-replied"
         ):
             raise ValueError("unsafe reply envelope")
         raw = mail.as_bytes(policy=policy.SMTP)
@@ -158,12 +182,15 @@ class GmailTransport:
             raise ValueError("reply MIME too large")
         self._connect()
         receipt = self._json(
-            "POST", ROOT + "/messages/send", headers=self._headers(),
+            "POST",
+            ROOT + "/messages/send",
+            headers=self._headers(),
             json={"threadId": thread_id, "raw": base64.urlsafe_b64encode(raw).decode("ascii")},
         )
         message_id = receipt.get("id")
         if (
-            not isinstance(message_id, str) or not re.fullmatch(r"[A-Fa-f0-9]{1,128}", message_id)
+            not isinstance(message_id, str)
+            or not re.fullmatch(r"[A-Fa-f0-9]{1,128}", message_id)
             or receipt.get("threadId") != thread_id
         ):
             raise MailUnavailable("ambiguous_send_receipt")

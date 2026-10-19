@@ -15,53 +15,99 @@ NOW = datetime(2026, 10, 19, 18, tzinfo=UTC)
 
 
 def catalogue():
-    return {"source": "mirza_local_readonly", "observed_at_utc": NOW.isoformat(),
-            "plans": [{"code": "fixture", "name": "fixture", "location": "fixture",
-                       "volume_gb": 20, "duration_days": 31, "price_toman": 100000}],
-            "payment": {"direct_buy": False, "minimum_wallet_toman": 100000,
-                        "card_to_support": True, "support_handle": "PVNetwork1"}}
+    return {
+        "source": "mirza_local_readonly",
+        "observed_at_utc": NOW.isoformat(),
+        "plans": [
+            {
+                "code": "fixture",
+                "name": "fixture",
+                "location": "fixture",
+                "volume_gb": 20,
+                "duration_days": 31,
+                "price_toman": 100000,
+            }
+        ],
+        "payment": {
+            "direct_buy": False,
+            "minimum_wallet_toman": 100000,
+            "card_to_support": True,
+            "support_handle": "PVNetwork1",
+        },
+    }
 
 
 def config():
     return {
-        "campaign": "external-acquisition-20261019", "owner": "pvnetwork8@gmail.com",
+        "campaign": "external-acquisition-20261019",
+        "owner": "pvnetwork8@gmail.com",
         "authorized_until_utc": (NOW + timedelta(days=7)).isoformat(),
-        "credentials": {"client_id": "fixture-client", "client_secret": "fixture-secret",
-                        "refresh_token": "fixture-refresh"},
+        "credentials": {
+            "client_id": "fixture-client",
+            "client_secret": "fixture-secret",
+            "refresh_token": "fixture-refresh",
+        },
         "recipients": [
-            {"route": kind + f"{i:02}", "email": f"{kind}{i}@example.org", "name": "Business",
-             "subject": "Proposal " + kind + str(i)}
-            for kind, cap in [("a", 10), ("s", 20)] for i in range(1, cap + 1)
+            {
+                "route": kind + f"{i:02}",
+                "email": f"{kind}{i}@example.org",
+                "name": "Business",
+                "subject": "Proposal " + kind + str(i),
+            }
+            for kind, cap in [("a", 10), ("s", 20)]
+            for i in range(1, cap + 1)
         ],
     }
 
 
 def classification():
-    return {"source": "owner_confirmed", "all_time_test_account_keys": [
-        sha256(f"mirza-user:fixture-{i}".encode()).hexdigest() for i in range(3)
-    ], "ordinary_test_share_estimate_percent": 50}
+    return {
+        "source": "owner_confirmed",
+        "all_time_test_account_keys": [
+            sha256(f"mirza-user:fixture-{i}".encode()).hexdigest() for i in range(3)
+        ],
+        "ordinary_test_share_estimate_percent": 50,
+    }
 
 
 def message(mid, *, body, sender="a1@example.org", sent=False, stamp=None):
-    headers = [{"name": "From", "value": sender},
-               {"name": "To", "value": "a1@example.org" if sent else "pvnetwork8@gmail.com"},
-               {"name": "Subject", "value": "Proposal a1" if sent else "Re: Proposal a1"},
-               {"name": "Message-ID", "value": "<" + mid + "@example.org>"}]
+    headers = [
+        {"name": "From", "value": sender},
+        {"name": "To", "value": "a1@example.org" if sent else "pvnetwork8@gmail.com"},
+        {"name": "Subject", "value": "Proposal a1" if sent else "Re: Proposal a1"},
+        {"name": "Message-ID", "value": "<" + mid + "@example.org>"},
+    ]
     if not sent:
-        headers.append({"name": "Authentication-Results",
-                        "value": "mx.google.com; dmarc=pass header.from=example.org;"})
-    return {"id": mid, "threadId": "abc123", "labelIds": ["SENT"] if sent else ["INBOX"],
-            "internalDate": str(int((stamp or NOW - timedelta(minutes=2)).timestamp() * 1000)),
-            "payload": {"mimeType": "text/plain", "headers": headers,
-                        "body": {"data": base64.urlsafe_b64encode(body.encode()).decode()}}}
+        headers.append(
+            {"name": "Authentication-Results", "value": "mx.google.com; dmarc=pass header.from=example.org;"}
+        )
+    return {
+        "id": mid,
+        "threadId": "abc123",
+        "labelIds": ["SENT"] if sent else ["INBOX"],
+        "internalDate": str(int((stamp or NOW - timedelta(minutes=2)).timestamp() * 1000)),
+        "payload": {
+            "mimeType": "text/plain",
+            "headers": headers,
+            "body": {"data": base64.urlsafe_b64encode(body.encode()).decode()},
+        },
+    }
 
 
 def thread(body="I am interested"):
-    return {"id": "abc123", "messages": [
-        message("aaaa01", body="Original https://t.me/pvgrowthos_bot?start=social_ext261019_a01",
-                sender="pvnetwork8@gmail.com", sent=True, stamp=NOW - timedelta(hours=1)),
-        message("bbbb01", body=body),
-    ]}
+    return {
+        "id": "abc123",
+        "messages": [
+            message(
+                "aaaa01",
+                body="Original https://t.me/pvgrowthos_bot?start=social_ext261019_a01",
+                sender="pvnetwork8@gmail.com",
+                sent=True,
+                stamp=NOW - timedelta(hours=1),
+            ),
+            message("bbbb01", body=body),
+        ],
+    }
 
 
 class GmailFixture:
@@ -91,8 +137,15 @@ class GmailFixture:
 
 
 def run(settings, api, **updates):
-    return process(settings, api, config=config(), catalogue=catalogue(),
-                   classification=classification(), now=NOW, **updates)
+    return process(
+        settings,
+        api,
+        config=config(),
+        catalogue=catalogue(),
+        classification=classification(),
+        now=NOW,
+        **updates,
+    )
 
 
 def test_verified_human_reply_uses_brand_route_and_durable_claim(settings):
@@ -126,10 +179,15 @@ def test_ambiguous_send_remains_consumed_on_next_poll(settings):
     assert len(api.sent) == 1
 
 
-@pytest.mark.parametrize("body,want", [
-    ("No thanks", "stopped"), ("> I am interested", "hold_intent"),
-    ("Maybe later", "hold_intent"), ("Can I have a discount?", "hold_terms"),
-])
+@pytest.mark.parametrize(
+    "body,want",
+    [
+        ("No thanks", "stopped"),
+        ("> I am interested", "hold_intent"),
+        ("Maybe later", "hold_intent"),
+        ("Can I have a discount?", "hold_terms"),
+    ],
+)
 def test_silence_quotes_ambiguity_and_opt_out_do_not_trigger_mail(settings, body, want):
     api = GmailFixture(thread(body))
     assert run(settings, api)["routes"]["a01"] == want
@@ -180,8 +238,15 @@ def test_similar_tracking_prefix_is_not_the_original_route(settings):
 
 def test_own_manual_reply_after_inbound_prevents_automatic_reply(settings):
     content = thread()
-    content["messages"].append(message("cccc01", body="Manual answer", sender="pvnetwork8@gmail.com",
-                                        sent=True, stamp=NOW - timedelta(minutes=1)))
+    content["messages"].append(
+        message(
+            "cccc01",
+            body="Manual answer",
+            sender="pvnetwork8@gmail.com",
+            sent=True,
+            stamp=NOW - timedelta(minutes=1),
+        )
+    )
     api = GmailFixture(content)
     assert run(settings, api)["routes"]["a01"] == "held_no_new_human_reply"
     assert api.sent == []
@@ -190,7 +255,8 @@ def test_own_manual_reply_after_inbound_prevents_automatic_reply(settings):
 def test_opt_out_arriving_during_poll_is_rechecked_before_send(settings):
     api = GmailFixture()
     api.before_recheck = lambda content: content["messages"].append(
-        message("bbbb02", body="unsubscribe", stamp=NOW - timedelta(minutes=1)))
+        message("bbbb02", body="unsubscribe", stamp=NOW - timedelta(minutes=1))
+    )
     assert run(settings, api)["routes"]["a01"] == "stopped"
     api.before_recheck = None
     api.content = thread()

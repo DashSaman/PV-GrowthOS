@@ -12,12 +12,22 @@ NOW = datetime(2026, 10, 19, 18, 5, tzinfo=UTC)
 
 
 def configuration():
-    return {"campaign": "external-acquisition-20261019", "owner": "pvnetwork8@gmail.com",
-            "authorized_until_utc": (NOW + timedelta(days=7)).isoformat(),
-            "credentials": {"client_id": "fixture", "client_secret": "fixture", "refresh_token": "fixture"},
-            "recipients": [{"route": f"{kind}{i:02}", "email": f"{kind}{i}@example.org",
-                            "subject": "Original proposal", "name": "Business"}
-                           for kind, cap in [("a", 10), ("s", 20)] for i in range(1, cap + 1)]}
+    return {
+        "campaign": "external-acquisition-20261019",
+        "owner": "pvnetwork8@gmail.com",
+        "authorized_until_utc": (NOW + timedelta(days=7)).isoformat(),
+        "credentials": {"client_id": "fixture", "client_secret": "fixture", "refresh_token": "fixture"},
+        "recipients": [
+            {
+                "route": f"{kind}{i:02}",
+                "email": f"{kind}{i}@example.org",
+                "subject": "Original proposal",
+                "name": "Business",
+            }
+            for kind, cap in [("a", 10), ("s", 20)]
+            for i in range(1, cap + 1)
+        ],
+    }
 
 
 def test_no_config_means_no_scheduler_mail_job(session, tmp_path, monkeypatch):
@@ -100,20 +110,51 @@ def test_config_loader_rejects_expiry_without_returning_credentials(settings, tm
 def test_full_native_cycle_requires_existing_registry_and_test_exclusions(session, settings, monkeypatch):
     from pv_growth.acquisition.outreach_report import SOURCE_CODES
 
-    registry = {"campaign": "external-acquisition-20261019", "stage": "registered",
-                "owner_authorized_limit": 30, "registered_at_utc": (NOW - timedelta(hours=1)).isoformat(),
-                "sources": [{"source_code": code, "key": code.rsplit("_", 1)[1],
-                             "start_parameter": code.replace("social:", "social_", 1),
-                             "segment": "admin" if "_a" in code else "shop"} for code in SOURCE_CODES]}
+    registry = {
+        "campaign": "external-acquisition-20261019",
+        "stage": "registered",
+        "owner_authorized_limit": 30,
+        "registered_at_utc": (NOW - timedelta(hours=1)).isoformat(),
+        "sources": [
+            {
+                "source_code": code,
+                "key": code.rsplit("_", 1)[1],
+                "start_parameter": code.replace("social:", "social_", 1),
+                "segment": "admin" if "_a" in code else "shop",
+            }
+            for code in SOURCE_CODES
+        ],
+    }
     session.add(AppConfig(key="retail-outreach:campaign:20261019", value=registry))
-    session.add(AppConfig(key="retail-sales:classification", value={"source": "owner_confirmed",
-                          "all_time_test_account_keys": [sha256(f"test-{i}".encode()).hexdigest()
-                                                         for i in range(3)]}))
-    session.add(AppConfig(key="retail-catalogue:active", value={
-        "source": "mirza_local_readonly", "observed_at_utc": NOW.isoformat(),
-        "plans": [{"code": "fixture", "name": "fixture", "location": "fixture",
-                   "volume_gb": 20, "duration_days": 31, "price_toman": 100000}],
-        "payment": {"direct_buy": False, "minimum_wallet_toman": 100000, "card_to_support": True}}))
+    session.add(
+        AppConfig(
+            key="retail-sales:classification",
+            value={
+                "source": "owner_confirmed",
+                "all_time_test_account_keys": [sha256(f"test-{i}".encode()).hexdigest() for i in range(3)],
+            },
+        )
+    )
+    session.add(
+        AppConfig(
+            key="retail-catalogue:active",
+            value={
+                "source": "mirza_local_readonly",
+                "observed_at_utc": NOW.isoformat(),
+                "plans": [
+                    {
+                        "code": "fixture",
+                        "name": "fixture",
+                        "location": "fixture",
+                        "volume_gb": 20,
+                        "duration_days": 31,
+                        "price_toman": 100000,
+                    }
+                ],
+                "payment": {"direct_buy": False, "minimum_wallet_toman": 100000, "card_to_support": True},
+            },
+        )
+    )
     session.commit()
     monkeypatch.setattr(mail_jobs, "utcnow", lambda: NOW)
     monkeypatch.setattr(mail_jobs, "load_config", lambda *_: configuration())

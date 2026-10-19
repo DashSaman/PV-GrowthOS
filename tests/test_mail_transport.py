@@ -15,8 +15,10 @@ from pv_growth.acquisition.mail_transport import GmailTransport, MailUnavailable
 
 
 def routes():
-    return {**{f"a{i:02}": f"admin{i}@example.org" for i in range(1, 11)},
-            **{f"s{i:02}": f"shop{i}@example.org" for i in range(1, 21)}}
+    return {
+        **{f"a{i:02}": f"admin{i}@example.org" for i in range(1, 11)},
+        **{f"s{i:02}": f"shop{i}@example.org" for i in range(1, 21)},
+    }
 
 
 def reply():
@@ -33,19 +35,26 @@ def reply():
 
 def transport(handler, mapping=None):
     return GmailTransport(
-        client_id="fixture-client", client_secret="fixture-secret",
-        refresh_token="fixture-refresh", recipients=mapping or routes(),
+        client_id="fixture-client",
+        client_secret="fixture-secret",
+        refresh_token="fixture-refresh",
+        recipients=mapping or routes(),
         http_transport=httpx.MockTransport(handler),
     )
 
 
 def authorized(request):
     if request.url.host == "oauth2.googleapis.com":
-        return httpx.Response(200, json={
-            "access_token": "fixture-access", "token_type": "Bearer", "expires_in": 3599,
-            "scope": "https://www.googleapis.com/auth/gmail.readonly "
-                     "https://www.googleapis.com/auth/gmail.send",
-        })
+        return httpx.Response(
+            200,
+            json={
+                "access_token": "fixture-access",
+                "token_type": "Bearer",
+                "expires_in": 3599,
+                "scope": "https://www.googleapis.com/auth/gmail.readonly "
+                "https://www.googleapis.com/auth/gmail.send",
+            },
+        )
     if request.url.path.endswith("/profile"):
         return httpx.Response(200, json={"emailAddress": "pvnetwork8@gmail.com", "historyId": "42"})
     raise AssertionError("unexpected HTTP request")
@@ -63,7 +72,9 @@ def test_business_profile_is_verified_before_thread_reads():
     with transport(server) as api:
         assert api.thread("abc123") == {"id": "abc123", "messages": []}
     assert [r.url.path for r in requests] == [
-        "/token", "/gmail/v1/users/me/profile", "/gmail/v1/users/me/threads/abc123",
+        "/token",
+        "/gmail/v1/users/me/profile",
+        "/gmail/v1/users/me/threads/abc123",
     ]
     assert requests[2].url.params["format"] == "full"
     assert requests[2].headers["authorization"] == "Bearer fixture-access"
@@ -85,15 +96,23 @@ def test_wrong_mailbox_stops_before_read_or_send():
     assert paths == ["/token", "/gmail/v1/users/me/profile"]
 
 
-@pytest.mark.parametrize("scope", ["", "https://www.googleapis.com/auth/gmail.send",
-                                    "https://mail.google.com/"])
+@pytest.mark.parametrize(
+    "scope", ["", "https://www.googleapis.com/auth/gmail.send", "https://mail.google.com/"]
+)
 def test_missing_or_broader_grant_does_not_read_mail(scope):
     paths = []
 
     def server(request):
         paths.append(request.url.path)
-        return httpx.Response(200, json={"access_token": "fixture-access", "scope": scope,
-                                        "token_type": "Bearer", "expires_in": 3599})
+        return httpx.Response(
+            200,
+            json={
+                "access_token": "fixture-access",
+                "scope": scope,
+                "token_type": "Bearer",
+                "expires_in": 3599,
+            },
+        )
 
     with transport(server) as api, pytest.raises(MailUnavailable, match="scope_mismatch"):
         api.thread("abc123")
@@ -106,8 +125,9 @@ def test_errors_are_never_retried_or_redirected_and_do_not_leak_secrets(status):
 
     def server(request):
         requests.append(request)
-        return httpx.Response(status, text="fixture-secret fixture-refresh",
-                              headers={"Location": "https://example.org/collect"})
+        return httpx.Response(
+            status, text="fixture-secret fixture-refresh", headers={"Location": "https://example.org/collect"}
+        )
 
     with transport(server) as api, pytest.raises(MailUnavailable) as failure:
         api.thread("abc123")
@@ -156,7 +176,7 @@ def test_original_search_is_one_bounded_sent_query_for_one_approved_route():
     with transport(server) as api:
         assert api.find_sent("a01") == {"threads": [{"id": "abc123"}], "resultSizeEstimate": 1}
     query = requests[-1].url.params
-    assert query["q"] == 'in:sent to:admin1@example.org after:2026/10/18 before:2026/10/21'
+    assert query["q"] == "in:sent to:admin1@example.org after:2026/10/18 before:2026/10/21"
     assert query["maxResults"] == "5"
 
 

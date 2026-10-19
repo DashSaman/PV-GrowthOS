@@ -40,9 +40,7 @@ def load_config(settings, now):
             info = os.fstat(file.fileno())
             if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
                 raise ValueError
-            if settings.env == "production" and (
-                info.st_mode & 0o077 or info.st_uid not in {0, os.getuid()}
-            ):
+            if settings.env == "production" and (info.st_mode & 0o077 or info.st_uid not in {0, os.getuid()}):
                 raise ValueError
             data = file.read(65537)
         if len(data) > 65536:
@@ -89,8 +87,13 @@ def enqueue(session, now):
     if not CONFIG_PATH.is_file() or aware(now) >= END:
         return
     stamp = bucket(now)
-    enqueue_job(session, "retail.mail_replies", {"bucket": stamp},
-                idempotency_key="retail-mail:20261019:" + stamp, max_attempts=1)
+    enqueue_job(
+        session,
+        "retail.mail_replies",
+        {"bucket": stamp},
+        idempotency_key="retail-mail:20261019:" + stamp,
+        max_attempts=1,
+    )
 
 
 def _facts(settings, now):
@@ -131,16 +134,29 @@ def monitor(session, settings, payload):
             routes = validate_config(private, now)
             recipients = {k: r["email"] for k, r in routes.items()}
             with GmailTransport(**private["credentials"], recipients=recipients) as api:
-                report = process(settings, api, config=private, classification=classification,
-                                 catalogue=catalogue, now=now, lock_held=True)
+                report = process(
+                    settings,
+                    api,
+                    config=private,
+                    classification=classification,
+                    catalogue=catalogue,
+                    now=now,
+                    lock_held=True,
+                )
         except Exception as exc:
             # Provider text, private message content, addresses and credentials
             # must never reach job tracebacks, logs or the aggregate report.
-            report = {"status": "unavailable", "data_complete": False,
-                      "error_class": type(exc).__name__, "campaign": "external-acquisition-20261019"}
+            report = {
+                "status": "unavailable",
+                "data_complete": False,
+                "error_class": type(exc).__name__,
+                "campaign": "external-acquisition-20261019",
+            }
         report.update(
-            observed_at_utc=aware(now).isoformat(), execution_owner="docker_scheduler",
-            payment_confirmation="manual_support", sales_report_key="retail-outreach:20261019:latest",
+            observed_at_utc=aware(now).isoformat(),
+            execution_owner="docker_scheduler",
+            payment_confirmation="manual_support",
+            sales_report_key="retail-outreach:20261019:latest",
         )
         _save(session, key, report)
         _save(session, PREFIX + ":latest", report)
