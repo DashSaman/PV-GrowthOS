@@ -15,6 +15,7 @@ from decimal import Decimal
 import httpx
 from sqlalchemy import select, text
 
+from pv_growth.acquisition.retail_catalogue import current_catalogue
 from pv_growth.acquisition.retail_offer import purchase_button
 from pv_growth.database.models import AppConfig, Event, User
 from pv_growth.database.types import utcnow
@@ -59,18 +60,49 @@ def record_entry(session, user, *, request_id):
             "RETAIL_POST_ENTERED",
             user_id=user.id,
             idempotency_key=f"retail-post-entry:{digest}",
-            metadata={"post": POST, "basis": "explicit_post_link_start", "version": "20261018"},
+            metadata={"post": POST, "basis": "explicit_post_link_start", "version": "20261019"},
         )
         session.commit()
         if not created:
             return None
+    return entry_message(session, now=now, tracked=active is not None)
+
+
+def entry_message(session, *, now=None, tracked=False):
+    """Render the actual post checkout guide without sending or recording anything."""
+    live = current_catalogue(session, now=now or utcnow())
+    primary = live["recommended"] if live else None
+    plan = (
+        f"📦 شروع پیشنهادی: {primary['volume_gb']} گیگ · "
+        f"{str(primary['duration_days']) + ' روز' if primary['duration_days'] else 'بدون محدودیت زمانی'} · "
+        f"{primary['price_toman']:,} تومان\n"
+        "قیمت پایهٔ تازه از میرزا؛ مبلغ نهایی، موجودی و شرایط همان فاکتور ملاک است.\n\n"
+        if primary
+        else "📦 پلن و قیمت تازه را در ربات اصلی ببین؛ قیمت قبلی مبنای پرداخت نیست.\n\n"
+    )
+    notice = "\nورود از لینک این پست برای بررسی نتیجه ثبت شد." if tracked else ""
     return (
-        "🛒 خرید اشتراک شخصی PV Network\n\n"
-        "برای دیدن پلن و فاکتور، دکمهٔ زیر را بزن.\n"
-        "💳 پرداخت و تأیید وجه با پشتیبانی است؛ پس از شارژ کیف پول، خرید سرویس را تکمیل کن.\n"
-        "ورود از لینک این پست برای بررسی نتیجهٔ تبلیغ ثبت می‌شود. "
-        "قیمت و موجودی نهایی در ربات اصلی ملاک است.",
-        InlineKeyboard([[purchase_button()]]),
+        "🛒 اشتراک شخصی PV Network\n\n"
+        + plan
+        + "۱️⃣ «انتخاب پلن و خرید» را بزن و در ربات اصلی، سرویس و پلن را انتخاب کن. "
+        "اگر Start نمایش داده شد، آن را بزن.\n"
+        "۲️⃣ مبلغ فاکتور و شرایط پلن را بررسی کن؛ در صورت کمبود موجودی، "
+        "فقط روش پرداخت همان ربات را استفاده کن. تأیید وجه با پشتیبانی است.\n"
+        "۳️⃣ پس از تأیید و شارژ کیف پول، به خرید برگرد و خرید سرویس را تکمیل کن؛ "
+        "شارژ کیف پول به‌تنهایی خرید سرویس نیست. اطلاعات اتصال در «سرویس‌های من» است.\n\n"
+        "💳 برای مراحل پرداخت و ✅ برای بررسی خرید از دکمه‌های زیر استفاده کن. "
+        "اگر اتصال روی اینترنتت مشکل دارد، پیش از پرداخت راهنمای اتصال را ببین. "
+        "در ابهام دوباره پرداخت نکن؛ رمز و اطلاعات کارت را اینجا نفرست." + notice,
+        InlineKeyboard(
+            [
+                [{**purchase_button(), "style": "success"}],
+                [
+                    {"text": "💳 راهنمای پرداخت دستی", "callback_data": "retail:payment"},
+                    {"text": "✅ وضعیت خرید من", "callback_data": "retail:status"},
+                ],
+                [{"text": "🔧 راهنمای اتصال / اعلام مشکل", "callback_data": "retail:setup"}],
+            ]
+        ),
     )
 
 
@@ -151,6 +183,10 @@ def summarize_post(snapshot, *, start, end, entries, classification):
         "status": "ok",
         "data_complete": True,
         "post": POST,
+        "non_test_entered_accounts": sum(
+            bool(anchors) and hashlib.sha256(("mirza-user:" + uid).encode()).hexdigest() not in tests
+            for uid, anchors in ordered_entries.items()
+        ),
         "start_utc": start.isoformat(),
         "end_utc": end.isoformat(),
         "confirmed_internal_test_excluded": remaining["confirmed_internal_test"],
@@ -269,10 +305,6 @@ def monitor(session, settings, payload):
             end=min(aware(now), cfg["published"] + timedelta(days=31)),
             entries=entries,
             classification=classification,
-        )
-        state, test_keys, _ = _classification(classification)
-        report["non_test_entered_accounts"] = sum(
-            hashlib.sha256(("mirza-user:" + uid).encode()).hexdigest() not in test_keys for uid in entries
         )
         for hours in (24, 72, 168):
             milestone_key = f"retail-post:milestone:{hours}"
