@@ -163,5 +163,22 @@
     "payment_confirmation": "manual_support",
     "retroactive_attribution": false,
     "new_publication_authorized": false
+  },
+  "retail_outreach_measurement": {
+    "campaign": "external-acquisition-20261019",
+    "owner_authorized_at": "2026-10-19",
+    "execution_owner": "existing_docker_scheduler",
+    "interval_hours": 1,
+    "registered_routes": 30,
+    "maximum_report_window_days": 31,
+    "attribution_window_days": 7,
+    "credit_rule": "first_campaign_source_per_account",
+    "test_exclusion": "explicit_owner_confirmed_all_time_accounts",
+    "owner_50_percent_estimate_applied": false,
+    "customer_messages": 0,
+    "max_attempts": 1,
+    "replay_stale_hour": false,
+    "new_outreach_authorized": false,
+    "payment_confirmation": "manual_support"
   }
 }

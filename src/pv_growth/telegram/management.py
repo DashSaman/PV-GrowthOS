@@ -204,6 +204,11 @@ def handle_action(session, settings, client, *, user_id, chat_id, chat_type, act
         from pv_growth.acquisition.post_report import report_text as post_report_text
 
         client.send_message(chat_id, render_report(report) + post_report_text(session), keyboard())
+        from pv_growth.acquisition.outreach_report import report_text as outreach_report_text
+
+        outreach = outreach_report_text(session)
+        if outreach:
+            client.send_message(chat_id, outreach)
         return True
     locked_policy = session.scalar(
         select(AppConfig)
