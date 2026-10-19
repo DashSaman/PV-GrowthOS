@@ -8,7 +8,7 @@ import hashlib
 from datetime import UTC, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select, text
+from sqlalchemy import and_, or_, select, text
 
 from pv_growth.acquisition.retail_catalogue import current_catalogue, payment_text
 from pv_growth.acquisition.retail_offer import current_offer, keyboard, purchase_button
@@ -74,6 +74,7 @@ def evaluate_status(snapshot, *, since, now):
 
 
 def _status(session, settings, user):
+    from pv_growth.acquisition.post_report import POST
     from pv_growth.database.base import session_scope
 
     with session_scope(settings) as db:
@@ -85,7 +86,13 @@ def _status(session, settings, user):
             select(Event)
             .where(
                 Event.user_id == user.id,
-                Event.event_type == "RETAIL_OFFER_REQUESTED",
+                or_(
+                    Event.event_type == "RETAIL_OFFER_REQUESTED",
+                    and_(
+                        Event.event_type == "RETAIL_POST_ENTERED",
+                        Event.metadata_json["post"].as_string() == POST,
+                    ),
+                ),
                 Event.occurred_at >= utcnow() - timedelta(days=7),
                 Event.occurred_at <= utcnow(),
             )
@@ -105,7 +112,7 @@ def _status(session, settings, user):
     state = result["status"]
     if state == "service_recorded":
         return (
-            f"✅ پس از درخواست راهنما، سرویس یا تمدید مثبت به مبلغ {result['service_toman']} تومان "
+            f"✅ پس از ورود به این مسیر خرید، سرویس یا تمدید مثبت به مبلغ {result['service_toman']} تومان "
             "در ربات اصلی ثبت شده است.\nاین مشاهدهٔ سفارش سرویس است، نه رسید تسویهٔ بانکی. "
             "جزئیات و اطلاعات اتصال را از «سرویس‌های من» در @pvnetwork_bot بگیر.\n"
             "اگر روی اینترنت خودت وصل نشد، از راهنمای اتصال و پشتیبانی همان ربات کمک بگیر."
