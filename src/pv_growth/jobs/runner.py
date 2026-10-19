@@ -51,6 +51,7 @@ def register_builtin_handlers() -> None:
     Without this the registry is empty at runtime and every job errors."""
     import pv_growth.acquisition.daily  # noqa: F401
     import pv_growth.acquisition.intro  # noqa: F401
+    import pv_growth.acquisition.outreach_report  # noqa: F401
     import pv_growth.acquisition.post_report  # noqa: F401
     import pv_growth.acquisition.purchase_journey  # noqa: F401
     import pv_growth.competitors.jobs  # noqa: F401
