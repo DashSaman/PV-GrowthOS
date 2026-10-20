@@ -18,6 +18,23 @@ from pv_growth.database.types import utcnow
 
 INTENTS = frozenset({"interest", "price", "payment", "payment_reported", "setup", "collaboration"})
 ROUTES = frozenset([f"a{i:02}" for i in range(1, 11)] + [f"s{i:02}" for i in range(1, 21)])
+CAMPAIGN = "external-acquisition-20261019"
+MAPS_CAMPAIGN = "maps-acquisition-20261020"
+MAPS_ROUTES = frozenset(f"m{i:02}" for i in range(1, 11))
+
+
+def routes_for(campaign):
+    if campaign == CAMPAIGN:
+        return ROUTES
+    if campaign == MAPS_CAMPAIGN:
+        return MAPS_ROUTES
+    raise ValueError("unsupported mail campaign")
+
+
+def source_url(campaign, route):
+    _route(route, campaign)
+    prefix = "social_maps261020_" if campaign == MAPS_CAMPAIGN else "social_ext261019_"
+    return "https://t.me/pvgrowthos_bot?start=" + prefix + route
 
 
 @dataclass(frozen=True)
@@ -26,9 +43,10 @@ class ReplyClaim:
     phase_key: str
 
 
-def _key(kind, value):
+def _key(kind, value, *, campaign=CAMPAIGN):
     # AppConfig.key has a 64-character limit. SHA-224 gives a 63-char key.
-    fingerprint = hashlib.sha224(("external-acquisition-20261019:" + value).encode()).hexdigest()
+    routes_for(campaign)
+    fingerprint = hashlib.sha224((campaign + ":" + value).encode()).hexdigest()
     return "mail:" + kind + ":" + fingerprint
 
 
@@ -41,24 +59,28 @@ def _guard(db, settings):
             raise ValueError("unexpected mail ledger database")
 
 
-def _route(route):
-    if route not in ROUTES:
+def _route(route, campaign=CAMPAIGN):
+    if route not in routes_for(campaign):
         raise ValueError("route outside original pilot")
 
 
-def claim_reply(settings, route: str, inbound_id: str, intent: str) -> ReplyClaim | None:
+def claim_reply(
+    settings, route: str, inbound_id: str, intent: str, *, campaign=CAMPAIGN
+) -> ReplyClaim | None:
     """Commit both inbound and phase claims before allowing one send attempt."""
-    _route(route)
+    _route(route, campaign)
     if intent not in INTENTS or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", inbound_id):
         raise ValueError("unsupported reply claim")
-    claim = ReplyClaim(_key("m", inbound_id), _key("p", route + ":" + intent))
+    claim = ReplyClaim(
+        _key("m", inbound_id, campaign=campaign), _key("p", route + ":" + intent, campaign=campaign)
+    )
     try:
         with session_scope(settings) as db:
             _guard(db, settings)
-            if db.get(AppConfig, _key("s", route)) is not None:
+            if db.get(AppConfig, _key("s", route, campaign=campaign)) is not None:
                 return None
             value = {
-                "campaign": "external-acquisition-20261019",
+                "campaign": campaign,
                 "route": route,
                 "intent": intent,
                 "state": "reserved",
@@ -87,13 +109,13 @@ def finish_reply(settings, claim: ReplyClaim, result: str) -> None:
             row.value = {**row.value, "state": result, "finished_at_utc": utcnow().isoformat()}
 
 
-def stop_route(settings, route: str) -> None:
+def stop_route(settings, route: str, *, campaign=CAMPAIGN) -> None:
     """Permanently hold this route after a verified human opt-out."""
-    _route(route)
+    _route(route, campaign)
     try:
         with session_scope(settings) as db:
             _guard(db, settings)
-            key = _key("s", route)
+            key = _key("s", route, campaign=campaign)
             if db.get(AppConfig, key) is None:
                 db.add(AppConfig(key=key, value={"route": route, "state": "stopped"}))
                 db.commit()

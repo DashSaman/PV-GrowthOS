@@ -14,7 +14,7 @@ from email.utils import getaddresses
 
 import httpx
 
-from pv_growth.acquisition.reply_ledger import ROUTES
+from pv_growth.acquisition.reply_ledger import MAPS_ROUTES, ROUTES
 
 OWNER = "pvnetwork8@gmail.com"
 SCOPES = frozenset(
@@ -44,11 +44,15 @@ def _addresses(mail, header):
 
 
 class GmailTransport:
+    _routes = ROUTES
+    _sent_after = "2026/10/18"
+    _sent_before = "2026/10/21"
+
     def __init__(self, *, client_id, client_secret, refresh_token, recipients, http_transport=None):
         if (
             not isinstance(recipients, dict)
-            or set(recipients) != ROUTES
-            or len(set(recipients.values())) != 30
+            or set(recipients) != self._routes
+            or len(set(recipients.values())) != len(self._routes)
             or any(
                 not isinstance(v, str)
                 or not re.fullmatch(
@@ -148,7 +152,14 @@ class GmailTransport:
     def find_sent(self, route):
         if route not in self._recipients:
             raise ValueError("route outside original pilot")
-        query = "in:sent to:" + self._recipients[route] + " after:2026/10/18 before:2026/10/21"
+        query = (
+            "in:sent to:"
+            + self._recipients[route]
+            + " after:"
+            + self._sent_after
+            + " before:"
+            + self._sent_before
+        )
         self._connect()
         return self._json(
             "GET", ROOT + "/threads", headers=self._headers(), params={"q": query, "maxResults": 5}
@@ -195,3 +206,11 @@ class GmailTransport:
         ):
             raise MailUnavailable("ambiguous_send_receipt")
         return {"id": message_id, "threadId": thread_id}
+
+
+class MapsGmailTransport(GmailTransport):
+    """Same fixed Gmail boundary, restricted to the independently approved ten."""
+
+    _routes = MAPS_ROUTES
+    _sent_after = "2026/10/19"
+    _sent_before = "2026/10/22"

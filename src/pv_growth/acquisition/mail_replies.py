@@ -13,8 +13,16 @@ from datetime import UTC, datetime, timedelta
 from email.utils import getaddresses
 from hashlib import sha256
 
-from pv_growth.acquisition.mail_transport import OWNER, GmailTransport, MailUnavailable
-from pv_growth.acquisition.reply_ledger import INTENTS, ROUTES, claim_reply, finish_reply, stop_route
+from pv_growth.acquisition.mail_transport import OWNER, GmailTransport, MailUnavailable, MapsGmailTransport
+from pv_growth.acquisition.reply_ledger import (
+    INTENTS,
+    MAPS_CAMPAIGN,
+    claim_reply,
+    finish_reply,
+    routes_for,
+    source_url,
+    stop_route,
+)
 from pv_growth.acquisition.reply_message import build_reply
 from pv_growth.acquisition.reply_policy import reply_decision
 from pv_growth.acquisition.retail_catalogue import validate_catalogue
@@ -24,27 +32,41 @@ CAMPAIGN = "external-acquisition-20261019"
 START = datetime(2026, 10, 19, tzinfo=UTC)
 END = datetime(2026, 11, 19, tzinfo=UTC)
 PILOT_FINGERPRINT = "59a08bcd08d035b3d3d548a6a834554b18f36aaa7b9628ad20632df95e7cc37a"
+MAPS_START = datetime(2026, 10, 20, tzinfo=UTC)
+MAPS_END = datetime(2026, 11, 20, tzinfo=UTC)
+MAPS_PILOT_FINGERPRINT = "ce95efbd67a79a6f33ab9e2c9c37a3c84cfa5a7c2d5c4e619f0c638834045d26"
 
 
-def verify_pilot(routes):
+def _pilot(campaign):
+    routes_for(campaign)
+    if campaign == MAPS_CAMPAIGN:
+        return MAPS_START, MAPS_END, MAPS_PILOT_FINGERPRINT, MapsGmailTransport, "retail-maps:20261020:latest"
+    return START, END, PILOT_FINGERPRINT, GmailTransport, "retail-outreach:20261019:latest"
+
+
+def verify_pilot(routes, *, campaign=CAMPAIGN):
+    if set(routes) != routes_for(campaign):
+        raise ValueError("pilot route mismatch")
     rows = [[k, r["email"].lower(), r["subject"]] for k, r in sorted(routes.items())]
     encoded = json.dumps(rows, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    if sha256(encoded).hexdigest() != PILOT_FINGERPRINT:
+    if sha256(encoded).hexdigest() != _pilot(campaign)[2]:
         raise ValueError("pilot recipient fingerprint mismatch")
 
 
-def validate_config(value, now):
+def validate_config(value, now, *, campaign=CAMPAIGN):
     try:
+        start, end, _fingerprint, transport, _sales = _pilot(campaign)
+        expected = routes_for(campaign)
         until = datetime.fromisoformat(value["authorized_until_utc"])
         rows = value["recipients"]
         if (
-            value["campaign"] != CAMPAIGN
+            value["campaign"] != campaign
             or value["owner"] != OWNER
             or until.tzinfo is None
-            or not START <= aware(now) < until <= END
+            or not start <= aware(now) < until <= end
             or not isinstance(rows, list)
-            or len(rows) != 30
-            or {row["route"] for row in rows} != ROUTES
+            or len(rows) != len(expected)
+            or {row["route"] for row in rows} != expected
             or any(
                 not isinstance(row["name"], str)
                 or len(row["name"]) > 160
@@ -57,7 +79,7 @@ def validate_config(value, now):
         ):
             raise ValueError
         # This validates credentials/recipients locally; it makes no HTTP call.
-        with GmailTransport(**value["credentials"], recipients={r["route"]: r["email"] for r in rows}):
+        with transport(**value["credentials"], recipients={r["route"]: r["email"] for r in rows}):
             pass
         return {row["route"]: dict(row) for row in rows}
     except (KeyError, TypeError, ValueError, AttributeError):
@@ -108,7 +130,7 @@ def _body(part, *, original=False, depth=0):
     return result
 
 
-def _ordered(thread, tid, now):
+def _ordered(thread, tid, now, *, campaign=CAMPAIGN):
     rows = thread.get("messages")
     if thread.get("id") != tid or not isinstance(rows, list) or not 1 <= len(rows) <= 100:
         raise ValueError("thread unavailable")
@@ -120,7 +142,7 @@ def _ordered(thread, tid, now):
             or not re.fullmatch(r"[A-Fa-f0-9]{1,128}", mid)
             or mid in seen
             or row.get("threadId") != tid
-            or not int(START.timestamp() * 1000) <= stamp <= int(aware(now).timestamp() * 1000)
+            or not int(_pilot(campaign)[0].timestamp() * 1000) <= stamp <= int(aware(now).timestamp() * 1000)
         ):
             raise ValueError("thread identity unavailable")
         seen.add(mid)
@@ -128,8 +150,8 @@ def _ordered(thread, tid, now):
     return [row for _, _, row in sorted(ordered)]
 
 
-def _original(rows, route):
-    source = "https://t.me/pvgrowthos_bot?start=social_ext261019_" + route["route"]
+def _original(rows, route, *, campaign=CAMPAIGN):
+    source = source_url(campaign, route["route"])
     for row in rows:
         headers = _headers(row)
         if (
@@ -162,9 +184,9 @@ def _decision(message, recipient):
     )
 
 
-def _inspect(thread, tid, route, now):
-    rows = _ordered(thread, tid, now)
-    original = _original(rows, route)
+def _inspect(thread, tid, route, now, *, campaign=CAMPAIGN):
+    rows = _ordered(thread, tid, now, campaign=campaign)
+    original = _original(rows, route, campaign=campaign)
     if original is None:
         return "held_original", None
     after = rows[rows.index(original) + 1 :]
@@ -176,27 +198,27 @@ def _inspect(thread, tid, route, now):
     return _decision(after[-1], route["email"]), after[-1]
 
 
-def process(settings, api, *, config, catalogue, classification, now, lock_held=False):
+def process(settings, api, *, config, catalogue, classification, now, lock_held=False, campaign=CAMPAIGN):
     """One bounded cycle; a failure never becomes silence, delivery or a sale."""
     if settings.env == "production" and not lock_held:
         raise ValueError("campaign lock required")
-    routes = validate_config(config, now)
+    routes = validate_config(config, now, campaign=campaign)
     if settings.env == "production":
-        verify_pilot(routes)
+        verify_pilot(routes, campaign=campaign)
     state, tests, _ = _classification(classification)
     if state != "owner_confirmed" or len(tests) < 3 or validate_catalogue(catalogue, now=now) is None:
         raise ValueError("catalogue or confirmed test classification unavailable")
     started = time.monotonic()
     deadline = started + 120
     result = {
-        "campaign": CAMPAIGN,
+        "campaign": campaign,
         "observed_at_utc": aware(now).isoformat(),
         "status": "ok",
         "data_complete": True,
         "routes": {},
         "payment_confirmation": "manual_support",
         "execution_owner": "docker_scheduler",
-        "sales_report_key": "retail-outreach:20261019:latest",
+        "sales_report_key": _pilot(campaign)[4],
         "confirmed_internal_test_account_count": len(tests),
         "reminders_sent": 0,
     }
@@ -212,9 +234,9 @@ def process(settings, api, *, config, catalogue, classification, now, lock_held=
                 result["routes"][key] = "held_original_lookup"
                 continue
             tid = candidates[0]["id"]
-            decision, incoming = _inspect(api.thread(tid), tid, route, now)
+            decision, incoming = _inspect(api.thread(tid), tid, route, now, campaign=campaign)
             if decision == "stopped":
-                stop_route(settings, key)
+                stop_route(settings, key, campaign=campaign)
             if decision not in INTENTS:
                 result["routes"][key] = decision
                 continue
@@ -232,17 +254,18 @@ def process(settings, api, *, config, catalogue, classification, now, lock_held=
                 references=references[-9:],
                 catalogue=catalogue,
                 now=current,
+                campaign=campaign,
             )
-            claim = claim_reply(settings, key, incoming["id"], decision)
+            claim = claim_reply(settings, key, incoming["id"], decision, campaign=campaign)
             if claim is None:
                 result["routes"][key] = "held_duplicate"
                 continue
             # A committed reservation survives a crash even during this final read.
             send_attempted = False
             try:
-                latest_decision, latest = _inspect(api.thread(tid), tid, route, now)
+                latest_decision, latest = _inspect(api.thread(tid), tid, route, now, campaign=campaign)
                 if latest_decision == "stopped":
-                    stop_route(settings, key)
+                    stop_route(settings, key, campaign=campaign)
                 if latest_decision != decision or latest is None or latest["id"] != incoming["id"]:
                     finish_reply(settings, claim, "held")
                     result["routes"][key] = (
