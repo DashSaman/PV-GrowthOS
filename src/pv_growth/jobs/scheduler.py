@@ -143,6 +143,9 @@ class Scheduler:
             from pv_growth.acquisition.outreach_report import enqueue_monitor as enqueue_outreach_monitor
 
             enqueue_outreach_monitor(session, utcnow())
+            from pv_growth.acquisition.maps_report import enqueue_monitor as enqueue_maps_monitor
+
+            enqueue_maps_monitor(session, utcnow())
             from pv_growth.acquisition.mail_jobs import enqueue as enqueue_mail_replies
 
             enqueue_mail_replies(session, utcnow())
