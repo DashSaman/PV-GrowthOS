@@ -6,7 +6,7 @@ import re
 from email.message import EmailMessage
 from pathlib import Path
 
-from pv_growth.acquisition.reply_ledger import INTENTS, ROUTES
+from pv_growth.acquisition.reply_ledger import CAMPAIGN, INTENTS, routes_for, source_url
 from pv_growth.acquisition.retail_catalogue import catalogue_text, payment_text, validate_catalogue
 
 OWNER = "pvnetwork8@gmail.com"
@@ -18,12 +18,23 @@ def _message_id(value):
 
 
 def build_reply(
-    *, route, recipient, name, subject, intent, inbound_id, in_reply_to, references, catalogue, now
+    *,
+    route,
+    recipient,
+    name,
+    subject,
+    intent,
+    inbound_id,
+    in_reply_to,
+    references,
+    catalogue,
+    now,
+    campaign=CAMPAIGN,
 ):
     """Build a single-recipient reply from verified public facts and fixed copy."""
     live = validate_catalogue(catalogue, now=now)
     if (
-        route not in ROUTES
+        route not in routes_for(campaign)
         or intent not in INTENTS
         or live is None
         or not isinstance(recipient, str)
@@ -74,13 +85,13 @@ def build_reply(
             "رسید را فقط از مسیر پشتیبانی رسمی داخل ربات پیگیری کنید؛ "
             "اگر نتیجه مشخص نیست، دوباره پرداخت نکن. تأیید وجه با پشتیبانی است."
         )
-    source_url = "https://t.me/pvgrowthos_bot?start=social_ext261019_" + route
+    entry_url = source_url(campaign, route)
     greeting = "سلام" + (" " + name.strip() if name.strip() else "")
     replacements = {
         "GREETING_TEXT": html.escape(greeting),
         "REPLY_PARAGRAPHS_HTML": "<p>" + html.escape(answer).replace("\n", "<br>") + "</p>",
         "NEXT_STEP_PARAGRAPHS_HTML": "<p>" + html.escape(step) + "</p>",
-        "SOURCE_URL": html.escape(source_url, quote=True),
+        "SOURCE_URL": html.escape(entry_url, quote=True),
         "CTA_TEXT": "انتخاب پلن و ادامهٔ خرید",
         "CTA_NOTE_TEXT": "ورود از این لینک، مسیر آشنایی شما را ثبت می‌کند؛ تأیید پرداخت با پشتیبانی است.",
     }
@@ -95,11 +106,14 @@ def build_reply(
     mail["Subject"] = subject if subject.lower().startswith("re:") else "Re: " + subject
     mail["In-Reply-To"] = in_reply_to
     mail["References"] = " ".join(dict.fromkeys([*references, in_reply_to]))
-    digest = hashlib.sha256((route + ":" + inbound_id + ":" + intent).encode()).hexdigest()
+    identity = route + ":" + inbound_id + ":" + intent
+    if campaign != CAMPAIGN:
+        identity = campaign + ":" + identity
+    digest = hashlib.sha256(identity.encode()).hexdigest()
     mail["Message-ID"] = "<growth-" + digest + "@pvnetwork.invalid>"
     mail["Auto-Submitted"] = "auto-replied"
     mail["X-Auto-Response-Suppress"] = "All"
-    mail.set_content(greeting + "\n\n" + answer + "\n\n" + step + "\n\n" + source_url)
+    mail.set_content(greeting + "\n\n" + answer + "\n\n" + step + "\n\n" + entry_url)
     mail.add_alternative(body, subtype="html")
     mail.get_payload()[-1].add_related(
         (ASSETS / "pvnetwork-logo.png").read_bytes(),
