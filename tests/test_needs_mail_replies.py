@@ -13,7 +13,7 @@ from pv_growth.acquisition.reply_message import build_reply
 from pv_growth.database.models import AppConfig, Job
 
 CAMPAIGN = "needs-led-acquisition-20261024"
-NOW = datetime(2026, 10, 24, 12, tzinfo=UTC)
+NOW = datetime(2026, 10, 24, 12, 10, tzinfo=UTC)
 
 
 def config():
@@ -124,6 +124,21 @@ class Gmail:
         return {"id": "cc0011", "threadId": tid}
 
 
+class VersionedGmail(Gmail):
+    def __init__(self):
+        super().__init__()
+        self.versions = {tid: "1" for tid in self.threads}
+        self.full_reads = 0
+
+    def find_sent(self, route):
+        tid = f"abc{int(route[1:]):03}"
+        return {"threads": [{"id": tid, "historyId": self.versions[tid]}]}
+
+    def thread(self, tid):
+        self.full_reads += 1
+        return {**super().thread(tid), "historyId": self.versions[tid]}
+
+
 def run(settings, api, **updates):
     return mail_replies.process(
         settings,
@@ -135,6 +150,69 @@ def run(settings, api, **updates):
         campaign=CAMPAIGN,
         **updates,
     )
+
+
+def test_unchanged_verified_silent_threads_skip_full_payload_reads(settings):
+    api = VersionedGmail()
+    assert run(settings, api)["data_complete"]
+    assert api.full_reads == 20
+    result = run(settings, api)
+    assert api.full_reads == 20
+    assert result["cached_unchanged_routes"] == 20
+    assert result["data_complete"] and not api.sent
+
+
+def test_changed_history_reads_and_answers_real_human_once(settings):
+    api = VersionedGmail()
+    run(settings, api)
+    api.versions["abc001"] = "2"
+    api.threads["abc001"]["messages"].append(message(1, inbound=True, text="I am interested"))
+    result = run(settings, api)
+    assert result["routes"]["n01"] == "sent" and len(api.sent) == 1
+    assert api.full_reads == 22
+
+
+def test_missing_history_never_uses_a_stale_silence_cache(settings):
+    api = VersionedGmail()
+    run(settings, api)
+    api.find_sent = lambda route: {"threads": [{"id": f"abc{int(route[1:]):03}"}]}
+    run(settings, api)
+    assert api.full_reads == 40
+
+
+def test_quota_storage_failure_stops_without_claim_or_send(settings):
+    class Unavailable(Gmail):
+        def find_sent(self, route):
+            raise mail_transport.MailUnavailable("api_rate_budget_unavailable")
+
+    api = Unavailable("I am interested")
+    result = run(settings, api)
+    assert result["status"] == "partial" and not api.sent
+    assert result["transport_errors"] == {"n01": "api_rate_budget_unavailable"}
+    assert result["routes"]["n02"] == "not_visited_after_error"
+
+
+def test_cache_is_bound_to_the_exact_recipient_and_subject(settings):
+    from pv_growth.acquisition import mail_poll_cache
+
+    api = VersionedGmail()
+    run(settings, api)
+    route = config()["recipients"][0]
+    meta = {"id": "abc001", "historyId": "1"}
+    assert mail_poll_cache.read(settings, CAMPAIGN, "n01", route, meta) == "held_no_new_human_reply"
+    assert mail_poll_cache.read(settings, CAMPAIGN, "n01", dict(route, subject="changed"), meta) is None
+    assert (
+        mail_poll_cache.read(settings, CAMPAIGN, "n01", dict(route, email="other@example.org"), meta) is None
+    )
+
+
+def test_human_intent_holds_are_not_cached_as_silence(settings):
+    from pv_growth.acquisition import mail_poll_cache
+
+    route = config()["recipients"][0]
+    meta = {"id": "abc001", "historyId": "1"}
+    mail_poll_cache.save(settings, CAMPAIGN, "n01", route, meta, "hold_intent")
+    assert mail_poll_cache.read(settings, CAMPAIGN, "n01", route, meta) is None
 
 
 def test_needs_claims_have_independent_namespace_and_ambiguous_send_never_replays(settings):

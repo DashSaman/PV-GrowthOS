@@ -68,7 +68,7 @@ def test_all430_routes_are_visited_once_every_eleven_five_minute_slots():
     shards = [expansion_mail_jobs.shard(NOW + timedelta(minutes=5 * i)) for i in range(11)]
     assert set().union(*map(set, shards)) == reply_ledger.routes_for(C)
     assert sum(map(len, shards)) == 430 and max(map(len, shards)) <= 40
-    assert expansion_mail_jobs.bucket(NOW) == "202610241200"
+    assert expansion_mail_jobs.bucket(NOW) == "202610241205"
 
 
 def test_expansion_claim_and_entry_url_are_separate_and_unknown_never_replays(settings):
