@@ -21,7 +21,7 @@ def identity(campaign, key, route, thread):
         return None
     namespace = json.dumps([POLICY_VERSION, campaign, key, route["email"].lower(), route["subject"]])
     return (
-        "mail:read:" + hashlib.sha224(namespace.encode()).hexdigest(),
+        "mail:r:" + hashlib.sha224(namespace.encode()).hexdigest(),
         hashlib.sha256(json.dumps([tid, history]).encode()).hexdigest(),
     )
 

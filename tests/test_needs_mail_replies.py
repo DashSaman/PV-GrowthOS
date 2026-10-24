@@ -206,6 +206,15 @@ def test_cache_is_bound_to_the_exact_recipient_and_subject(settings):
     )
 
 
+def test_cache_identity_fits_existing_postgres_config_column():
+    from pv_growth.acquisition import mail_poll_cache
+
+    token = mail_poll_cache.identity(
+        CAMPAIGN, "n01", config()["recipients"][0], {"id": "abc001", "historyId": "1"}
+    )
+    assert len(token[0]) <= AppConfig.__table__.c.key.type.length
+
+
 def test_human_intent_holds_are_not_cached_as_silence(settings):
     from pv_growth.acquisition import mail_poll_cache
 
