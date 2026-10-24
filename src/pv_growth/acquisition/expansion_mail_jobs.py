@@ -5,6 +5,7 @@ import os
 import stat
 import threading
 from contextlib import contextmanager
+from datetime import timedelta
 from functools import partial
 from pathlib import Path
 
@@ -57,7 +58,7 @@ def resume_key(report, selected):
 
 
 def bucket(now):
-    now = aware(now)
+    now = aware(now) - timedelta(minutes=2)
     return now.replace(minute=(now.minute // 5) * 5, second=0, microsecond=0).strftime("%Y%m%d%H%M")
 
 

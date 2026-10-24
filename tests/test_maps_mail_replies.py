@@ -13,7 +13,7 @@ from pv_growth.acquisition.reply_message import build_reply
 from pv_growth.database.models import AppConfig, Job
 
 CAMPAIGN = "maps-acquisition-20261020"
-NOW = datetime(2026, 10, 20, 12, tzinfo=UTC)
+NOW = datetime(2026, 10, 20, 12, 5, tzinfo=UTC)
 
 
 def config():

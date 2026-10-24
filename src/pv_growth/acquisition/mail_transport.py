@@ -114,6 +114,15 @@ class GmailTransport:
         self._prepared_budget.clear()
 
     def _json(self, method, url, **kwargs):
+        if self._budget_settings is not None:
+            from pv_growth.acquisition import mail_api_quota
+
+            try:
+                cost = mail_api_quota.units(method, url, kwargs.get("params"))
+                if cost is not None:
+                    mail_api_quota.wait(self._budget_settings, cost)
+            except (ValueError, TypeError, KeyError):
+                raise MailUnavailable("api_rate_budget_unavailable") from None
         deadline = time.monotonic() + 10
         try:
             with self._http.stream(method, url, **kwargs) as response:

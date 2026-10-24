@@ -5,6 +5,7 @@ import os
 import stat
 import threading
 from contextlib import contextmanager
+from datetime import timedelta
 from functools import partial
 from pathlib import Path
 
@@ -35,7 +36,7 @@ _LOCK_ID = 261020101
 
 
 def bucket(now):
-    now = aware(now)
+    now = aware(now) - timedelta(minutes=5)
     return now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0).strftime("%Y%m%d%H%M")
 
 

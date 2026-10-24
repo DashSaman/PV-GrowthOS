@@ -25,6 +25,43 @@ def baseline(settings):
     mail_budget.initialize(settings, observed_sent=[], observed_at=now, initial_already_attempted=20, now=now)
 
 
+def test_transport_paces_profile_snapshot_and_actual_post(settings, monkeypatch):
+    from pv_growth.acquisition import mail_api_quota
+
+    baseline(settings)
+    costs = []
+    monkeypatch.setattr(mail_api_quota, "wait", lambda s, cost: costs.append(cost))
+
+    def server(req):
+        if req.url.path.endswith("/messages"):
+            return httpx.Response(200, json={"messages": []})
+        if req.url.path.endswith("/messages/send"):
+            return httpx.Response(200, json={"id": "abcdef", "threadId": "abc123"})
+        return authorized(req)
+
+    with make(settings, server) as api:
+        api.send_reply("a01", "abc123", reply())
+    assert costs == [1, 5, 100]
+
+
+def test_unavailable_api_rate_storage_never_reaches_provider(settings, monkeypatch):
+    from pv_growth.acquisition import mail_api_quota
+
+    def fail(*_):
+        raise ValueError("fixture unavailable rate storage")
+
+    monkeypatch.setattr(mail_api_quota, "wait", fail)
+    calls = []
+
+    def server(req):
+        calls.append(req.url.path)
+        return authorized(req)
+
+    with make(settings, server) as api, pytest.raises(MailUnavailable, match="api_rate_budget_unavailable"):
+        api.find_sent("a01")
+    assert calls == ["/token"]
+
+
 def test_committed_shared_budget_exists_before_send_post(settings):
     baseline(settings)
     posts = []

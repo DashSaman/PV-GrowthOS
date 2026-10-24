@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from email.utils import getaddresses
 from hashlib import sha256
 
+from pv_growth.acquisition import mail_poll_cache
 from pv_growth.acquisition.mail_transport import (
     OWNER,
     ExpansionGmailTransport,
@@ -324,6 +325,7 @@ def process(
         "sales_report_key": _pilot(campaign)[4],
         "confirmed_internal_test_account_count": len(tests),
         "reminders_sent": 0,
+        "cached_unchanged_routes": 0,
     }
     if campaign == EXPANSION_CAMPAIGN:
         result.update(
@@ -344,7 +346,14 @@ def process(
                 result["routes"][key] = "held_original_lookup"
                 continue
             tid = candidates[0]["id"]
-            decision, incoming = _inspect(api.thread(tid), tid, route, now, campaign=campaign)
+            cached = mail_poll_cache.read(settings, campaign, key, route, candidates[0])
+            if cached is not None:
+                result["routes"][key] = cached
+                result["cached_unchanged_routes"] += 1
+                continue
+            thread = api.thread(tid)
+            decision, incoming = _inspect(thread, tid, route, now, campaign=campaign)
+            mail_poll_cache.save(settings, campaign, key, route, thread, decision)
             if decision == "stopped":
                 stop_route(settings, key, campaign=campaign)
             if decision not in INTENTS:
@@ -417,6 +426,7 @@ def process(
                     "scope_mismatch",
                     "mailbox_mismatch",
                     "invalid_access_token_response",
+                    "api_rate_budget_unavailable",
                 }
                 safe = (
                     code
@@ -432,6 +442,7 @@ def process(
                     "http_status_401",
                     "http_status_403",
                     "http_status_429",
+                    "api_rate_budget_unavailable",
                 }:
                     continue
             break
