@@ -14,7 +14,7 @@ from email.utils import getaddresses
 
 import httpx
 
-from pv_growth.acquisition.reply_ledger import MAPS_ROUTES, ROUTES
+from pv_growth.acquisition.reply_ledger import MAPS_ROUTES, NEEDS_ROUTES, ROUTES
 
 OWNER = "pvnetwork8@gmail.com"
 SCOPES = frozenset(
@@ -214,3 +214,11 @@ class MapsGmailTransport(GmailTransport):
     _routes = MAPS_ROUTES
     _sent_after = "2026/10/19"
     _sent_before = "2026/10/22"
+
+
+class NeedsGmailTransport(GmailTransport):
+    """Exact twenty-route needs-led campaign, isolated from both previous pilots."""
+
+    _routes = NEEDS_ROUTES
+    _sent_after = "2026/10/23"
+    _sent_before = "2026/10/27"

@@ -54,6 +54,8 @@ def register_builtin_handlers() -> None:
     import pv_growth.acquisition.mail_jobs  # noqa: F401
     import pv_growth.acquisition.maps_mail_jobs  # noqa: F401
     import pv_growth.acquisition.maps_report  # noqa: F401
+    import pv_growth.acquisition.needs_mail_jobs  # noqa: F401
+    import pv_growth.acquisition.needs_report  # noqa: F401
     import pv_growth.acquisition.outreach_report  # noqa: F401
     import pv_growth.acquisition.post_report  # noqa: F401
     import pv_growth.acquisition.purchase_journey  # noqa: F401

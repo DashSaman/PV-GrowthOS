@@ -13,10 +13,17 @@ from datetime import UTC, datetime, timedelta
 from email.utils import getaddresses
 from hashlib import sha256
 
-from pv_growth.acquisition.mail_transport import OWNER, GmailTransport, MailUnavailable, MapsGmailTransport
+from pv_growth.acquisition.mail_transport import (
+    OWNER,
+    GmailTransport,
+    MailUnavailable,
+    MapsGmailTransport,
+    NeedsGmailTransport,
+)
 from pv_growth.acquisition.reply_ledger import (
     INTENTS,
     MAPS_CAMPAIGN,
+    NEEDS_CAMPAIGN,
     claim_reply,
     finish_reply,
     routes_for,
@@ -36,9 +43,21 @@ MAPS_START = datetime(2026, 10, 20, tzinfo=UTC)
 MAPS_END = datetime(2026, 11, 20, tzinfo=UTC)
 MAPS_PILOT_FINGERPRINT = "ce95efbd67a79a6f33ab9e2c9c37a3c84cfa5a7c2d5c4e619f0c638834045d26"
 
+NEEDS_START = datetime(2026, 10, 24, tzinfo=UTC)
+NEEDS_END = datetime(2026, 11, 24, tzinfo=UTC)
+NEEDS_PILOT_FINGERPRINT = "beb3f6ab3207ce96840ca06aa93731cbdca16a11a904537b1cf679934e00125f"
+
 
 def _pilot(campaign):
     routes_for(campaign)
+    if campaign == NEEDS_CAMPAIGN:
+        return (
+            NEEDS_START,
+            NEEDS_END,
+            NEEDS_PILOT_FINGERPRINT,
+            NeedsGmailTransport,
+            "retail-needs:20261024:latest",
+        )
     if campaign == MAPS_CAMPAIGN:
         return MAPS_START, MAPS_END, MAPS_PILOT_FINGERPRINT, MapsGmailTransport, "retail-maps:20261020:latest"
     return START, END, PILOT_FINGERPRINT, GmailTransport, "retail-outreach:20261019:latest"
