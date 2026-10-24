@@ -23,6 +23,8 @@ MAPS_CAMPAIGN = "maps-acquisition-20261020"
 MAPS_ROUTES = frozenset(f"m{i:02}" for i in range(1, 11))
 NEEDS_CAMPAIGN = "needs-led-acquisition-20261024"
 NEEDS_ROUTES = frozenset(f"n{i:02}" for i in range(1, 21))
+EXPANSION_CAMPAIGN = "needs-expansion-20261024"
+EXPANSION_ROUTES = frozenset(f"e{i:03}" for i in range(1, 431))
 
 
 def routes_for(campaign):
@@ -32,14 +34,18 @@ def routes_for(campaign):
         return MAPS_ROUTES
     if campaign == NEEDS_CAMPAIGN:
         return NEEDS_ROUTES
+    if campaign == EXPANSION_CAMPAIGN:
+        return EXPANSION_ROUTES
     raise ValueError("unsupported mail campaign")
 
 
 def source_url(campaign, route):
     _route(route, campaign)
-    prefix = {MAPS_CAMPAIGN: "social_maps261020_", NEEDS_CAMPAIGN: "social_needs261024_"}.get(
-        campaign, "social_ext261019_"
-    )
+    prefix = {
+        EXPANSION_CAMPAIGN: "social_expand261024_",
+        MAPS_CAMPAIGN: "social_maps261020_",
+        NEEDS_CAMPAIGN: "social_needs261024_",
+    }.get(campaign, "social_ext261019_")
     return "https://t.me/pvgrowthos_bot?start=" + prefix + route
 
 
@@ -68,6 +74,23 @@ def _guard(db, settings):
 def _route(route, campaign=CAMPAIGN):
     if route not in routes_for(campaign):
         raise ValueError("route outside original pilot")
+
+
+def reply_reserved(settings, route, inbound_id, intent, *, campaign=CAMPAIGN):
+    """Read-only duplicate precheck while the production campaign lock is held."""
+    _route(route, campaign)
+    if intent not in INTENTS or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", inbound_id):
+        raise ValueError("unsupported reply claim")
+    keys = (
+        _key("m", inbound_id, campaign=campaign),
+        _key("p", route + ":" + intent, campaign=campaign),
+        _key("s", route, campaign=campaign),
+    )
+    with session_scope(settings) as db:
+        if db.bind.dialect.name == "postgresql":
+            db.execute(text("SET TRANSACTION READ ONLY"))
+        _guard(db, settings)
+        return any(db.get(AppConfig, k) is not None for k in keys)
 
 
 def claim_reply(

@@ -6,15 +6,20 @@ before invoking send_reply; a send exception always consumes that claim.
 """
 
 import base64
+import hashlib
 import json
 import re
 import time
+from datetime import timedelta
 from email import policy
 from email.utils import getaddresses
 
 import httpx
 
-from pv_growth.acquisition.reply_ledger import MAPS_ROUTES, NEEDS_ROUTES, ROUTES
+from pv_growth.acquisition import mail_budget
+from pv_growth.acquisition.reply_ledger import EXPANSION_ROUTES, MAPS_ROUTES, NEEDS_ROUTES, ROUTES
+from pv_growth.core.config import get_settings
+from pv_growth.database.types import utcnow
 
 OWNER = "pvnetwork8@gmail.com"
 SCOPES = frozenset(
@@ -48,7 +53,16 @@ class GmailTransport:
     _sent_after = "2026/10/18"
     _sent_before = "2026/10/21"
 
-    def __init__(self, *, client_id, client_secret, refresh_token, recipients, http_transport=None):
+    def __init__(
+        self,
+        *,
+        client_id,
+        client_secret,
+        refresh_token,
+        recipients,
+        http_transport=None,
+        budget_settings=None,
+    ):
         if (
             not isinstance(recipients, dict)
             or set(recipients) != self._routes
@@ -71,6 +85,8 @@ class GmailTransport:
             )
         ):
             raise ValueError("invalid private pilot configuration")
+        self._budget_settings = budget_settings
+        self._prepared_budget = {}
         self._recipients = dict(recipients)
         self._credentials = {
             "client_id": client_id,
@@ -95,6 +111,7 @@ class GmailTransport:
         self._http.close()
         self._token = ""
         self._credentials.clear()
+        self._prepared_budget.clear()
 
     def _json(self, method, url, **kwargs):
         deadline = time.monotonic() + 10
@@ -175,7 +192,30 @@ class GmailTransport:
             raise MailUnavailable("invalid_thread_response")
         return value
 
-    def send_reply(self, route, thread_id, mail):
+    def sent_snapshot(self):
+        self._connect()
+        cutoff = int((utcnow() - timedelta(days=1)).timestamp())
+        value = self._json(
+            "GET",
+            ROOT + "/messages",
+            headers=self._headers(),
+            params={"q": "in:sent after:" + str(cutoff), "includeSpamTrash": "true", "maxResults": 500},
+        )
+        messages = value.get("messages", [])
+        if (
+            value.get("nextPageToken")
+            or not isinstance(messages, list)
+            or any(not isinstance(m, dict) for m in messages)
+        ):
+            raise MailUnavailable("shared_mail_snapshot_incomplete")
+        ids = [m.get("id") for m in messages]
+        try:
+            mail_budget._snapshot(ids)
+        except (ValueError, TypeError):
+            raise MailUnavailable("shared_mail_snapshot_invalid") from None
+        return ids, utcnow()
+
+    def _reply_raw(self, route, thread_id, mail):
         _thread_id(thread_id)
         if (
             route not in self._recipients
@@ -188,10 +228,43 @@ class GmailTransport:
             or mail.get("Auto-Submitted") != "auto-replied"
         ):
             raise ValueError("unsafe reply envelope")
+        if self._budget_settings is None and get_settings().env == "production":
+            raise MailUnavailable("production_transport_budget_missing")
         raw = mail.as_bytes(policy=policy.SMTP)
         if len(raw) > 524288:
             raise ValueError("reply MIME too large")
+        return raw
+
+    def _prepare_budget(self, raw):
         self._connect()
+        if self._budget_settings is None:
+            return True
+        key = hashlib.sha224(raw).hexdigest()
+        if key in self._prepared_budget:
+            return True
+        ids, observed = self.sent_snapshot()
+        claim = mail_budget.reserve(
+            self._budget_settings,
+            "reply:" + key,
+            "reply",
+            observed_sent=ids,
+            observed_at=observed,
+            now=utcnow(),
+        )
+        if claim is None:
+            return False
+        self._prepared_budget[key] = claim
+        return True
+
+    def prepare_reply(self, route, thread_id, mail):
+        """Reserve shared quota before the processor consumes its reply phase."""
+        return self._prepare_budget(self._reply_raw(route, thread_id, mail))
+
+    def send_reply(self, route, thread_id, mail):
+        raw = self._reply_raw(route, thread_id, mail)
+        if not self._prepare_budget(raw):
+            raise MailUnavailable("shared_mail_budget_held")
+        budget_claim = self._prepared_budget.pop(hashlib.sha224(raw).hexdigest(), None)
         receipt = self._json(
             "POST",
             ROOT + "/messages/send",
@@ -205,6 +278,8 @@ class GmailTransport:
             or receipt.get("threadId") != thread_id
         ):
             raise MailUnavailable("ambiguous_send_receipt")
+        if budget_claim is not None:
+            mail_budget.finish(self._budget_settings, budget_claim, message_id)
         return {"id": message_id, "threadId": thread_id}
 
 
@@ -220,5 +295,24 @@ class NeedsGmailTransport(GmailTransport):
     """Exact twenty-route needs-led campaign, isolated from both previous pilots."""
 
     _routes = NEEDS_ROUTES
+    _sent_after = "2026/10/23"
+    _sent_before = "2026/10/27"
+
+
+class ExpansionGmailTransport(GmailTransport):
+    """Frozen registered batches within430additional routes; same shared budget."""
+
+    _routes = EXPANSION_ROUTES
+
+    def __init__(self, *, recipients, **kwargs):
+        if (
+            not isinstance(recipients, dict)
+            or not 1 <= len(recipients) <= 430
+            or not set(recipients) <= EXPANSION_ROUTES
+        ):
+            raise ValueError("expansion routes outside approved cap")
+        self._routes = frozenset(recipients)
+        super().__init__(recipients=recipients, **kwargs)
+
     _sent_after = "2026/10/23"
     _sent_before = "2026/10/27"

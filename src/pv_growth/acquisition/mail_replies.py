@@ -15,17 +15,20 @@ from hashlib import sha256
 
 from pv_growth.acquisition.mail_transport import (
     OWNER,
+    ExpansionGmailTransport,
     GmailTransport,
     MailUnavailable,
     MapsGmailTransport,
     NeedsGmailTransport,
 )
 from pv_growth.acquisition.reply_ledger import (
+    EXPANSION_CAMPAIGN,
     INTENTS,
     MAPS_CAMPAIGN,
     NEEDS_CAMPAIGN,
     claim_reply,
     finish_reply,
+    reply_reserved,
     routes_for,
     source_url,
     stop_route,
@@ -45,11 +48,20 @@ MAPS_PILOT_FINGERPRINT = "ce95efbd67a79a6f33ab9e2c9c37a3c84cfa5a7c2d5c4e619f0c63
 
 NEEDS_START = datetime(2026, 10, 24, tzinfo=UTC)
 NEEDS_END = datetime(2026, 11, 24, tzinfo=UTC)
+EXPANSION_PILOT_FINGERPRINT = None  # Validated against the independent registered batch manifest.
 NEEDS_PILOT_FINGERPRINT = "beb3f6ab3207ce96840ca06aa93731cbdca16a11a904537b1cf679934e00125f"
 
 
 def _pilot(campaign):
     routes_for(campaign)
+    if campaign == EXPANSION_CAMPAIGN:
+        return (
+            NEEDS_START,
+            NEEDS_END,
+            EXPANSION_PILOT_FINGERPRINT,
+            ExpansionGmailTransport,
+            "retail-expand:20261024:latest",
+        )
     if campaign == NEEDS_CAMPAIGN:
         return (
             NEEDS_START,
@@ -63,7 +75,40 @@ def _pilot(campaign):
     return START, END, PILOT_FINGERPRINT, GmailTransport, "retail-outreach:20261019:latest"
 
 
-def verify_pilot(routes, *, campaign=CAMPAIGN):
+def verify_pilot(routes, *, campaign=CAMPAIGN, settings=None):
+    if campaign == EXPANSION_CAMPAIGN:
+        if settings is None or not 1 <= len(routes) <= 430 or not set(routes) <= routes_for(campaign):
+            raise ValueError("expansion registry required")
+        from sqlalchemy import text
+
+        from pv_growth.database.base import session_scope
+        from pv_growth.database.models import AppConfig
+
+        with session_scope(settings) as db:
+            if db.bind.dialect.name == "postgresql":
+                db.execute(text("SET TRANSACTION READ ONLY"))
+            if settings.env == "production" and (
+                db.bind.dialect.name != "postgresql"
+                or db.scalar(text("SELECT current_database()")) != "pv_growth"
+            ):
+                raise ValueError("unexpected expansion registry database")
+            row = db.get(AppConfig, "retail-expand:campaign:20261024")
+            registry = row.value if row else {}
+            if (
+                registry.get("stage") != "registered"
+                or registry.get("campaign") != campaign
+                or registry.get("owner_authorized_limit") != 430
+                or {x["key"] for x in registry.get("sources", [])} != set(routes)
+            ):
+                raise ValueError("expansion manifest registry mismatch")
+            expected_fingerprint = registry.get("manifest_fingerprint")
+        rows = [[k, r["email"].lower(), r["subject"]] for k, r in sorted(routes.items())]
+        if (
+            sha256(json.dumps(rows, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+            != expected_fingerprint
+        ):
+            raise ValueError("expansion manifest fingerprint mismatch")
+        return
     if set(routes) != routes_for(campaign):
         raise ValueError("pilot route mismatch")
     rows = [[k, r["email"].lower(), r["subject"]] for k, r in sorted(routes.items())]
@@ -78,6 +123,14 @@ def validate_config(value, now, *, campaign=CAMPAIGN):
         expected = routes_for(campaign)
         until = datetime.fromisoformat(value["authorized_until_utc"])
         rows = value["recipients"]
+        if campaign == EXPANSION_CAMPAIGN:
+            if (
+                not isinstance(rows, list)
+                or not 1 <= len(rows) <= 430
+                or not {r["route"] for r in rows} <= expected
+            ):
+                raise ValueError
+            expected = {r["route"] for r in rows}
         if (
             value["campaign"] != campaign
             or value["owner"] != OWNER
@@ -203,7 +256,7 @@ def _decision(message, recipient, *, campaign=CAMPAIGN):
     )
 
     if (
-        campaign == NEEDS_CAMPAIGN
+        campaign in {NEEDS_CAMPAIGN, EXPANSION_CAMPAIGN}
         and decision == "hold_intent"
         and re.fullmatch(r"راهنمایی اتصال[.!،\s]*", _new_text(_body(message["payload"])))
     ):
@@ -225,13 +278,36 @@ def _inspect(thread, tid, route, now, *, campaign=CAMPAIGN):
     return _decision(after[-1], route["email"], campaign=campaign), after[-1]
 
 
-def process(settings, api, *, config, catalogue, classification, now, lock_held=False, campaign=CAMPAIGN):
+def process(
+    settings,
+    api,
+    *,
+    config,
+    catalogue,
+    classification,
+    now,
+    lock_held=False,
+    campaign=CAMPAIGN,
+    route_keys=None,
+):
     """One bounded cycle; a failure never becomes silence, delivery or a sale."""
     if settings.env == "production" and not lock_held:
         raise ValueError("campaign lock required")
     routes = validate_config(config, now, campaign=campaign)
     if settings.env == "production":
-        verify_pilot(routes, campaign=campaign)
+        verify_pilot(routes, campaign=campaign, settings=settings)
+    campaign_route_count = len(routes)
+    if campaign == EXPANSION_CAMPAIGN:
+        if (
+            not isinstance(route_keys, (list, tuple))
+            or not 1 <= len(route_keys) <= 40
+            or len(set(route_keys)) != len(route_keys)
+            or not set(route_keys) <= set(routes)
+        ):
+            raise ValueError("explicit bounded expansion shard required")
+        routes = {key: routes[key] for key in route_keys}
+    elif route_keys is not None:
+        raise ValueError("original campaigns cannot accept route subsets")
     state, tests, _ = _classification(classification)
     if state != "owner_confirmed" or len(tests) < 3 or validate_catalogue(catalogue, now=now) is None:
         raise ValueError("catalogue or confirmed test classification unavailable")
@@ -249,7 +325,14 @@ def process(settings, api, *, config, catalogue, classification, now, lock_held=
         "confirmed_internal_test_account_count": len(tests),
         "reminders_sent": 0,
     }
-    for key, route in sorted(routes.items()):
+    if campaign == EXPANSION_CAMPAIGN:
+        result.update(
+            coverage="selected_shard",
+            campaign_route_count=campaign_route_count,
+            selected_route_count=len(routes),
+        )
+    ordered = routes.items() if campaign == EXPANSION_CAMPAIGN else sorted(routes.items())
+    for key, route in ordered:
         if time.monotonic() >= deadline:
             result.update(status="partial", data_complete=False)
             result["routes"][key] = "not_visited_time_bound"
@@ -283,6 +366,13 @@ def process(settings, api, *, config, catalogue, classification, now, lock_held=
                 now=current,
                 campaign=campaign,
             )
+            if reply_reserved(settings, key, incoming["id"], decision, campaign=campaign):
+                result["routes"][key] = "held_duplicate"
+                continue
+            if hasattr(api, "prepare_reply") and not api.prepare_reply(key, tid, mail):
+                result["routes"][key] = "held_shared_budget"
+                result.update(status="partial", data_complete=False)
+                continue
             claim = claim_reply(settings, key, incoming["id"], decision, campaign=campaign)
             if claim is None:
                 result["routes"][key] = "held_duplicate"
@@ -311,9 +401,39 @@ def process(settings, api, *, config, catalogue, classification, now, lock_held=
                 break
             finish_reply(settings, claim, "sent")
             result["routes"][key] = "sent"
-        except MailUnavailable:
+        except MailUnavailable as exc:
             result["routes"][key] = "unavailable_transport"
             result.update(status="partial", data_complete=False)
+            if campaign in {NEEDS_CAMPAIGN, EXPANSION_CAMPAIGN}:
+                code = str(exc)
+                allowed = {
+                    "http_transport_failed",
+                    "response_time_bound",
+                    "response_too_large",
+                    "connection_unavailable",
+                    "invalid_provider_json",
+                    "invalid_provider_shape",
+                    "invalid_thread_response",
+                    "scope_mismatch",
+                    "mailbox_mismatch",
+                    "invalid_access_token_response",
+                }
+                safe = (
+                    code
+                    if code in allowed or re.fullmatch(r"http_status_[0-9]{3}", code)
+                    else "transport_unavailable"
+                )
+                result.setdefault("transport_errors", {})[key] = safe
+                if safe not in {
+                    "scope_mismatch",
+                    "mailbox_mismatch",
+                    "invalid_access_token_response",
+                    "connection_unavailable",
+                    "http_status_401",
+                    "http_status_403",
+                    "http_status_429",
+                }:
+                    continue
             break
         except (ValueError, KeyError, TypeError, AttributeError):
             result["routes"][key] = "held_malformed_thread"

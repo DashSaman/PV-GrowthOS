@@ -141,7 +141,9 @@ def monitor(session, settings, payload):
             classification, catalogue = _facts(settings, now)
             routes = validate_config(private, now)
             recipients = {k: r["email"] for k, r in routes.items()}
-            with GmailTransport(**private["credentials"], recipients=recipients) as api:
+            with GmailTransport(
+                **private["credentials"], recipients=recipients, budget_settings=settings
+            ) as api:
                 report = process(
                     settings,
                     api,

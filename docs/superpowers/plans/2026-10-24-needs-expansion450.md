@@ -1,0 +1,19 @@
+# Needs-led450 implementation plan
+
+> Execute directly with superpowers:executing-plans; owner already requested complete execution.
+
+Goal:450total one-time initialmessages including20accepted;430newqualifiedbusinesses, no repeat.
+Architecture:preserve20/30/10manifests;newexpansioncampaignboundedshards;oneaccount-widebudgetreservationbeforeanyPOST. Python/Postgres/existingGmailreadonly+send.
+Spec:../specs/2026-10-24-needs-expansion450-design.md
+
+Constraints:nootheraccounts/paidAPIs/financialchanges/replay;manualpayment,originalblackgoldlogo,500accountsharedlimit,450initialcap. Missingdataunavailable;currentbuyersnotnewcustomers.
+Reviewfocus:concurrentsends/unknownsconsume;staleGmailSentindex;oldmanifestsunchanged;laterrecipientfairness;incomplete72hnotzero.
+
+- [ ] Task1:discover/qualify batches under430additionalownsiteemailsandIG,globalidentity+MX+freshGmailhistory;freezeprivateallowlist.
+- [x] Task2:TDDmail_budget.pyreserve(settings,operation,kind,observed_sent,now)atomicPGlock,rolling24h500shared/450cumulativeinitial,prePOSTunknownconsumed. Testinitial20baseline,repliescompetition,duplicatekeys,unavailable/staleobservations,expiredchargewithoutreleasingoperation. IntegrateallthreeexistingGmailworkersandnewone;mockprovider testsprovePOSTneverprecedescommittedbudget.
+- [x] Task3:TDDnewexpansionroutes/fixedmanifest/config/fairnativepollingbatch20perquarterwithin120seconds;sharedgenericpolicyexactneedsphrase;savepartialunknowntruthfully, no silentreminders. Testsold20/30/10unchanged,shardrotationandforeignpayloadignored.
+- [x] Task4:TDDseparatenativehourlyreport+fixed72hfromlastactualacceptance;existinghistorysplitnewcountunproven. Sourceconfig/testclassificationonlySELECT.
+- [ ] Task5:offlineguardedinitialsender+brandMIMEexact/hash/profile/dedup/prePOSTclaim+sharedbudget;timeoutsunknownnoresend;freshqualifiedsourceexpiry. Alltargeted+fullCIgreen;exactartifactguardedreleaseonlyGrowth.
+- [ ] Task6:oncepernewrecipient initialsend,verifySentexactMIME/PNG/source;closeacceptedtime;firstnativecycle/checkpoint+automationupdate.
+
+Verification:890passed/7skip/2existingwarnings with patched3dependencyversions; Windows Bashfileexcludedlocally, LinuxCIretainsit. Ruffcheck/formatgreen. Focusedreviewfound quota-beforephaseanddeadline-starvation;bothreproducedREDandfixedGREEN.
