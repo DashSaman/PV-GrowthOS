@@ -6,7 +6,14 @@ import re
 from email.message import EmailMessage
 from pathlib import Path
 
-from pv_growth.acquisition.reply_ledger import CAMPAIGN, INTENTS, NEEDS_CAMPAIGN, routes_for, source_url
+from pv_growth.acquisition.reply_ledger import (
+    CAMPAIGN,
+    EXPANSION_CAMPAIGN,
+    INTENTS,
+    NEEDS_CAMPAIGN,
+    routes_for,
+    source_url,
+)
 from pv_growth.acquisition.retail_catalogue import catalogue_text, payment_text, validate_catalogue
 
 OWNER = "pvnetwork8@gmail.com"
@@ -85,7 +92,7 @@ def build_reply(
             "رسید را فقط از مسیر پشتیبانی رسمی داخل ربات پیگیری کنید؛ "
             "اگر نتیجه مشخص نیست، دوباره پرداخت نکن. تأیید وجه با پشتیبانی است."
         )
-    if campaign == NEEDS_CAMPAIGN and intent in {"interest", "setup"}:
+    if campaign in {NEEDS_CAMPAIGN, EXPANSION_CAMPAIGN} and intent in {"interest", "setup"}:
         answer = (
             "برای بررسی مشکل اتصال کاری، نام اینترنت و مدل دستگاه را بفرمایید؛ "
             "اگر این موارد را قبلاً فرستاده‌اید، لازم نیست دوباره بفرستید. "

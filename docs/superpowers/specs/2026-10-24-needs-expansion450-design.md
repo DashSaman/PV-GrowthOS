@@ -1,0 +1,13 @@
+# Expansion to450 initial contacts
+
+Owner24Oct explicitly requested450messages total, including20alreadyaccepted.430remain. Preserve exact20manifest/source/replyworker and allprevious30/10. Existing business buyers are not newcustomers. Newpeople remain researchcontacts until positivehistory+identityconfirmed.
+
+Implementation choice: ownsitepublicemail+Instagramidentity+businessrelevance, current global email/domain/name/IG/phone dedup/suppression+freshGmailhistory beforeoneinitialsend; exactfrozennewallowlist; no silentreminders/replay. One shared Gmail budget across all initial+replytransports reserves beforePOST; cap500shared/day and initial450total including20, preserve50headroomwhenavailable; failclosedonquota/transport/incompletehistory. Existingreadonly+sendgrantonly, no paidprovider/account/authloop.
+
+Nativeexpansionreplypolling must shard/rotatebounded batches fairly within120s; do notjustwidenold20loop. Nativehourlyderivedsalesreportseparatefromoldcampaigns with existinghistoryquality and72hafterlastinitialacceptance. Tests coverquotaatomicclaim/unknown/reentry/history/incompletepollingandoldallowlists.
+
+Sequence:finishPR39nativeverification;boundeddiscovery/qualify430;implementsharedbudget+exactnewcampaign;offlineverification/exactCI/artifactrelease;onceinitialsend;verifyactualSent;nativefirstcycle. Userexplicitexecution optsoutofanotherdesignapprovalquestion.
+
+Budget refinement:rolling24hchargeexpiry preserves permanentoperationclaims;knownreceipt hashes are unionedwithfreshSent IDs, avoidingdoublecount;unknownsretainfullcharge.450initialcumulativecapdoesnotreset. Replyservicecontinuesafterdayonewithinexistingcampaignend.
+
+Batch execution refinement:freeze actual qualified batch(es) under430additional total. Privateallowlistfingerprint must exactly match owner-registered GrowthcampaignmanifestandSourcekeys;allpreviousbatchrows/receiptclaims preservedappend-only. Existing20/30/10 stillhardcodedunchanged. No publicruntimeAPI toregister. Transportacceptsonlyconfiguredsubsetofe001..e430;sharedbudgetenforces450cumulativeinitial.

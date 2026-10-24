@@ -381,3 +381,69 @@ def test_initial_phrase_still_requires_new_verified_human_text(settings, change)
         ]
     assert run(settings, api)["routes"]["n01"] != "sent"
     assert api.sent == []
+
+
+def test_one_route_read_failure_does_not_starve_later_needs_routes(settings):
+    seen = []
+
+    class PartialRead:
+        def find_sent(self, key):
+            seen.append(key)
+            if key == "n07":
+                raise mail_transport.MailUnavailable("http_transport_failed")
+            return {"threads": []}
+
+    result = run(settings, PartialRead())
+    assert seen == [f"n{i:02}" for i in range(1, 21)]
+    assert result["status"] == "partial" and result["data_complete"] is False
+    assert result["transport_errors"] == {"n07": "http_transport_failed"}
+
+
+def test_full_shared_budget_does_not_consume_human_phase_before_any_post(settings):
+    from pv_growth.acquisition import mail_budget
+    from pv_growth.database.base import session_scope
+
+    later = NOW + timedelta(days=1, seconds=1)
+    mail_budget.initialize(
+        settings,
+        observed_sent=[f"{i + 1:x}" for i in range(500)],
+        observed_at=NOW,
+        initial_already_attempted=20,
+        now=NOW,
+    )
+
+    class Budgeted(Gmail):
+        current = NOW
+
+        def prepare_reply(self, route, tid, mail):
+            count = 500 if self.current == NOW else 0
+            return (
+                mail_budget.reserve(
+                    settings,
+                    "human-reply:" + route,
+                    "reply",
+                    observed_sent=[f"{i + 1:x}" for i in range(count)],
+                    observed_at=self.current,
+                    now=self.current,
+                )
+                is not None
+            )
+
+    api = Budgeted("راهنمایی اتصال")
+    first = run(settings, api)
+    assert first["routes"]["n01"] == "held_shared_budget" and api.sent == []
+    with session_scope(settings) as db:
+        assert db.query(AppConfig).filter(AppConfig.key.like("mail:p:%")).count() == 0
+    api.current = later
+    cat = catalogue()
+    cat["observed_at_utc"] = later.isoformat()
+    second = mail_replies.process(
+        settings,
+        api,
+        config=config(),
+        catalogue=cat,
+        classification=classification(),
+        now=later,
+        campaign=CAMPAIGN,
+    )
+    assert second["routes"]["n01"] == "sent" and len(api.sent) == 1
