@@ -21,6 +21,8 @@ ROUTES = frozenset([f"a{i:02}" for i in range(1, 11)] + [f"s{i:02}" for i in ran
 CAMPAIGN = "external-acquisition-20261019"
 MAPS_CAMPAIGN = "maps-acquisition-20261020"
 MAPS_ROUTES = frozenset(f"m{i:02}" for i in range(1, 11))
+NEEDS_CAMPAIGN = "needs-led-acquisition-20261024"
+NEEDS_ROUTES = frozenset(f"n{i:02}" for i in range(1, 21))
 
 
 def routes_for(campaign):
@@ -28,12 +30,16 @@ def routes_for(campaign):
         return ROUTES
     if campaign == MAPS_CAMPAIGN:
         return MAPS_ROUTES
+    if campaign == NEEDS_CAMPAIGN:
+        return NEEDS_ROUTES
     raise ValueError("unsupported mail campaign")
 
 
 def source_url(campaign, route):
     _route(route, campaign)
-    prefix = "social_maps261020_" if campaign == MAPS_CAMPAIGN else "social_ext261019_"
+    prefix = {MAPS_CAMPAIGN: "social_maps261020_", NEEDS_CAMPAIGN: "social_needs261024_"}.get(
+        campaign, "social_ext261019_"
+    )
     return "https://t.me/pvgrowthos_bot?start=" + prefix + route
 
 

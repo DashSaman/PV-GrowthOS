@@ -152,6 +152,11 @@ class Scheduler:
             from pv_growth.acquisition.maps_mail_jobs import enqueue as enqueue_maps_mail_replies
 
             enqueue_maps_mail_replies(session, utcnow())
+            from pv_growth.acquisition.needs_mail_jobs import enqueue as enqueue_needs_mail_replies
+            from pv_growth.acquisition.needs_report import enqueue_monitor as enqueue_needs_monitor
+
+            enqueue_needs_monitor(session, utcnow())
+            enqueue_needs_mail_replies(session, utcnow())
             from pv_growth.core.flags import FlagService
 
             if FlagService(self._settings).enabled("COMPETITOR_WATCH_ENABLED"):
