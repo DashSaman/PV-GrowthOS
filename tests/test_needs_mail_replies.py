@@ -360,3 +360,24 @@ def test_needs_interested_reply_asks_for_compatibility_before_purchase():
     text = mail.get_body(preferencelist=("plain",)).get_content()
     assert "نام اینترنت" in text and "مدل دستگاه" in text
     assert "خرید را ادامه دهید" not in text
+
+
+def test_exact_initial_message_reply_phrase_gets_one_compatibility_answer(settings):
+    api = Gmail("راهنمایی اتصال")
+    result = run(settings, api)
+    assert result["routes"]["n01"] == "sent"
+    assert len(api.sent) == 1
+    assert "نام اینترنت" in api.sent[0][2].get_body(preferencelist=("plain",)).get_content()
+
+
+@pytest.mark.parametrize("change", ["quote", "unverified"])
+def test_initial_phrase_still_requires_new_verified_human_text(settings, change):
+    api = Gmail("> راهنمایی اتصال" if change == "quote" else "راهنمایی اتصال")
+    if change == "unverified":
+        api.threads["abc001"]["messages"][-1]["payload"]["headers"] = [
+            h
+            for h in api.threads["abc001"]["messages"][-1]["payload"]["headers"]
+            if h["name"] != "Authentication-Results"
+        ]
+    assert run(settings, api)["routes"]["n01"] != "sent"
+    assert api.sent == []

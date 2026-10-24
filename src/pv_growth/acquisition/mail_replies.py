@@ -31,7 +31,7 @@ from pv_growth.acquisition.reply_ledger import (
     stop_route,
 )
 from pv_growth.acquisition.reply_message import build_reply
-from pv_growth.acquisition.reply_policy import reply_decision
+from pv_growth.acquisition.reply_policy import _new_text, reply_decision
 from pv_growth.acquisition.retail_catalogue import validate_catalogue
 from pv_growth.mirza_adapter.retail_sales import _classification, aware
 
@@ -188,11 +188,11 @@ def _original(rows, route, *, campaign=CAMPAIGN):
     return None
 
 
-def _decision(message, recipient):
+def _decision(message, recipient, *, campaign=CAMPAIGN):
     headers = _headers(message)
     if _address(headers, "to") != [OWNER]:
         return "hold_recipient"
-    return reply_decision(
+    decision = reply_decision(
         {
             "headers": message["payload"]["headers"],
             "labels": message.get("labelIds", []),
@@ -201,6 +201,14 @@ def _decision(message, recipient):
         recipient=recipient,
         owner=OWNER,
     )
+
+    if (
+        campaign == NEEDS_CAMPAIGN
+        and decision == "hold_intent"
+        and re.fullmatch(r"راهنمایی اتصال[.!،\s]*", _new_text(_body(message["payload"])))
+    ):
+        return "setup"
+    return decision
 
 
 def _inspect(thread, tid, route, now, *, campaign=CAMPAIGN):
@@ -214,7 +222,7 @@ def _inspect(thread, tid, route, now, *, campaign=CAMPAIGN):
             return "stopped", None
     if not after or _address(_headers(after[-1]), "from") == [OWNER]:
         return "held_no_new_human_reply", None
-    return _decision(after[-1], route["email"]), after[-1]
+    return _decision(after[-1], route["email"], campaign=campaign), after[-1]
 
 
 def process(settings, api, *, config, catalogue, classification, now, lock_held=False, campaign=CAMPAIGN):
