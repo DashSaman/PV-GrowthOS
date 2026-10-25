@@ -484,6 +484,18 @@ def _handle_message(client, message: TgMessage) -> None:
                 if result:
                     _safe_send(client, chat_id, *result)
                 return
+            from pv_growth.acquisition.campaign_entry import record_entry as record_campaign_entry
+
+            handled, result = record_campaign_entry(
+                session,
+                user,
+                start_param=argument.strip(),
+                request_id=f"m:{message.message_id}" if message.message_id else None,
+            )
+            if handled:
+                if result:
+                    _safe_send(client, chat_id, *result)
+                return
             from pv_growth.free_config.audience import decision_for_user
 
             decision = decision_for_user(session, settings, user.id)
