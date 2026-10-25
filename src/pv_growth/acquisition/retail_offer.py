@@ -11,7 +11,7 @@ from pv_growth.database.types import utcnow
 from pv_growth.events.service import ingest
 from pv_growth.telegram.client import InlineKeyboard
 
-SOURCES = {"menu", "owned", "web", "share"}
+SOURCES = {"menu", "owned", "web", "share", "campaign"}
 NEEDS = {"daily", "work"}
 PURCHASE_URL = "https://t.me/pvnetwork_bot?start=buy"
 
